@@ -422,3 +422,60 @@ bool DummySignatureCreator::CreateSig(std::vector<unsigned char>& vchSig, const 
     vchSig[6 + 33 + 32] = SIGHASH_ALL;
     return true;
 }
+
+PartiallySignedTransaction::PartiallySignedTransaction() : tx(), redeem_scripts(), witness_scripts(), inputs() {}
+PartiallySignedTransaction::PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs)
+{
+    this->tx = tx;
+    this->redeem_scripts = redeem_scripts;
+    this->witness_scripts = witness_scripts;
+    this->inputs = inputs;
+
+    sanitize_for_serialization();
+}
+
+void PartiallySignedTransaction::sanitize_for_serialization()
+{
+    // Remove sigs from inputs
+    for (unsigned int i = 0; i < tx.vin.size(); i++) {
+        CTxIn& in = tx.vin[i];
+        PartiallySignedInput psbt_in = inputs[i];
+        CTxOut vout;
+        if (psbt_in.non_witness_utxo) {
+            vout = psbt_in.non_witness_utxo->vout[in.prevout.n];
+        }
+        else if (!psbt_in.witness_utxo.IsNull()) {
+            vout = psbt_in.witness_utxo;
+        }
+        else {
+            // There is no input here, skip
+            continue;
+        }
+
+        // Check the input for sigs. Remove partial sigs. Assume that they are already in partial_sigs
+        ScriptError serror = SCRIPT_ERR_OK;
+        const CAmount& amount = vout.nValue;
+        const CTransaction const_tx(tx);
+        if (!VerifyScript(in.scriptSig, vout.scriptPubKey, &in.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&const_tx, i, amount), &serror)) {
+            in.scriptSig.clear();
+            in.scriptWitness.SetNull();
+        }
+        // If this passes, then remove all input data for this input
+        else {
+            inputs[i].SetNull();
+        }
+    }
+}
+
+void PartiallySignedInput::SetNull()
+{
+    non_witness_utxo = CTransactionRef();
+    witness_utxo.SetNull();
+    partial_sigs.clear();
+    unknown.clear();
+}
+
+bool PartiallySignedInput::IsNull()
+{
+    return !non_witness_utxo && witness_utxo.IsNull() && partial_sigs.empty() && unknown.empty();
+}
