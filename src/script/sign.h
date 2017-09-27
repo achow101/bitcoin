@@ -265,7 +265,7 @@ struct PartiallySignedTransaction
 
                 if (separators > 0) {
                     // Make sure this input has an index of indexes are being used
-                    if (!use_in_index && !input.use_in_index) {
+                    if (use_in_index && !input.use_in_index) {
                         throw std::ios_base::failure("Input indexes being used but an input was provided without an index");
                     }
 
@@ -278,7 +278,7 @@ struct PartiallySignedTransaction
                 ++separators;
 
                 // Make sure that the number of separators - 1 matches the number of inputs if the stream is going to be empty
-                if (s.empty() && separators - 1 == num_ins) {
+                if (s.empty() && separators - 1 == num_ins && use_in_index) {
                     throw std::ios_base::failure("Inputs provided does not match the number of inputs stated.");
                 }
 

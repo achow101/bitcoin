@@ -3436,6 +3436,289 @@ UniValue rescanblockchain(const JSONRPCRequest& request)
     return response;
 }
 
+UniValue walletupdatepsbt(const JSONRPCRequest& request)
+{
+    CWallet * const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 3)
+        throw std::runtime_error(
+            "walletupdatepsbt \"hexstring\" ( sighashtype psbtformat)\n"
+            "\nUpdate a psbt with input information from our wallet and then sign inputs\n"
+            "that we an sign for.\n"
+            + HelpRequiringPassphrase(pwallet) + "\n"
+
+            "\nArguments:\n"
+            "1. \"hexstring\"              (string, required) The transaction hex string\n"
+            "2. \"sighashtype\"            (string, optional, default=ALL) The signature hash type. Must be one of\n"
+            "       \"ALL\"\n"
+            "       \"NONE\"\n"
+            "       \"SINGLE\"\n"
+            "       \"ALL|ANYONECANPAY\"\n"
+            "       \"NONE|ANYONECANPAY\"\n"
+            "       \"SINGLE|ANYONECANPAY\"\n"
+            "3. \"psbtformat\"              (boolean, optional, default=false) If true, return the complete transaction \n"
+            "                             in the PSBT format. Otherwise complete transactions will be in normal network serialization.\n"
+
+            "\nResult:\n"
+            "{\n"
+            "  \"hex\" : \"value\",           (string) The hex-encoded partially signed transaction\n"
+            "  \"complete\" : true|false,   (boolean) If the transaction has a complete set of signatures\n"
+            "  ]\n"
+            "}\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("walletupdatepsbt", "\"myhex\"")
+            + HelpExampleRpc("walletupdatepsbt", "\"myhex\"")
+        );
+
+    LOCK2(cs_main, pwallet->cs_wallet);
+    RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VSTR, UniValue::VBOOL});
+
+    // Unserialize the transaction
+    PartiallySignedTransaction psbtx;
+    if (!IsHex(request.params[0].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed, not hex");
+    }
+    std::vector<unsigned char> txData(ParseHex(request.params[0].get_str()));
+    CDataStream ssData(txData, SER_NETWORK, PROTOCOL_VERSION);
+    try {
+        ssData >> psbtx;
+        if (!ssData.empty()) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed, extra data after PSBT");
+        }
+    }
+    catch (const std::exception& e) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", e.what()));
+    }
+
+    // Sign the transaction
+    int nHashType = SIGHASH_ALL;
+    if (!request.params[1].isNull()) {
+        static std::map<std::string, int> mapSigHashValues = {
+            {std::string("ALL"), int(SIGHASH_ALL)},
+            {std::string("ALL|ANYONECANPAY"), int(SIGHASH_ALL|SIGHASH_ANYONECANPAY)},
+            {std::string("NONE"), int(SIGHASH_NONE)},
+            {std::string("NONE|ANYONECANPAY"), int(SIGHASH_NONE|SIGHASH_ANYONECANPAY)},
+            {std::string("SINGLE"), int(SIGHASH_SINGLE)},
+            {std::string("SINGLE|ANYONECANPAY"), int(SIGHASH_SINGLE|SIGHASH_ANYONECANPAY)},
+        };
+        std::string strHashType = request.params[1].get_str();
+        if (mapSigHashValues.count(strHashType))
+            nHashType = mapSigHashValues[strHashType];
+        else
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid sighash param");
+    }
+
+    // Script verification errors
+    UniValue vErrors(UniValue::VARR);
+
+    // Use CTransaction for the constant parts of the
+    // transaction to avoid rehashing.
+    CMutableTransaction mtx = psbtx.tx;
+    const CTransaction txConst(mtx);
+
+    // Go through all of the inputs to fill in if it is completely empty
+    for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
+        CTxIn txin = mtx.vin[i];
+        PartiallySignedInput input = psbtx.inputs[i];
+
+        // If this input is not empty, skip it
+        if (!input.IsNull() || txin.scriptSig.empty() || txin.scriptWitness.IsNull()) {
+            continue;
+        }
+
+        uint256 hash = txin.prevout.hash;
+
+        // If we don't know about this input, skip it and let someone else deal with it
+        if (!pwallet->mapWallet.count(hash)) {
+            continue;
+        }
+        const CWalletTx& wtx = pwallet->mapWallet[hash];
+
+        // Add the transaction to prev_txs regardless
+        const CTransaction& ctx = wtx;
+
+        // Get scriptpubkey and check for redeemScript or witnessscript
+        CTxOut prevout = ctx.vout[txin.prevout.n];
+        txnouttype type;
+        std::vector<std::vector<unsigned char>> solns;
+        Solver(prevout.scriptPubKey, type, solns);
+        // handle script hashes
+        if (type == TX_SCRIPTHASH) {
+            // get the hash and find it in the wallet.
+            CScript redeem_script;
+            uint160 hash(solns[0]);
+            pwallet->GetCScript(CScriptID(hash), redeem_script);
+
+            // put redeem_script in map
+            psbtx.redeem_scripts.emplace(hash, redeem_script);
+
+            // Now check whether the redeem_script is a witness script
+            solns.clear();
+            Solver(redeem_script, type, solns);
+        }
+        // Handle witness scripts
+        if (type == TX_WITNESS_V0_SCRIPTHASH) {
+            // Get the hash from the solver return
+            uint160 hash;
+            CRIPEMD160().Write(&solns[0][0], solns[0].size()).Finalize(hash.begin());
+
+            // Lookup hash from wallet
+            CScript witness_script;
+            pwallet->GetCScript(CScriptID(hash), witness_script);
+
+            // Put witness script in map
+            uint256 hash256(solns[0]);
+            psbtx.witness_scripts.emplace(hash256, witness_script);
+
+            // Put the witness CTxOut in the input
+            psbtx.inputs[i].witness_utxo = prevout;
+        }
+        // Put the witness utxo for witness keyhash outputs
+        else if (type == TX_WITNESS_V0_KEYHASH) {
+            // Put the witness CTxOut in the input
+            psbtx.inputs[i].witness_utxo = prevout;
+        }
+        // Not witness, put non witness utxo
+        else {
+            psbtx.inputs[i].non_witness_utxo = wtx.tx;
+        }
+    }
+
+    // Sign what we can:
+    bool fComplete = SignPartialTransaction(psbtx, pwallet, nHashType);
+    psbtx.sanitize_for_serialization();
+
+    UniValue result(UniValue::VOBJ);
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    if (fComplete && (request.params[2].isNull() || (!request.params[2].isNull() && !request.params[2].get_bool()))) {
+        ssTx << psbtx.tx;
+    } else {
+        ssTx << psbtx;
+    }
+    result.push_back(Pair("hex", HexStr(ssTx.begin(), ssTx.end())));
+    result.push_back(Pair("complete", fComplete));
+
+    return result;
+}
+
+UniValue walletcreatepsbt(const JSONRPCRequest& request)
+{
+    CWallet * const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() != 1)
+        throw std::runtime_error(
+                            "walletcreatepsbt \"hexstring\"\n"
+                            "\nCreates a transaction in the Partially Signed Transaction format from a\n"
+                            "raw transaction that was funded with inputs from our wallet, typically from\n"
+                            "using fundrawtransaction.\n"
+                            "\nArguments:\n"
+                            "1. \"hexstring\"            (string, required) The hex string of the raw transaction\n"
+                            "\nResult:\n"
+                            "{\n"
+                            "  \"hex\": \"value\",         (string)  The resulting raw transaction (hex-encoded string)\n"
+                            "}\n"
+                            "\nExamples:\n"
+                            "\nCreate a transaction with no inputs\n"
+                            + HelpExampleCli("createrawtransaction", "\"[]\" \"{\\\"myaddress\\\":0.01}\"") +
+                            "\nAdd sufficient unsigned inputs to meet the output value\n"
+                            + HelpExampleCli("fundrawtransaction", "\"rawtransactionhex\"") +
+                            "\nMake PSBT to sign elsewhere\n"
+                            + HelpExampleCli("walletcreatepsbt", "\"fundedtransactionhex\"")
+                            );
+
+    RPCTypeCheck(request.params, {UniValue::VSTR});
+
+    CMutableTransaction mtx;
+
+    // Decode the transaction
+    if (!DecodeHexTx(mtx, request.params[0].get_str(), true))
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+
+    // Stuff to pass into PartiallySignedTransaction
+    std::map<uint160, CScript> redeem_scripts;
+    std::map<uint256, CScript> witness_scripts;
+    std::vector<PartiallySignedInput> inputs;
+
+    // Get all of the previous transactions
+    for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
+        CTxIn txin = mtx.vin[i];
+        PartiallySignedInput input;
+
+        uint256 hash = txin.prevout.hash;
+
+        // If we don't know about this input, skip it and let someone else deal with it
+        if (!pwallet->mapWallet.count(hash)) {
+            continue;
+        }
+        const CWalletTx& wtx = pwallet->mapWallet[hash];
+
+        // Add the transaction to prev_txs regardless
+        const CTransaction& ctx = wtx;
+
+        // Get scriptpubkey and check for redeemScript or witnessscript
+        CTxOut prevout = ctx.vout[txin.prevout.n];
+        txnouttype type;
+        std::vector<std::vector<unsigned char>> solns;
+        Solver(prevout.scriptPubKey, type, solns);
+        // handle script hashes
+        if (type == TX_SCRIPTHASH) {
+            // get the hash and find it in the wallet.
+            CScript redeem_script;
+            uint160 hash(solns[0]);
+            pwallet->GetCScript(CScriptID(hash), redeem_script);
+
+            // put redeem_script in map
+            redeem_scripts.emplace(hash, redeem_script);
+
+            // Now check whether the redeem_script is a witness script
+            solns.clear();
+            Solver(redeem_script, type, solns);
+        }
+        // Handle witness scripts
+        if (type == TX_WITNESS_V0_SCRIPTHASH) {
+            // Get the hash from the solver return
+            uint160 hash;
+            CRIPEMD160().Write(&solns[0][0], solns[0].size()).Finalize(hash.begin());
+
+            // Lookup hash from wallet
+            CScript witness_script;
+            pwallet->GetCScript(CScriptID(hash), witness_script);
+
+            // Put witness script in map
+            uint256 hash256(solns[0]);
+            witness_scripts.emplace(hash256, witness_script);
+
+            // Put the witness CTxOut in the input
+            input.witness_utxo = prevout;
+        }
+        // Put the witness utxo for witness keyhash outputs
+        else if (type == TX_WITNESS_V0_KEYHASH) {
+            // Put the witness CTxOut in the input
+            input.witness_utxo = prevout;
+        }
+        // Not witness, put non witness utxo
+        else {
+            input.non_witness_utxo = wtx.tx;
+        }
+
+        // Add to inputs
+        inputs.push_back(input);
+    }
+
+    // Make the PSBT and serialize it
+    PartiallySignedTransaction psbtx(mtx, redeem_scripts, witness_scripts, inputs);
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << psbtx;
+    return HexStr(ssTx.begin(), ssTx.end());
+}
+
 extern UniValue abortrescan(const JSONRPCRequest& request); // in rpcdump.cpp
 extern UniValue dumpprivkey(const JSONRPCRequest& request); // in rpcdump.cpp
 extern UniValue importprivkey(const JSONRPCRequest& request);
@@ -3452,6 +3735,8 @@ static const CRPCCommand commands[] =
 { //  category              name                        actor (function)           argNames
     //  --------------------- ------------------------    -----------------------  ----------
     { "rawtransactions",    "fundrawtransaction",       &fundrawtransaction,       {"hexstring","options","iswitness"} },
+    { "wallet",             "walletupdatepsbt",         &walletupdatepsbt,         {"hexstring","sighashtype","psbtformat"} },
+    { "wallet",             "walletcreatepsbt",         &walletcreatepsbt,         {"hexstring"} },
     { "hidden",             "resendwallettransactions", &resendwallettransactions, {} },
     { "wallet",             "abandontransaction",       &abandontransaction,       {"txid"} },
     { "wallet",             "abortrescan",              &abortrescan,              {} },
