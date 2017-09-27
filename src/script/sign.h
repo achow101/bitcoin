@@ -7,6 +7,10 @@
 #define BITCOIN_SCRIPT_SIGN_H
 
 #include <script/interpreter.h>
+#include <streams.h>
+#include <version.h>
+#include <pubkey.h>
+#include <hash.h>
 
 class CKeyID;
 class CKeyStore;
@@ -453,6 +457,8 @@ struct PartiallySignedTransaction
 
 /** Produce a script signature using a generic signature creator. */
 bool ProduceSignature(const BaseSignatureCreator& creator, const CScript& scriptPubKey, SignatureData& sigdata);
+
+bool SignPartialTransaction(PartiallySignedTransaction& psbt, const CKeyStore* keystore, int nHashType);
 
 /** Produce a script signature for a transaction. */
 bool SignSignature(const CKeyStore &keystore, const CScript& fromPubKey, CMutableTransaction& txTo, unsigned int nIn, const CAmount& amount, int nHashType);
