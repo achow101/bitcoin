@@ -267,23 +267,25 @@ struct PartiallySignedTransaction
                 in_globals = false;
 
                 if (separators > 0) {
-                    // Make sure this input has an index of indexes are being used
+                    // Make sure this input has an index if indexes are being used
                     if (use_in_index && !input.use_in_index) {
                         throw std::ios_base::failure("Input indexes being used but an input was provided without an index");
+                    }
+                    // If indexes are being used, add a bunch of empty inputs to the input vector so that it matches the number of inputs in the transaction so far
+                    if (use_in_index) {
+                        for (unsigned int i = inputs.size(); i < input.index; ++i) {
+                            PartiallySignedInput empty_input;
+                            inputs.push_back(empty_input);
+                        }
                     }
 
                     // Add input to vector
                     inputs.push_back(input);
                     input.SetNull();
-                    input.index = separators - 1; // Set the inputs index. This will be overwritten if an index is provided.
+                    input.index = separators; // Set the inputs index. This will be overwritten if an index is provided.
                 }
 
                 ++separators;
-
-                // Make sure that the number of separators - 1 matches the number of inputs if the stream is going to be empty
-                if (s.empty() && separators - 1 == num_ins && use_in_index) {
-                    throw std::ios_base::failure("Inputs provided does not match the number of inputs stated.");
-                }
 
                 continue;
             }
@@ -427,10 +429,11 @@ struct PartiallySignedTransaction
                             throw std::ios_base::failure("Input indexes being used but an input does not provide its index");
                         }
 
-                        s >> input.index;
+                        input.index = ReadCompactSize(s);
                         use_in_index = true;
                         input.use_in_index = true;
                     }
+                    break;
                 }
                 // Unknown stuff
                 default:
@@ -447,6 +450,16 @@ struct PartiallySignedTransaction
                         input.unknown.emplace(key, val_bytes);
                     }
             }
+        }
+
+        // Make sure that the number of separators - 1 matches the number of inputs
+        if (separators - 1 != num_ins && use_in_index) {
+            throw std::ios_base::failure("Inputs provided does not match the number of inputs stated.");
+        }
+
+        // Make sure that the number of inputs matches the number of inputs in the transaction
+        if (inputs.size() != tx.vin.size()) {
+            throw std::ios_base::failure("Inputs provided does not match the number of inputs in transaction.");
         }
     }
 
