@@ -3436,6 +3436,89 @@ UniValue rescanblockchain(const JSONRPCRequest& request)
     return response;
 }
 
+void fill_psbt(const CWallet* pwallet, PartiallySignedTransaction& psbtx, const CTransaction* txConst)
+{
+    // Get all of the previous transactions
+    bool psbtx_blank = psbtx.IsNull();
+    for (unsigned int i = 0; i < txConst->vin.size(); ++i) {
+        CTxIn txin = txConst->vin[i];
+        PartiallySignedInput input;
+        if (!psbtx_blank) {
+            input = psbtx.inputs.at(i);
+        }
+
+        // If this input is not empty, skip it
+        if (!psbtx_blank && (!input.IsNull() || txin.scriptSig.empty() || txin.scriptWitness.IsNull())) {
+            continue;
+        }
+
+        uint256 txhash = txin.prevout.hash;
+
+        // If we don't know about this input, skip it and let someone else deal with it
+        if (!pwallet->mapWallet.count(txhash)) {
+            if (psbtx_blank) {
+                psbtx.inputs.push_back(input);
+            }
+            continue;
+        }
+        const CWalletTx& wtx = pwallet->mapWallet.at(txhash);
+        const CTransaction& ctx = *wtx.tx;
+
+        // Get scriptpubkey and check for redeemScript or witnessscript
+        CTxOut prevout = ctx.vout[txin.prevout.n];
+        txnouttype type;
+        std::vector<std::vector<unsigned char>> solns;
+        Solver(prevout.scriptPubKey, type, solns);
+        // Get script hashes
+        if (type == TX_SCRIPTHASH) {
+            // get the hash and find it in the wallet.
+            CScript redeem_script;
+            uint160 hash(solns[0]);
+            pwallet->GetCScript(CScriptID(hash), redeem_script);
+
+            // put redeem_script in map
+            psbtx.redeem_scripts.emplace(hash, redeem_script);
+
+            // Now check whether the redeem_script is a witness script
+            solns.clear();
+            Solver(redeem_script, type, solns);
+        }
+        // Get witness scripts
+        if (type == TX_WITNESS_V0_SCRIPTHASH) {
+            // Get the hash from the solver return
+            uint160 hash;
+            CRIPEMD160().Write(&solns[0][0], solns[0].size()).Finalize(hash.begin());
+
+            // Lookup hash from wallet
+            CScript witness_script;
+            pwallet->GetCScript(CScriptID(hash), witness_script);
+
+            // Put witness script in map
+            uint256 hash256(solns[0]);
+            psbtx.witness_scripts.emplace(hash256, witness_script);
+
+            // Decode the witness script
+            solns.clear();
+            Solver(witness_script, type, solns);
+        }
+
+        // Put the witness utxo for witness outputs
+        if (type == TX_WITNESS_V0_KEYHASH || type == TX_WITNESS_V0_SCRIPTHASH || type == TX_WITNESS_UNKNOWN) {
+            // Put the witness CTxOut in the input
+            input.witness_utxo = prevout;
+        }
+        // Not witness, put non witness utxo
+        else {
+            input.non_witness_utxo = wtx.tx;
+        }
+
+        if (psbtx_blank) {
+            // Add to inputs
+            psbtx.inputs.push_back(input);
+        }
+    }
+}
+
 UniValue walletupdatepsbt(const JSONRPCRequest& request)
 {
     CWallet * const pwallet = GetWalletForJSONRPCRequest(request);
@@ -3520,73 +3603,8 @@ UniValue walletupdatepsbt(const JSONRPCRequest& request)
     CMutableTransaction mtx = psbtx.tx;
     const CTransaction txConst(mtx);
 
-    // Go through all of the inputs to fill in if it is completely empty
-    for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
-        CTxIn txin = mtx.vin[i];
-        PartiallySignedInput input = psbtx.inputs[i];
-
-        // If this input is not empty, skip it
-        if (!input.IsNull() || txin.scriptSig.empty() || txin.scriptWitness.IsNull()) {
-            continue;
-        }
-
-        uint256 hash = txin.prevout.hash;
-
-        // If we don't know about this input, skip it and let someone else deal with it
-        if (!pwallet->mapWallet.count(hash)) {
-            continue;
-        }
-        const CWalletTx& wtx = pwallet->mapWallet[hash];
-
-        // Add the transaction to prev_txs regardless
-        const CTransaction& ctx = wtx;
-
-        // Get scriptpubkey and check for redeemScript or witnessscript
-        CTxOut prevout = ctx.vout[txin.prevout.n];
-        txnouttype type;
-        std::vector<std::vector<unsigned char>> solns;
-        Solver(prevout.scriptPubKey, type, solns);
-        // handle script hashes
-        if (type == TX_SCRIPTHASH) {
-            // get the hash and find it in the wallet.
-            CScript redeem_script;
-            uint160 hash(solns[0]);
-            pwallet->GetCScript(CScriptID(hash), redeem_script);
-
-            // put redeem_script in map
-            psbtx.redeem_scripts.emplace(hash, redeem_script);
-
-            // Now check whether the redeem_script is a witness script
-            solns.clear();
-            Solver(redeem_script, type, solns);
-        }
-        // Handle witness scripts
-        if (type == TX_WITNESS_V0_SCRIPTHASH) {
-            // Get the hash from the solver return
-            uint160 hash;
-            CRIPEMD160().Write(&solns[0][0], solns[0].size()).Finalize(hash.begin());
-
-            // Lookup hash from wallet
-            CScript witness_script;
-            pwallet->GetCScript(CScriptID(hash), witness_script);
-
-            // Put witness script in map
-            uint256 hash256(solns[0]);
-            psbtx.witness_scripts.emplace(hash256, witness_script);
-
-            // Put the witness CTxOut in the input
-            psbtx.inputs[i].witness_utxo = prevout;
-        }
-        // Put the witness utxo for witness keyhash outputs
-        else if (type == TX_WITNESS_V0_KEYHASH) {
-            // Put the witness CTxOut in the input
-            psbtx.inputs[i].witness_utxo = prevout;
-        }
-        // Not witness, put non witness utxo
-        else {
-            psbtx.inputs[i].non_witness_utxo = wtx.tx;
-        }
-    }
+    // Fill transaction with out data
+    fill_psbt(pwallet, psbtx, &txConst);
 
     // Sign what we can:
     bool fComplete = SignPartialTransaction(psbtx, pwallet, nHashType);
@@ -3641,79 +3659,16 @@ UniValue walletcreatepsbt(const JSONRPCRequest& request)
     if (!DecodeHexTx(mtx, request.params[0].get_str(), true))
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
 
-    // Stuff to pass into PartiallySignedTransaction
-    std::map<uint160, CScript> redeem_scripts;
-    std::map<uint256, CScript> witness_scripts;
-    std::vector<PartiallySignedInput> inputs;
+    // Make a blank psbt
+    PartiallySignedTransaction psbtx;
+    psbtx.SetNull();
 
-    // Get all of the previous transactions
-    for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
-        CTxIn txin = mtx.vin[i];
-        PartiallySignedInput input;
+    // Fill the psbtx
+    const CTransaction txConst(mtx);
+    fill_psbt(pwallet, psbtx, &txConst);
+    psbtx.tx = mtx;
 
-        uint256 hash = txin.prevout.hash;
-
-        // If we don't know about this input, skip it and let someone else deal with it
-        if (!pwallet->mapWallet.count(hash)) {
-            continue;
-        }
-        const CWalletTx& wtx = pwallet->mapWallet[hash];
-
-        // Add the transaction to prev_txs regardless
-        const CTransaction& ctx = wtx;
-
-        // Get scriptpubkey and check for redeemScript or witnessscript
-        CTxOut prevout = ctx.vout[txin.prevout.n];
-        txnouttype type;
-        std::vector<std::vector<unsigned char>> solns;
-        Solver(prevout.scriptPubKey, type, solns);
-        // handle script hashes
-        if (type == TX_SCRIPTHASH) {
-            // get the hash and find it in the wallet.
-            CScript redeem_script;
-            uint160 hash(solns[0]);
-            pwallet->GetCScript(CScriptID(hash), redeem_script);
-
-            // put redeem_script in map
-            redeem_scripts.emplace(hash, redeem_script);
-
-            // Now check whether the redeem_script is a witness script
-            solns.clear();
-            Solver(redeem_script, type, solns);
-        }
-        // Handle witness scripts
-        if (type == TX_WITNESS_V0_SCRIPTHASH) {
-            // Get the hash from the solver return
-            uint160 hash;
-            CRIPEMD160().Write(&solns[0][0], solns[0].size()).Finalize(hash.begin());
-
-            // Lookup hash from wallet
-            CScript witness_script;
-            pwallet->GetCScript(CScriptID(hash), witness_script);
-
-            // Put witness script in map
-            uint256 hash256(solns[0]);
-            witness_scripts.emplace(hash256, witness_script);
-
-            // Put the witness CTxOut in the input
-            input.witness_utxo = prevout;
-        }
-        // Put the witness utxo for witness keyhash outputs
-        else if (type == TX_WITNESS_V0_KEYHASH) {
-            // Put the witness CTxOut in the input
-            input.witness_utxo = prevout;
-        }
-        // Not witness, put non witness utxo
-        else {
-            input.non_witness_utxo = wtx.tx;
-        }
-
-        // Add to inputs
-        inputs.push_back(input);
-    }
-
-    // Make the PSBT and serialize it
-    PartiallySignedTransaction psbtx(mtx, redeem_scripts, witness_scripts, inputs);
+    // Serialize the PSBT
     CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
     ssTx << psbtx;
     return HexStr(ssTx.begin(), ssTx.end());
