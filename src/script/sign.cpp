@@ -674,13 +674,14 @@ bool DummySignatureCreator::CreateSig(std::vector<unsigned char>& vchSig, const 
     return true;
 }
 
-PartiallySignedTransaction::PartiallySignedTransaction() : tx(), redeem_scripts(), witness_scripts(), inputs() {}
-PartiallySignedTransaction::PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs)
+PartiallySignedTransaction::PartiallySignedTransaction() : tx(), redeem_scripts(), witness_scripts(), inputs(), hd_keypaths() {}
+PartiallySignedTransaction::PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs, std::map<CPubKey, std::vector<uint32_t>>& hd_keypaths)
 {
     this->tx = tx;
     this->redeem_scripts = redeem_scripts;
     this->witness_scripts = witness_scripts;
     this->inputs = inputs;
+    this->hd_keypaths = hd_keypaths;
 
     sanitize_for_serialization();
 }
@@ -716,6 +717,20 @@ void PartiallySignedTransaction::sanitize_for_serialization()
             inputs[i].SetNull();
         }
     }
+}
+
+void PartiallySignedTransaction::SetNull()
+{
+    tx = CMutableTransaction();
+    redeem_scripts.clear();
+    witness_scripts.clear();
+    inputs.clear();
+    hd_keypaths.clear();
+}
+
+bool PartiallySignedTransaction::IsNull()
+{
+    return tx.vin.empty() && tx.vout.empty() && redeem_scripts.empty() && witness_scripts.empty() && inputs.empty() && hd_keypaths.empty();
 }
 
 void PartiallySignedInput::SetNull()

@@ -122,8 +122,11 @@ struct PartiallySignedTransaction
     uint64_t num_ins = 0;
     bool use_in_index = false;
 
+    void SetNull();
+    bool IsNull();
+
     PartiallySignedTransaction();
-    PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs);
+    PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs, std::map<CPubKey, std::vector<uint32_t>>& hd_keypaths);
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -157,7 +160,7 @@ struct PartiallySignedTransaction
         for (auto keypath_pair : hd_keypaths) {
             s << SerializeToVector(PSBT_BIP32_KEYPATH_SIGHASH, CFlatData((void *)keypath_pair.first.begin(), (void *)keypath_pair.first.end()));
             WriteCompactSize(s, keypath_pair.second.size() * sizeof(uint32_t));
-            s << keypath_pair.second;
+            s << CFlatData(REF(keypath_pair.second));
         }
 
         // Write the number of inputs

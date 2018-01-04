@@ -3436,6 +3436,73 @@ UniValue rescanblockchain(const JSONRPCRequest& request)
     return response;
 }
 
+bool parse_hd_keypath(std::string keypath_str, std::vector<uint32_t>& keypath)
+{
+    std::stringstream ss(keypath_str);
+    std::string item;
+    bool first = true;
+    while (std::getline(ss, item, '/')) {
+        if (item.compare("m") == 0) {
+            if (first) {
+                first = false;
+                continue;
+            } else {
+                return false;
+            }
+        }
+        // Finds whether it is hardened
+        uint32_t path = 0;
+        size_t pos = item.find("'");
+        if (pos != std::string::npos) {
+            // The hardened tick can only be in the last index of the string
+            if (pos != item.size() - 1) {
+                return false;
+            }
+            path |= BIP32_HARDENED_KEY_LIMIT;
+            item = item.substr(0, item.size() - 1); // Drop the last character which is the hardened tick
+        }
+
+        // Ensure this is only numbers
+        for (auto& c : item) {
+            if (!std::isdigit(c)) {
+                return false;
+            }
+        }
+        uint32_t number;
+        ParseUInt32(item, &number);
+        path |= number;
+
+        keypath.push_back(path);
+        first = false;
+    }
+    return true;
+}
+
+void add_keypath_to_map(const CWallet* pwallet, const CKeyID& keyID, std::map<CPubKey, std::vector<uint32_t>>& hd_keypaths)
+{
+    CPubKey vchPubKey;
+    pwallet->GetPubKey(keyID, vchPubKey);
+    CKeyMetadata meta;
+    auto it = pwallet->mapKeyMetadata.find(keyID);
+    if (it != pwallet->mapKeyMetadata.end()) {
+        meta = it->second;
+    }
+    if (!meta.hdKeypath.empty()) {
+        std::vector<uint32_t> keypath;
+        if (!parse_hd_keypath(meta.hdKeypath, keypath)) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Internal keypath is broken");
+        }
+        // Get the proper master key id
+        CKey key;
+        pwallet->GetKey(meta.hdMasterKeyID, key);
+        CExtKey masterKey;
+        masterKey.SetMaster(key.begin(), key.size());
+        // Add to map
+        keypath.insert(keypath.begin(), masterKey.key.GetPubKey().GetID().GetUint32(0));
+        hd_keypaths.emplace(vchPubKey, keypath);
+    }
+}
+
 void fill_psbt(const CWallet* pwallet, PartiallySignedTransaction& psbtx, const CTransaction* txConst)
 {
     // Get all of the previous transactions
@@ -3484,7 +3551,9 @@ void fill_psbt(const CWallet* pwallet, PartiallySignedTransaction& psbtx, const 
             Solver(redeem_script, type, solns);
         }
         // Get witness scripts
+        bool witness = false;
         if (type == TX_WITNESS_V0_SCRIPTHASH) {
+            witness = true;
             // Get the hash from the solver return
             uint160 hash;
             CRIPEMD160().Write(&solns[0][0], solns[0].size()).Finalize(hash.begin());
@@ -3501,9 +3570,27 @@ void fill_psbt(const CWallet* pwallet, PartiallySignedTransaction& psbtx, const 
             solns.clear();
             Solver(witness_script, type, solns);
         }
+        // Get public keys if hd is enabled
+        if (pwallet->IsHDEnabled()) {
+            if (type == TX_PUBKEYHASH) {
+                uint160 hash(solns[0]);
+                CKeyID keyID(hash);
+                add_keypath_to_map(pwallet, keyID, psbtx.hd_keypaths);
+            } else if (type == TX_PUBKEY) {
+                CPubKey vchPubKey(solns[0]);
+                CKeyID keyID = vchPubKey.GetID();
+                add_keypath_to_map(pwallet, keyID, psbtx.hd_keypaths);
+            } else if (type == TX_MULTISIG) {
+                for (auto& soln : solns) {
+                    CPubKey vchPubKey(soln);
+                    CKeyID keyID = vchPubKey.GetID();
+                    add_keypath_to_map(pwallet, keyID, psbtx.hd_keypaths);
+                }
+            }
+        }
 
         // Put the witness utxo for witness outputs
-        if (type == TX_WITNESS_V0_KEYHASH || type == TX_WITNESS_V0_SCRIPTHASH || type == TX_WITNESS_UNKNOWN) {
+        if (witness || type == TX_WITNESS_V0_KEYHASH || type == TX_WITNESS_V0_SCRIPTHASH || type == TX_WITNESS_UNKNOWN) {
             // Put the witness CTxOut in the input
             input.witness_utxo = prevout;
         }
