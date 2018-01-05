@@ -1264,6 +1264,175 @@ UniValue decodepsbt(const JSONRPCRequest& request)
     return result;
 }
 
+UniValue combinepsbt(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
+        throw std::runtime_error(
+            "combinepsbt [\"hexstring\",...] (psbtformat)\n"
+            "\nCombine multiple partially signed Bitcoin transactions into one transaction.\n"
+            "The combined transaction may be still be partially signed transaction, in which case\n"
+            "it will be a PSBT, or it may be fully signed transaction, in which case it will be a\n"
+            "network serialized transaction which can be broadcast with sendrawtransaction"
+
+            "\nArguments:\n"
+            "1. \"txs\"                   (string) A json array of hex strings of partially signed transactions\n"
+            "    [\n"
+            "      \"hexstring\"             (string) A transaction hash\n"
+            "      ,...\n"
+            "    ]\n"
+            "2. \"psbtformat\"              (boolean, optional, default=false) If true, return the complete transaction \n"
+            "                             in the PSBT format. Otherwise complete transactions will be in normal network serialization.\n"
+
+            "\nResult:\n"
+            "{\n"
+            "  \"hex\" : \"value\",           (string) The hex-encoded partially signed transaction\n"
+            "  \"complete\" : true|false,   (boolean) If the transaction has a complete set of signatures\n"
+            "  ]\n"
+            "}\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("combinepsbt", "[\"myhex1\", \"myhex2\", \"myhex3\"]")
+        );
+
+    RPCTypeCheck(request.params, {UniValue::VARR, UniValue::VBOOL}, true);
+
+    // Unserialize the transactions
+    std::vector<PartiallySignedTransaction> psbtxs;
+    UniValue txs = request.params[0].get_array();
+    for (unsigned int i = 0; i < txs.size(); ++i) {
+        PartiallySignedTransaction psbtx;
+        if (!IsHex(txs[i].get_str())) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed, not hex");
+        }
+        std::vector<unsigned char> txData(ParseHex(txs[i].get_str()));
+        CDataStream ssData(txData, SER_NETWORK, PROTOCOL_VERSION);
+        try {
+            ssData >> psbtx;
+            if (!ssData.empty()) {
+                throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed, extra data after PSBT");
+            }
+        }
+        catch (const std::exception& e) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", e.what()));
+        }
+        psbtxs.push_back(psbtx);
+    }
+
+    // Check that each psbt refers to the same transactions
+    for (const PartiallySignedTransaction& psbtx : psbtxs) {
+        for (const PartiallySignedTransaction& comp_psbtx : psbtxs) {
+            if (psbtx != comp_psbtx) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "PSBTs do not refer to the same transactions.");
+            }
+        }
+    }
+
+    // Merge the input fields
+    PartiallySignedTransaction merged_psbtx(psbtxs[0]); // Copy the first one
+    const CTransaction txConst(merged_psbtx.tx);
+    // Merge global data
+    for (const PartiallySignedTransaction& psbtx : psbtxs) {
+        // Merge redeem_scripts
+        merged_psbtx.redeem_scripts.insert(psbtx.redeem_scripts.begin(), psbtx.redeem_scripts.end());
+
+        // Merge witness_scripts
+        merged_psbtx.witness_scripts.insert(psbtx.witness_scripts.begin(), psbtx.witness_scripts.end());
+
+        // Merge unknown
+        merged_psbtx.unknown.insert(psbtx.unknown.begin(), psbtx.unknown.end());
+
+        // Merge hd_keypaths
+        merged_psbtx.hd_keypaths.insert(psbtx.hd_keypaths.begin(), psbtx.hd_keypaths.end());
+
+        // If one of these is using input indexes, then use input indexes
+        if (psbtx.use_in_index) {
+            merged_psbtx.use_in_index = true;
+        }
+    }
+    // Merge input data
+    for (unsigned int i = 0; i < merged_psbtx.tx.vin.size(); ++i) {
+        CTxIn& txin = merged_psbtx.tx.vin[i];
+
+        // Find the utxo from one of the psbtxs
+        CTxOut utxo;
+        CTransactionRef non_witness_utxo = nullptr;
+        for (const PartiallySignedTransaction& psbtx : psbtxs) {
+            // First find the non-witness utxo
+            if (psbtx.inputs.at(i).non_witness_utxo) {
+                // If we have already seen the utxo, we want to make sure that these match
+                if (!utxo.IsNull()) {
+                    if (utxo != psbtx.inputs.at(i).non_witness_utxo->vout[txin.prevout.n]) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Input UTXOs for input %d do not match.", i));
+                    }
+                } else {
+                    utxo = psbtx.inputs.at(i).non_witness_utxo->vout[txin.prevout.n];
+                    non_witness_utxo = psbtx.inputs.at(i).non_witness_utxo;
+                }
+            }
+            // Now find the witness utxo if the non witness doesn't exist
+            else if (!psbtx.inputs.at(i).witness_utxo.IsNull()) {
+                // If we have already seen the utxo, we want to make sure that these match
+                if (!utxo.IsNull()) {
+                    if (utxo != psbtx.inputs.at(i).witness_utxo) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Input UTXOs for input %d do not match.", i));
+                    }
+                } else {
+                    utxo = psbtx.inputs.at(i).witness_utxo;
+                }
+            }
+            // If there is no nonwitness or witness utxo, the continue and see if it is in another psbt
+            else {
+                continue;
+            }
+        }
+
+        SignatureData sigdata;
+
+        for (const PartiallySignedTransaction& psbtx : psbtxs) {
+            // Merge scriptsigs if we have the utxo
+            if (!utxo.IsNull()) {
+                const CScript& prevPubKey = utxo.scriptPubKey;
+                const CAmount& amount = utxo.nValue;
+                sigdata = CombineSignatures(prevPubKey, TransactionSignatureChecker(&txConst, i, amount), sigdata, DataFromTransaction(psbtx.tx, i));
+            }
+
+            // Merge input partial signatures
+            merged_psbtx.inputs.at(i).partial_sigs.insert(psbtx.inputs.at(i).partial_sigs.begin(), psbtx.inputs.at(i).partial_sigs.end());
+        }
+
+        // Only do this if there was a utxo
+        if (!utxo.IsNull()) {
+            UpdateTransaction(merged_psbtx.tx, i, sigdata);
+            // Put the UTXO in the merged psbtx
+            if (non_witness_utxo) {
+                merged_psbtx.inputs.at(i).non_witness_utxo = non_witness_utxo;
+            } else {
+                merged_psbtx.inputs.at(i).witness_utxo = utxo;
+            }
+        }
+    }
+
+    // Sign what we can:
+    bool return_finalized = request.params[1].isNull() || (!request.params[1].isNull() && !request.params[1].get_bool());
+    bool fComplete = false;
+    if (return_finalized) {
+        fComplete = FinalizePartialTransaction(merged_psbtx);
+    }
+    merged_psbtx.sanitize_for_serialization();
+
+    UniValue result(UniValue::VOBJ);
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    if (fComplete && return_finalized) {
+        ssTx << merged_psbtx.tx;
+    } else {
+        ssTx << merged_psbtx;
+    }
+    result.push_back(Pair("hex", HexStr(ssTx.begin(), ssTx.end())));
+    result.push_back(Pair("complete", fComplete));
+
+    return result;
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         argNames
   //  --------------------- ------------------------  -----------------------  ----------
@@ -1275,6 +1444,7 @@ static const CRPCCommand commands[] =
     { "rawtransactions",    "combinerawtransaction",  &combinerawtransaction,  {"txs"} },
     { "rawtransactions",    "signrawtransaction",     &signrawtransaction,     {"hexstring","prevtxs","privkeys","sighashtype"} }, /* uses wallet if enabled */
     { "rawtransactions",    "decodepsbt",             &decodepsbt,             {"hexstring"} },
+    { "rawtransactions",    "combinepsbt",            &combinepsbt,            {"txs","psbtformat"} },
 
     { "blockchain",         "gettxoutproof",          &gettxoutproof,          {"txids", "blockhash"} },
     { "blockchain",         "verifytxoutproof",       &verifytxoutproof,       {"proof"} },
