@@ -3694,12 +3694,17 @@ UniValue walletupdatepsbt(const JSONRPCRequest& request)
     fill_psbt(pwallet, psbtx, &txConst);
 
     // Sign what we can:
-    bool fComplete = SignPartialTransaction(psbtx, pwallet, nHashType);
+    SignPartialTransaction(psbtx, pwallet, nHashType);
+    bool return_finalized = request.params[2].isNull() || (!request.params[2].isNull() && !request.params[2].get_bool());
+    bool fComplete = false;
+    if (return_finalized) {
+        fComplete = FinalizePartialTransaction(psbtx);
+    }
     psbtx.sanitize_for_serialization();
 
     UniValue result(UniValue::VOBJ);
     CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
-    if (fComplete && (request.params[2].isNull() || (!request.params[2].isNull() && !request.params[2].get_bool()))) {
+    if (fComplete && return_finalized) {
         ssTx << psbtx.tx;
     } else {
         ssTx << psbtx;

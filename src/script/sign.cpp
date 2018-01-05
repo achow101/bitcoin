@@ -436,91 +436,130 @@ bool SignPartialTransaction(PartiallySignedTransaction& psbt, const CKeyStore* k
         }
 
         // Add to partial sigs
+        if (solved) {
+            for (unsigned int j = 0; j < key_ret.size(); ++j) {
+                psbt.inputs[i].partial_sigs.emplace(key_ret[j], sig_ret[j]);
+            }
+        }
+    }
+
+    return solved;
+}
+
+// Finalizes the inputs that can be finalized
+// Returns true for final tx, false for non final
+bool FinalizePartialTransaction(PartiallySignedTransaction& psbt)
+{
+    CMutableTransaction mtx = psbt.tx;
+    bool complete = true;
+    const CTransaction const_tx(mtx);
+    for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
+        CTxIn& txin = mtx.vin[i];
+        PartiallySignedInput psbt_in = psbt.inputs[i];
+
+        // Find the non witness utxo first
+        CTxOut utxo;
+        if (psbt_in.non_witness_utxo) {
+            utxo = psbt_in.non_witness_utxo->vout[txin.prevout.n];
+        }
+        // Now find the witness utxo if the non witness doesn't exist
+        else if (!psbt_in.witness_utxo.IsNull()) {
+            utxo = psbt_in.witness_utxo;
+        }
+        // If there is no nonwitness or witness utxo, then this input is fully signed and we are done here
+        else {
+            continue;
+        }
+
+        // Combine partial sigs and create full scriptsig
+        std::vector<valtype> vSolutions;
+        CScript spk = utxo.scriptPubKey;
+        bool loop = true;
         bool P2SH = false;
         bool witness = false;
         bool WSH = false;
         CScript redeemscript;
         CScript witnessscript;
         SignatureData sigdata;
-        if (solved) {
-            for (unsigned int j = 0; j < key_ret.size(); ++j) {
-                psbt.inputs[i].partial_sigs.emplace(key_ret[j], sig_ret[j]);
-            }
-
-            // Combine partial sigs and create full scriptsig
-            std::vector<valtype> vSolutions;
-            CScript spk = utxo.scriptPubKey;
-            bool loop = true;
-            script_ret.clear();
-            while (loop) {
-                loop = false;
-                uint160 h160;
-                CScript script_ret2;
-                CKeyID keyID;
-                CPubKey vch;
-                if (Solver(spk, whichType, vSolutions)) {
-                    switch (whichType)
+        std::vector<valtype> script_ret; // Only for the signer to put redemscripts to be used later.
+        txnouttype whichType;
+        while (loop) {
+            loop = false;
+            uint160 h160;
+            CScript script_ret2;
+            CKeyID keyID;
+            bool found_pk = false;
+            if (Solver(spk, whichType, vSolutions)) {
+                switch (whichType)
+                {
+                case TX_PUBKEY:
+                    script_ret.push_back(psbt.inputs[i].partial_sigs.find(CPubKey(vSolutions[0]))->second);
+                    break;
+                case TX_WITNESS_V0_KEYHASH:
+                    witness = true;
+                case TX_PUBKEYHASH:
+                    keyID = CKeyID(uint160(vSolutions[0]));
+                    // Go through each of the pubkeys in partial_sigs and find the one that matches
+                    for (auto& pair : psbt.inputs[i].partial_sigs) {
+                        if (pair.first.GetID() == keyID) {
+                            found_pk = true;
+                            script_ret.push_back(pair.second);
+                            script_ret.push_back(ToByteVector(pair.first));
+                            break;
+                        }
+                    }
+                    if (!found_pk) {
+                        complete = false;
+                    }
+                    break;
+                case TX_SCRIPTHASH:
+                    P2SH = true;
                     {
-                    case TX_PUBKEY:
-                        script_ret.push_back(psbt.inputs[i].partial_sigs.find(CPubKey(vSolutions[0]))->second);
-                        break;
-                    case TX_WITNESS_V0_KEYHASH:
-                        witness = true;
-                    case TX_PUBKEYHASH:
-                        keyID = CKeyID(uint160(vSolutions[0]));
-                        creator.KeyStore().GetPubKey(keyID, vch);
-                        script_ret.push_back(psbt.inputs[i].partial_sigs.find(vch)->second);
-                        script_ret.push_back(ToByteVector(vch));
-                        break;
-                    case TX_SCRIPTHASH:
-                        P2SH = true;
-                        {
-                            auto redeem_script_it = psbt.redeem_scripts.find(uint160(vSolutions[0]));
-                            if (redeem_script_it != psbt.redeem_scripts.end()) {
-                                spk = redeemscript = redeem_script_it->second;
-                            } else {
-                                break;
-                            }
+                        auto redeem_script_it = psbt.redeem_scripts.find(uint160(vSolutions[0]));
+                        if (redeem_script_it != psbt.redeem_scripts.end()) {
+                            spk = redeemscript = redeem_script_it->second;
+                        } else {
+                            break;
                         }
-                        loop = true;
-                        break;
-                    case TX_MULTISIG: {
-                        script_ret.push_back(valtype()); // workaround CHECKMULTISIG bug
-                        SignatureData dummy_sigdata;
-                        dummy_sigdata.scriptSig = spk;
-                        Stacks redeemscript_stack(dummy_sigdata);
-                        unsigned int nSigsRequired = redeemscript_stack.script.front()[0];
-                        unsigned int nSigsHave = 0;
-                        unsigned int nPubKeys = redeemscript_stack.script.size()-2;
-                        for (unsigned int j = 0; j < nPubKeys && nSigsHave < nSigsRequired; ++j)
-                        {
-                            auto sig_it = psbt.inputs[i].partial_sigs.find(CPubKey(redeemscript_stack.script[j + 1]));
-                            if (sig_it != psbt.inputs[i].partial_sigs.end()) {
-                                script_ret.push_back(sig_it->second);
-                                ++nSigsHave;
-                            }
-                        }
-                        break;
                     }
-                    case TX_WITNESS_V0_SCRIPTHASH:
-                        witness = true;
-                        WSH = true;
-                        {
-                            auto witness_script_it = psbt.witness_scripts.find(uint256(vSolutions[0]));
-                            if (witness_script_it != psbt.witness_scripts.end()) {
-                                spk = witnessscript = witness_script_it->second;
-                            } else {
-                                break;
-                            }
+                    loop = true;
+                    break;
+                case TX_MULTISIG: {
+                    script_ret.push_back(valtype()); // workaround CHECKMULTISIG bug
+                    SignatureData dummy_sigdata;
+                    dummy_sigdata.scriptSig = spk;
+                    Stacks redeemscript_stack(dummy_sigdata);
+                    unsigned int nSigsRequired = redeemscript_stack.script.front()[0];
+                    unsigned int nSigsHave = 0;
+                    unsigned int nPubKeys = redeemscript_stack.script.size()-2;
+                    for (unsigned int j = 0; j < nPubKeys && nSigsHave < nSigsRequired; ++j)
+                    {
+                        auto sig_it = psbt.inputs[i].partial_sigs.find(CPubKey(redeemscript_stack.script[j + 1]));
+                        if (sig_it != psbt.inputs[i].partial_sigs.end()) {
+                            script_ret.push_back(sig_it->second);
+                            ++nSigsHave;
                         }
-                        loop = true;
-                        break;
+                    }
+                    break;
+                }
+                case TX_WITNESS_V0_SCRIPTHASH:
+                    witness = true;
+                    WSH = true;
+                    {
+                        auto witness_script_it = psbt.witness_scripts.find(uint256(vSolutions[0]));
+                        if (witness_script_it != psbt.witness_scripts.end()) {
+                            spk = witnessscript = witness_script_it->second;
+                        } else {
+                            break;
+                        }
+                    }
+                    loop = true;
+                    break;
 
-                    case TX_NONSTANDARD:
-                    case TX_NULL_DATA:
-                    default:
-                        break;
-                    }
+                case TX_NONSTANDARD:
+                case TX_NULL_DATA:
+                default:
+                    break;
                 }
             }
         }
@@ -539,18 +578,19 @@ bool SignPartialTransaction(PartiallySignedTransaction& psbt, const CKeyStore* k
 
         // Test solution
         ScriptError serror = SCRIPT_ERR_OK;
-        if (VerifyScript(sigdata.scriptSig, utxo.scriptPubKey, &sigdata.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, creator.Checker(), &serror)) {
+        const CAmount& amount = utxo.nValue;
+        if (VerifyScript(sigdata.scriptSig, utxo.scriptPubKey, &sigdata.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, TransactionSignatureChecker(&const_tx, i, amount), &serror)) {
             // signatures are complete
             // Add scriptsig/scriptwitness to transaction
             psbt.tx.vin[i].scriptSig = sigdata.scriptSig;
             psbt.tx.vin[i].scriptWitness = sigdata.scriptWitness;
         }
         else {
-            solved = false;
+            complete = false;
         }
     }
 
-    return solved;
+    return complete;
 }
 
 static Stacks CombineSignatures(const CScript& scriptPubKey, const BaseSignatureChecker& checker,

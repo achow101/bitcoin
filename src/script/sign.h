@@ -499,6 +499,7 @@ struct PartiallySignedTransaction
 bool ProduceSignature(const BaseSignatureCreator& creator, const CScript& scriptPubKey, SignatureData& sigdata);
 
 bool SignPartialTransaction(PartiallySignedTransaction& psbt, const CKeyStore* keystore, int nHashType);
+bool FinalizePartialTransaction(PartiallySignedTransaction& psbt);
 
 /** Produce a script signature for a transaction. */
 bool SignSignature(const CKeyStore &keystore, const CScript& fromPubKey, CMutableTransaction& txTo, unsigned int nIn, const CAmount& amount, int nHashType);
