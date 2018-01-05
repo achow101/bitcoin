@@ -127,6 +127,30 @@ struct PartiallySignedTransaction
 
     PartiallySignedTransaction();
     PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs, std::map<CPubKey, std::vector<uint32_t>>& hd_keypaths);
+    PartiallySignedTransaction(const PartiallySignedTransaction& psbt_in);
+
+    // Only checks if they refer to the same transaction
+    friend bool operator==(const PartiallySignedTransaction& a, const PartiallySignedTransaction &b)
+    {
+        // Check the inputs
+        for (unsigned int i = 0; i < a.tx.vin.size(); ++i) {
+            if (a.tx.vin[i].prevout != b.tx.vin[i].prevout
+                || a.tx.vin[i].nSequence != b.tx.vin[i].nSequence) {
+                    return false;
+                }
+        }
+        // Check the outputs
+        for (unsigned int i = 0; i < a.tx.vout.size(); ++i) {
+            if (a.tx.vout[i] != b.tx.vout[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    friend bool operator!=(const PartiallySignedTransaction& a, const PartiallySignedTransaction &b)
+    {
+        return !(a == b);
+    }
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {

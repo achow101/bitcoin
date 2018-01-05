@@ -675,6 +675,7 @@ bool DummySignatureCreator::CreateSig(std::vector<unsigned char>& vchSig, const 
 }
 
 PartiallySignedTransaction::PartiallySignedTransaction() : tx(), redeem_scripts(), witness_scripts(), inputs(), hd_keypaths() {}
+PartiallySignedTransaction::PartiallySignedTransaction(const PartiallySignedTransaction& psbtx_in) : tx(psbtx_in.tx), redeem_scripts(psbtx_in.redeem_scripts), witness_scripts(psbtx_in.witness_scripts), inputs(psbtx_in.inputs), unknown(psbtx_in.unknown), hd_keypaths(psbtx_in.hd_keypaths), num_ins(psbtx_in.num_ins), use_in_index(psbtx_in.use_in_index) {}
 PartiallySignedTransaction::PartiallySignedTransaction(CMutableTransaction& tx, std::map<uint160, CScript>& redeem_scripts, std::map<uint256, CScript>& witness_scripts, std::vector<PartiallySignedInput>& inputs, std::map<CPubKey, std::vector<uint32_t>>& hd_keypaths)
 {
     this->tx = tx;
