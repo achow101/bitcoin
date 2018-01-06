@@ -70,6 +70,8 @@ extern const char * DEFAULT_WALLET_DAT;
 
 static const int64_t TIMESTAMP_MIN = 0;
 
+const uint32_t BIP32_HARDENED_KEY_LIMIT = 0x80000000;
+
 class CBlockIndex;
 class CCoinControl;
 class COutput;
