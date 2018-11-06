@@ -534,6 +534,9 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     if (wss.fAnyUnordered)
         result = pwallet->ReorderTransactions();
 
+    // Upgrade all of the wallet keymetadata to have the hd master key id
+    pwallet->UpgradeKeyMetadata();
+
     return result;
 }
 

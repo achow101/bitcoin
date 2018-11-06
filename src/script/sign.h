@@ -29,6 +29,25 @@ struct KeyOriginInfo
     {
         return std::equal(std::begin(a.fingerprint), std::end(a.fingerprint), std::begin(b.fingerprint)) && a.path == b.path;
     }
+
+    ADD_SERIALIZE_METHODS;
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action)
+    {
+        READWRITE(fingerprint);
+        READWRITE(path);
+    }
+
+    void SetNull()
+    {
+        memset(fingerprint, 0, 4);
+        path.clear();
+    }
+
+    bool IsNull() const
+    {
+        return path.empty() && fingerprint[0] == 0 && fingerprint[1] == 0 && fingerprint[2] == 0 && fingerprint[3] == 0;
+    }
 };
 
 /** An interface to be implemented by keystores that support signing. */
