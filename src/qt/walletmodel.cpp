@@ -568,7 +568,7 @@ bool WalletModel::isWalletEnabled()
 
 bool WalletModel::privateKeysDisabled() const
 {
-    return m_wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+    return m_wallet->NoPrivkeysAndKeypoolEmpty(false);
 }
 
 QString WalletModel::getWalletName() const

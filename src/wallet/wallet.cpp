@@ -2743,7 +2743,7 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
                 //  post-backup change.
 
                 // Reserve a new key pair from key pool
-                if (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                if (NoPrivkeysAndKeypoolEmpty(true)) {
                     strFailReason = _("Can't generate a change-address key. Private keys are disabled for this wallet.");
                     return false;
                 }
@@ -3295,6 +3295,22 @@ size_t CWallet::KeypoolCountExternalKeys()
     return setExternalKeyPool.size() + set_pre_split_keypool.size();
 }
 
+bool CWallet::NoPrivkeysAndKeypoolEmpty(bool internal)
+{
+    if (!IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        return false;
+    }
+
+    {
+        LOCK(cs_wallet);
+        if (internal) {
+            return setInternalKeyPool.size() == 0;
+        } else {
+            return KeypoolCountExternalKeys() == 0;
+        }
+    }
+}
+
 void CWallet::LoadKeyPool(int64_t nIndex, const CKeyPool &keypool)
 {
     AssertLockHeld(cs_wallet);
@@ -3401,7 +3417,8 @@ bool CWallet::ReserveKeyFromKeyPool(int64_t& nIndex, CKeyPool& keypool, bool fRe
         if (!IsLocked())
             TopUpKeyPool();
 
-        bool fReturningInternal = IsHDEnabled() && CanSupportFeature(FEATURE_HD_SPLIT) && fRequestedInternal;
+        bool fReturningInternal = fRequestedInternal;
+        fReturningInternal &= (IsHDEnabled() && CanSupportFeature(FEATURE_HD_SPLIT)) || IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
         bool use_split_keypool = set_pre_split_keypool.empty();
         std::set<int64_t>& setKeyPool = use_split_keypool ? (fReturningInternal ? setInternalKeyPool : setExternalKeyPool) : set_pre_split_keypool;
 
@@ -3418,7 +3435,8 @@ bool CWallet::ReserveKeyFromKeyPool(int64_t& nIndex, CKeyPool& keypool, bool fRe
         if (!batch.ReadPool(nIndex, keypool)) {
             throw std::runtime_error(std::string(__func__) + ": read failed");
         }
-        if (!HaveKey(keypool.vchPubKey.GetID())) {
+        CPubKey pk;
+        if (!GetPubKey(keypool.vchPubKey.GetID(), pk)) {
             throw std::runtime_error(std::string(__func__) + ": unknown key in key pool");
         }
         // If the key was pre-split keypool, we don't care about what type it is
@@ -3462,23 +3480,21 @@ void CWallet::ReturnKey(int64_t nIndex, bool fInternal, const CPubKey& pubkey)
 
 bool CWallet::GetKeyFromPool(CPubKey& result, bool internal)
 {
-    if (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+    LOCK(cs_wallet);
+    if (NoPrivkeysAndKeypoolEmpty(internal)) {
         return false;
     }
 
     CKeyPool keypool;
-    {
-        LOCK(cs_wallet);
-        int64_t nIndex;
-        if (!ReserveKeyFromKeyPool(nIndex, keypool, internal)) {
-            if (IsLocked()) return false;
-            WalletBatch batch(*database);
-            result = GenerateNewKey(batch, internal);
-            return true;
-        }
-        KeepKey(nIndex);
-        result = keypool.vchPubKey;
+    int64_t nIndex;
+    if (!ReserveKeyFromKeyPool(nIndex, keypool, internal) && !IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        if (IsLocked()) return false;
+        WalletBatch batch(*database);
+        result = GenerateNewKey(batch, internal);
+        return true;
     }
+    KeepKey(nIndex);
+    result = keypool.vchPubKey;
     return true;
 }
 

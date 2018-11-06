@@ -491,6 +491,8 @@ public:
 
     std::shared_ptr<CWallet> m_shared_wallet;
     CWallet& m_wallet;
+
+    bool NoPrivkeysAndKeypoolEmpty(bool internal) override { return m_wallet.NoPrivkeysAndKeypoolEmpty(internal); }
 };
 
 class WalletClientImpl : public ChainClient

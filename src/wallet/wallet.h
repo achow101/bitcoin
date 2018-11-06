@@ -998,6 +998,7 @@ public:
     void ReturnKey(int64_t nIndex, bool fInternal, const CPubKey& pubkey);
     bool GetKeyFromPool(CPubKey &key, bool internal = false);
     int64_t GetOldestKeyPoolTime();
+    bool NoPrivkeysAndKeypoolEmpty(bool internal = false);
     /**
      * Marks all keys in the keypool up to and including reserve_key as used.
      */

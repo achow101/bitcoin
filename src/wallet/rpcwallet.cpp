@@ -166,11 +166,15 @@ static UniValue getnewaddress(const JSONRPCRequest& request)
             + HelpExampleRpc("getnewaddress", "")
         );
 
-    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+    LOCK(pwallet->cs_wallet);
+
+    if (pwallet->NoPrivkeysAndKeypoolEmpty()) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet and no keys in the external keypool");
     }
 
-    LOCK(pwallet->cs_wallet);
+    if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && !pwallet->IsLocked()) {
+        pwallet->TopUpKeyPool();
+    }
 
     // Parse the label first so we don't generate a key if there's an error
     std::string label;
@@ -182,10 +186,6 @@ static UniValue getnewaddress(const JSONRPCRequest& request)
         if (!ParseOutputType(request.params[1].get_str(), output_type)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[1].get_str()));
         }
-    }
-
-    if (!pwallet->IsLocked()) {
-        pwallet->TopUpKeyPool();
     }
 
     // Generate a new key that is added to wallet
@@ -226,13 +226,13 @@ static UniValue getrawchangeaddress(const JSONRPCRequest& request)
             + HelpExampleRpc("getrawchangeaddress", "")
        );
 
-    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
-    }
-
     LOCK(pwallet->cs_wallet);
 
-    if (!pwallet->IsLocked()) {
+    if (pwallet->NoPrivkeysAndKeypoolEmpty(true)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet and no keys in the internal keypool");
+    }
+
+    if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && !pwallet->IsLocked()) {
         pwallet->TopUpKeyPool();
     }
 
