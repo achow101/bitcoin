@@ -587,6 +587,21 @@ bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypa
     return true;
 }
 
+std::string FormatKeyPath(const std::vector<uint32_t>& path)
+{
+    std::string ret;
+    for (auto i : path) {
+        ret += strprintf("/%i", (i << 1) >> 1);
+        if (i >> 31) ret += '\'';
+    }
+    return ret;
+}
+
+std::string WriteHdKeypath(const std::vector<uint32_t> keypath)
+{
+    return "m" + FormatKeyPath(keypath);
+}
+
 void Downcase(std::string& str)
 {
     std::transform(str.begin(), str.end(), str.begin(), [](char c){return ToLower(c);});

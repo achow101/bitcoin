@@ -25,16 +25,6 @@ namespace {
 
 typedef std::vector<uint32_t> KeyPath;
 
-std::string FormatKeyPath(const KeyPath& path)
-{
-    std::string ret;
-    for (auto i : path) {
-        ret += strprintf("/%i", (i << 1) >> 1);
-        if (i >> 31) ret += '\'';
-    }
-    return ret;
-}
-
 /** Interface for public key objects in descriptors. */
 struct PubkeyProvider
 {

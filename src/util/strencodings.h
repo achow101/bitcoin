@@ -200,6 +200,10 @@ bool ConvertBits(const O& outfn, I it, I end) {
 /** Parse an HD keypaths like "m/7/0'/2000". */
 NODISCARD bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypath);
 
+/** Write HD keypaths as strings */
+std::string WriteHdKeypath(const std::vector<uint32_t> keypath);
+std::string FormatKeyPath(const std::vector<uint32_t>& path);
+
 /**
  * Converts the given character to its lowercase equivalent.
  * This function is locale independent. It only converts uppercase
