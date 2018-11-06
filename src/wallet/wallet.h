@@ -977,6 +977,7 @@ public:
     bool NewKeyPool();
     size_t KeypoolCountExternalKeys() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool TopUpKeyPool(unsigned int kpSize = 0);
+    void AddKeypoolPubkey(const CPubKey& pubkey, const bool internal);
 
     /**
      * Reserves a key from the keypool and sets nIndex to its index
