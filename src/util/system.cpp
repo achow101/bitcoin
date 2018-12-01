@@ -8,9 +8,11 @@
 #include <chainparamsbase.h>
 #include <random.h>
 #include <serialize.h>
+#include <univalue.h>
 #include <util/strencodings.h>
 
 #include <stdarg.h>
+#include <array>
 
 #if (defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__))
 #include <pthread.h>
@@ -1193,6 +1195,24 @@ void runCommand(const std::string& strCommand)
 #endif
     if (nErr)
         LogPrintf("runCommand error: system(%s) returned %d\n", strCommand, nErr);
+}
+
+UniValue runCommandParseJSON(const std::string& strCommand)
+{
+    if (strCommand.empty()) return UniValue::VNULL;
+
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(strCommand.c_str(), "r"), pclose);
+    if (!pipe) throw std::runtime_error("popen() failed!");
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+      result += buffer.data();
+    }
+
+    UniValue resultJSON;
+    if (!resultJSON.read(result)) throw std::runtime_error("Unable to parse JSON: " + result);
+
+    return resultJSON;
 }
 
 void RenameThread(const char* name)
