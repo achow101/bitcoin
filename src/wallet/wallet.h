@@ -20,6 +20,7 @@
 #include <util/system.h>
 #include <wallet/crypter.h>
 #include <wallet/coinselection.h>
+#include <wallet/externalsigner.h>
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 
@@ -91,6 +92,8 @@ static const unsigned int DEFAULT_TX_CONFIRM_TARGET = 6;
 static const bool DEFAULT_WALLET_RBF = false;
 static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
+//! -signer default
+static const std::string DEFAULT_EXTERNAL_SIGNER = "";
 
 //! Pre-calculated constants for input size estimation in *virtual size*
 static constexpr size_t DUMMY_NESTED_P2WPKH_INPUT_SIZE = 91;
@@ -973,6 +976,9 @@ public:
     CFeeRate m_discard_rate{DEFAULT_DISCARD_FEE};
     OutputType m_default_address_type{DEFAULT_ADDRESS_TYPE};
     OutputType m_default_change_type{DEFAULT_CHANGE_TYPE};
+
+    // See docs/external-signer.md
+    std::vector<ExternalSigner> m_external_signers;
 
     bool NewKeyPool();
     size_t KeypoolCountExternalKeys() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
