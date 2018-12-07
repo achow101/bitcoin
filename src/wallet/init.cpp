@@ -13,6 +13,7 @@
 #include <util/moneystr.h>
 #include <validation.h>
 #include <walletinitinterface.h>
+#include <wallet/rpcsigner.h>
 #include <wallet/rpcwallet.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
