@@ -27,6 +27,9 @@ def getkeys(args):
     print("Pseudo-descriptor not recognized: " + args.desc)
     exit(1)
 
+def displayaddress(args):
+    return sys.stdout.write(json.dumps(None))
+
 parser = argparse.ArgumentParser(prog='./signer.py', description='External signer mock')
 parser.add_argument('--fingerprint')
 parser.add_argument('--testnet', action='store_true')
@@ -39,6 +42,10 @@ parser_getkeys = subparsers.add_parser('getkeys', help='get keys from signer')
 parser_getkeys.add_argument('--desc', metavar='desc',
                     help='a pseudo-descriptor for the keys to fetch')
 parser_getkeys.set_defaults(func=getkeys)
+
+parser_displayaddress = subparsers.add_parser('displayaddress', help='display address on signer')
+parser_displayaddress.add_argument('--desc', metavar='desc')
+parser_displayaddress.set_defaults(func=displayaddress)
 
 if len(sys.argv) == 1:
   args = parser.parse_args(['-h'])

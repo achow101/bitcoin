@@ -32,6 +32,7 @@ public:
 
     static UniValue Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, bool mainnet = true);
 
+    UniValue displayAddress(const std::string& descriptor);
     UniValue getKeys(const std::string& descriptor);
 };
 

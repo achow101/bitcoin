@@ -3,7 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparamsbase.h>
+#include <key_io.h>
 #include <rpc/server.h>
+#include <rpc/util.h>
+#include <script/descriptor.h>
 #include <validation.h>
 #include <wallet/rpcdump.h>
 #include <wallet/rpcwallet.h>
@@ -95,6 +98,95 @@ UniValue signerdissociate(const JSONRPCRequest& request)
     if (position != pwallet->m_external_signers.end()) pwallet->m_external_signers.erase(position);
 
     return NullUniValue;
+}
+
+static UniValue signerdisplayaddress(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.empty() || request.params.size() > 2) {
+        throw std::runtime_error(
+            "signerdisplayaddress\n"
+            "Display address on an external signer for verification.\n"
+            "\nArguments:\n"
+            "1. \"address\"       (string, required) The bitcoin address to display.\n"
+            "2. \"fingerprint\"   (string, optional) Master key fingerprint of signer\n"
+        );
+    }
+
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    ExternalSigner *signer = GetSignerForJSONRPCRequest(request, 1, pwallet);
+
+    LOCK(pwallet->cs_wallet);
+
+    CTxDestination dest = DecodeDestination(request.params[0].get_str());
+
+    // Make sure the destination is valid
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+    }
+
+    const CKeyMetadata* meta = nullptr;
+    CKeyID key_id = GetKeyForDestination(*pwallet, dest);
+    if (!key_id.IsNull()) {
+        auto it = pwallet->mapKeyMetadata.find(key_id);
+        if (it != pwallet->mapKeyMetadata.end()) {
+            meta = &it->second;
+        }
+    }
+    // TODO: use inferred descriptor (preferably with xpub at the account level)
+    CScript scriptPubKey = GetScriptForDestination(dest);
+    if (!meta) {
+        auto it = pwallet->m_script_metadata.find(CScriptID(scriptPubKey));
+        if (it != pwallet->m_script_metadata.end()) {
+            meta = &it->second;
+        }
+    }
+    if (!meta || meta->key_origin.IsNull()) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Missing BIP32 derivation data");
+    }
+
+    std::string path = meta->hdKeypath;
+    path.erase(0,2); // Unsafe, but to be replaced with inferred descriptor
+
+    KeyOriginInfo info;
+    if (!pwallet->GetKeyOrigin(key_id, info)) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Internal keypath is broken");
+    }
+
+    bool solvable = IsSolvable(*pwallet, scriptPubKey);
+    if (!solvable) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Address is not solvable");
+    }
+
+    std::string inferredDescriptor = InferDescriptor(scriptPubKey, *pwallet)->ToString();
+
+    // TODO: Use the inferred descriptor directly. Unfortunately it's currently
+    //       not useful (or is it??).
+
+    std::string prefix = "";
+    std::string postfix = "";
+
+    if (inferredDescriptor.find("wpkh") == 0) {
+        prefix = "wpkh(";
+        postfix = ")";
+    } else if (inferredDescriptor.find("sh(wpkh") == 0) {
+        prefix = "sh(wpkh(";
+        postfix = "))";
+    } else if (inferredDescriptor.find("pkh") == 0) {
+        prefix = "pkh(";
+        postfix = ")";
+    } else {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to produce descriptor");
+    }
+    std::string descriptor = prefix + strprintf("%08x/", ReadBE32(info.fingerprint)) + WriteHDKeypath(info.path).erase(0,2) + postfix;
+    signer->displayAddress(descriptor);
+
+    return UniValue(UniValue::VNULL);
 }
 
 UniValue signerfetchkeys(const JSONRPCRequest& request)
@@ -245,6 +337,7 @@ static const CRPCCommand commands[] =
     //  --------------------- ------------------------          -----------------------         ----------
     { "signer",             "enumeratesigners",                 &enumeratesigners,              {} },
     { "signer",             "signerdissociate",                 &signerdissociate,              {"fingerprint"} },
+    { "signer",             "signerdisplayaddress",             &signerdisplayaddress,          {"address", "fingerprint"} },
     { "signer",             "signerfetchkeys",                  &signerfetchkeys,               {"fingerprint"} },
 };
 // clang-format on
