@@ -26,6 +26,8 @@ public:
     bool m_mainnet;
 
     static UniValue Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, bool mainnet = true);
+
+    UniValue getKeys(const std::string& descriptor);
 };
 
 #endif // BITCOIN_WALLET_EXTERNALSIGNER_H

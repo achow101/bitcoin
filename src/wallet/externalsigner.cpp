@@ -28,3 +28,8 @@ UniValue ExternalSigner::Enumerate(const std::string& command, std::vector<Exter
     }
     return result;
 }
+
+UniValue ExternalSigner::getKeys(const std::string& descriptor)
+{
+    return runCommandParseJSON(m_command + " --fingerprint \"" + m_fingerprint + "\"" + (m_mainnet ? "" : " --testnet ") + " getkeys --desc \"" + descriptor + "\"");
+}
