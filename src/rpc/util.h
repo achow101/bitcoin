@@ -28,6 +28,8 @@ CScript CreateMultisigRedeemscript(const int required, const std::vector<CPubKey
 
 UniValue DescribeAddress(const CTxDestination& dest);
 
+std::string WriteHDKeypath(std::vector<uint32_t>& keypath);
+
 struct RPCArg {
     enum class Type {
         OBJ,
