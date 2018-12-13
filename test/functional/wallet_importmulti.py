@@ -543,5 +543,43 @@ class ImportMultiTest(BitcoinTestFramework):
                      solvable=True,
                      ismine=False)
 
+        # Test importing of a P2SH-P2WPKH address via descriptor + private key
+        key = get_key(self.nodes[0])
+        self.log.info("Should import a p2sh-p2wpkh address from descriptor and private key")
+        self.test_importmulti({"desc": "sh(wpkh(" + key.pubkey + "))",
+                               "timestamp": "now",
+                               "label": "Descriptor import test",
+                               "keys": [key.privkey]},
+                              True)
+        test_address(self.nodes[1],
+                     key.p2sh_p2wpkh_addr,
+                     solvable=True,
+                     ismine=True,
+                     label="Descriptor import test")
+
+        # Test ranged descriptor fails if range is not specified
+        xpriv = "tprv8ZgxMBicQKsPeuVhWwi6wuMQGfPKi9Li5GtX35jVNknACgqe3CY4g5xgkfDDJcmtF7o1QnxWDRYw4H5P26PXq7sbcUkEqeR4fg3Kxp2tigg"
+        addresses = ["2N7yv4p8G8yEaPddJxY41kPihnWvs39qCMf", "2MsHxyb2JS3pAySeNUsJ7mNnurtpeenDzLA"] # hdkeypath=m/0'/0'/0' and 1'
+        desc = "sh(wpkh(" + xpriv + "/0'/0'/*'" + "))"
+        self.log.info("Ranged descriptor import should fail without a specified range")
+        self.test_importmulti({"desc": desc,
+                               "timestamp": "now"},
+                              False,
+                              error_code=-8,
+                              error_message='Descriptor is ranged, please specify the range')
+
+        # Test importing of a ranged descriptor without keys
+        self.log.info("Should import the ranged descriptor with specified range as solvable")
+        self.test_importmulti({"desc": desc,
+                               "timestamp": "now",
+                               "range": {"end": 1}},
+                              True,
+                              warnings=["Some private keys are missing, outputs will be considered watchonly. If this is intentional, specify the watchonly flag."])
+        for address in addresses:
+            test_address(self.nodes[1],
+                         key.p2sh_p2wpkh_addr,
+                         solvable=True)
+
+
 if __name__ == '__main__':
     ImportMultiTest().main()
