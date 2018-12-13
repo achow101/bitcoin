@@ -9,6 +9,7 @@
 #include <merkleblock.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
+#include <script/descriptor.h>
 #include <script/script.h>
 #include <script/standard.h>
 #include <sync.h>
@@ -1062,6 +1063,83 @@ static UniValue ProcessImportLegacy(ImportData& import_data, std::map<CKeyID, CP
     return warnings;
 }
 
+static UniValue ProcessImportDescriptor(ImportData& import_data, std::map<CKeyID, CPubKey>& pubkey_map, std::map<CKeyID, CKey>& privkey_map, std::set<CScript>& script_pub_keys, bool& have_solving_data, const UniValue& data)
+{
+    UniValue warnings(UniValue::VARR);
+
+    const std::string& descriptor = data["desc"].get_str();
+    FlatSigningProvider keys;
+    auto parsed_desc = Parse(descriptor, keys);
+    if (!parsed_desc) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Descriptor is invalid");
+    }
+
+    have_solving_data = parsed_desc->IsSolvable();
+    const bool watch_only = data.exists("watchonly") ? data["watchonly"].get_bool() : false;
+
+    int64_t range_start = 0, range_end = 0;
+    if (!parsed_desc->IsRange() && data.exists("range")) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Range should not be specified for an un-ranged descriptor");
+    } else if (parsed_desc->IsRange()) {
+        if (!data.exists("range")) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Descriptor is ranged, please specify the range");
+        }
+        const UniValue& range = data["range"];
+        range_start = range.exists("start") ? range["start"].get_int64() : 0;
+        if (!range.exists("end")) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "End of range for descriptor must be specified");
+        }
+        range_end = range["end"].get_int64();
+    }
+
+    const UniValue& priv_keys = data.exists("keys") ? data["keys"].get_array() : UniValue();
+
+    FlatSigningProvider out_keys;
+
+    // Expand all descriptors to get public keys and scripts.
+    // TODO: get private keys from descriptors too
+    for (int i = range_start; i <= range_end; ++i) {
+        std::vector<CScript> scripts_temp;
+        parsed_desc->Expand(i, keys, scripts_temp, out_keys);
+        std::copy(scripts_temp.begin(), scripts_temp.end(), std::inserter(script_pub_keys, script_pub_keys.end()));
+    }
+
+    for (auto const& x : out_keys.scripts) {
+        import_data.import_scripts.emplace(x.second);
+    }
+
+    std::copy(out_keys.pubkeys.begin(), out_keys.pubkeys.end(), std::inserter(pubkey_map, pubkey_map.end()));
+
+    for (size_t i = 0; i < priv_keys.size(); ++i) {
+        const auto& str = priv_keys[i].get_str();
+        CKey key = DecodeSecret(str);
+        if (!key.IsValid()) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+        }
+        CPubKey pubkey = key.GetPubKey();
+        CKeyID id = pubkey.GetID();
+
+        // Check if this private key corresponds to a public key from the descriptor
+        if (!pubkey_map.count(id)) {
+            warnings.push_back("Ignoring irrelevant private key.");
+        } else {
+            privkey_map.emplace(id, key);
+        }
+    }
+
+    // Check if all the public keys have corresponding private keys in the import for spendability.
+    // This does not take into account threshold multisigs which could be spendable without all keys
+    bool spendable = std::all_of(pubkey_map.begin(), pubkey_map.end(), [&](const std::pair<CKeyID, CPubKey>& used_key){ return privkey_map.count(used_key.first) > 0; });
+    if (!watch_only && !spendable) {
+        warnings.push_back("Some private keys are missing, outputs will be considered watchonly. If this is intentional, specify the watchonly flag.");
+    }
+    if (watch_only && spendable) {
+        warnings.push_back("All private keys are provided, outputs will be considered spendable. If this is intentional, do not specify the watchonly flag.");
+    }
+
+    return warnings;
+}
+
 static UniValue ProcessImport(CWallet * const pwallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     UniValue warnings(UniValue::VARR);
@@ -1081,8 +1159,15 @@ static UniValue ProcessImport(CWallet * const pwallet, const UniValue& data, con
         std::set<CScript> script_pub_keys;
         bool have_solving_data;
 
-        warnings = ProcessImportLegacy(import_data, pubkey_map, privkey_map, script_pub_keys, have_solving_data, data);
-
+        if (data.exists("scriptPubKey") && data.exists("desc")) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Both a descriptor and a scriptPubKey should not be provided.");
+        } else if (data.exists("scriptPubKey")) {
+            warnings = ProcessImportLegacy(import_data, pubkey_map, privkey_map, script_pub_keys, have_solving_data, data);
+        } else if (data.exists("desc")) {
+            warnings = ProcessImportDescriptor(import_data, pubkey_map, privkey_map, script_pub_keys, have_solving_data, data);
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Either a descriptor or scriptPubKey must be provided.");
+        }
 
         // Check whether we have any work to do
         for (const CScript& script : script_pub_keys) {
@@ -1179,7 +1264,8 @@ UniValue importmulti(const JSONRPCRequest& mainRequest)
                         {
                             {"", RPCArg::Type::OBJ, /* opt */ false, /* default_val */ "", "",
                                 {
-                                    {"scriptPubKey", RPCArg::Type::STR, /* opt */ false, /* default_val */ "", "Type of scriptPubKey (string for script, json for address)",
+                                    {"desc", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Descriptor to import. If using descriptor, do not also provide address/scriptPubKey, scripts, or pubkeys"},
+                                    {"scriptPubKey", RPCArg::Type::STR, /* opt */ false, /* default_val */ "", "Type of scriptPubKey (string for script, json for address). Should not be provided if using a descriptor",
                                         /* oneline_description */ "", {"\"<script>\" | { \"address\":\"<address>\" }", "string / json"}
                                     },
                                     {"timestamp", RPCArg::Type::NUM, /* opt */ false, /* default_val */ "", "Creation time of the key in seconds since epoch (Jan 1 1970 GMT),\n"
@@ -1200,6 +1286,12 @@ UniValue importmulti(const JSONRPCRequest& mainRequest)
                                     {"keys", RPCArg::Type::ARR, /* opt */ true, /* default_val */ "empty array", "Array of strings giving private keys to import. The corresponding public keys must occur in the output or redeemscript.",
                                         {
                                             {"key", RPCArg::Type::STR, /* opt */ false, /* default_val */ "", ""},
+                                        }
+                                    },
+                                    {"range", RPCArg::Type::OBJ, /* opt */ true, /* default_val */ "", "If a ranged descriptor is used, this specifies the start and end of the range to import",
+                                        {
+                                            {"start", RPCArg::Type::NUM, /* opt */ true, /* default_val */ "0", "Start of the range to import"},
+                                            {"end", RPCArg::Type::NUM, /* opt */ false, /* default_val */ "", "End of the range to import (inclusive)"},
                                         }
                                     },
                                     {"internal", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Stating whether matching outputs should be treated as not incoming payments (also known as change)"},
