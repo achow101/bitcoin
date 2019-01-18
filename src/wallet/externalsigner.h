@@ -25,6 +25,11 @@ public:
     std::string m_fingerprint;
     bool m_mainnet;
 
+    friend inline bool operator==( const ExternalSigner &a, const ExternalSigner &b )
+    {
+         return a.m_fingerprint == b.m_fingerprint;
+    }
+
     static UniValue Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, bool mainnet = true);
 
     UniValue getKeys(const std::string& descriptor);

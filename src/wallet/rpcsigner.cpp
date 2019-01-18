@@ -70,6 +70,33 @@ ExternalSigner *GetSignerForJSONRPCRequest(const JSONRPCRequest& request, int in
     throw JSONRPCError(RPC_WALLET_ERROR, "Signer fingerprint not found");
 }
 
+UniValue signerdissociate(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() > 1) {
+        throw std::runtime_error(
+            "signerdissociate ( fingerprint )\n"
+            "Disossociates external signer from the wallet.\n"
+            "\nArguments:\n"
+            "1. \"fingerprint\"   (string, optional) Master key fingerprint of signer\n"
+        );
+    }
+
+    ExternalSigner *signer = GetSignerForJSONRPCRequest(request, 0, pwallet);
+
+    assert(signer != nullptr);
+    std::vector<ExternalSigner>::iterator position = std::find(pwallet->m_external_signers.begin(), pwallet->m_external_signers.end(), *signer);
+    if (position != pwallet->m_external_signers.end()) pwallet->m_external_signers.erase(position);
+
+    return NullUniValue;
+}
+
 UniValue signerfetchkeys(const JSONRPCRequest& request)
 {
     std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
@@ -217,6 +244,7 @@ static const CRPCCommand commands[] =
 { //  category              name                                actor (function)                argNames
     //  --------------------- ------------------------          -----------------------         ----------
     { "signer",             "enumeratesigners",                 &enumeratesigners,              {} },
+    { "signer",             "signerdissociate",                 &signerdissociate,              {"fingerprint"} },
     { "signer",             "signerfetchkeys",                  &signerfetchkeys,               {"fingerprint"} },
 };
 // clang-format on

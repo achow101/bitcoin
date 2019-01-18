@@ -36,6 +36,7 @@
 #include <wallet/walletutil.h>
 
 #include <stdint.h>
+#include <algorithm>
 
 #include <univalue.h>
 
