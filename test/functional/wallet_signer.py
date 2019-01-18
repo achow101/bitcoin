@@ -21,9 +21,9 @@ class SignerTest(BitcoinTestFramework):
         mock_signer_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'mocks/signer.py')
         self.extra_args = [
             [],
-            ['-signer="%s"' % mock_signer_path , '-addresstype=bech32'],
-            ['-signer="%s"' % mock_signer_path, '-addresstype=p2sh-segwit'],
-            ['-signer="%s"' % mock_signer_path, '-addresstype=legacy']
+            ['-signer="%s"' % mock_signer_path , '-addresstype=bech32', '-keypool=10'],
+            ['-signer="%s"' % mock_signer_path, '-addresstype=p2sh-segwit', '-keypool=10'],
+            ['-signer="%s"' % mock_signer_path, '-addresstype=legacy', '-keypool=10']
         ]
 
     def skip_test_if_missing_module(self):
@@ -57,7 +57,7 @@ class SignerTest(BitcoinTestFramework):
 
         result = hww1.signerfetchkeys("00000001")
         assert_equal(result, [{'success': True}, {'success': True}])
-        assert_equal(hww1.getwalletinfo()["keypoolsize"], 1)
+        assert_equal(hww1.getwalletinfo()["keypoolsize"], 10)
 
         address1 = hww1.getnewaddress()
         assert_equal(address1, "bcrt1qm90ugl4d48jv8n6e5t9ln6t9zlpm5th68x4f8g")
@@ -71,7 +71,7 @@ class SignerTest(BitcoinTestFramework):
 
         result = hww2.signerfetchkeys("00000001")
         assert_equal(result, [{'success': True}, {'success': True}])
-        assert_equal(hww2.getwalletinfo()["keypoolsize"], 1)
+        assert_equal(hww2.getwalletinfo()["keypoolsize"], 10)
 
         address2 = hww2.getnewaddress()
         assert_equal(address2, "2N2gQKzjUe47gM8p1JZxaAkTcoHPXV6YyVp")
@@ -86,7 +86,7 @@ class SignerTest(BitcoinTestFramework):
         hww3.signerfetchkeys()
 
         assert_equal(result, [{'success': True}, {'success': True}])
-        assert_equal(hww3.getwalletinfo()["keypoolsize"], 1)
+        assert_equal(hww3.getwalletinfo()["keypoolsize"], 10)
 
         address3 = hww3.getnewaddress("00000001")
         assert_equal(address3, "n1LKejAadN6hg2FrBXoU1KrwX4uK16mco9")
@@ -98,6 +98,29 @@ class SignerTest(BitcoinTestFramework):
         self.log.info('Test signerdisplayaddress')
         hww1.signerdisplayaddress(address1, "00000001")
         hww3.signerdisplayaddress(address3)
+
+        self.log.info('Test sign PSBT')
+        self.nodes[0].sendtoaddress(address1, 1)
+        self.nodes[0].generate(1)
+        self.sync_all()
+
+        # Load private key into wallet to generate a signed PSBT for the mock
+        # self.nodes[1].createwallet("mock")
+        # mock_wallet = self.nodes[1].get_wallet_rpc("mock")
+        # TODO: we need support for creating an empty wallet and then importing private keys, following won't work:
+        # mock_wallet.importmulti([{
+        #     "desc": "wpkh([00000000/84h/1h/0h]tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/0/0)",
+        #     "timestamp": 0,
+        #     "keypool": True
+        # }])
+        # print(mock_wallet.getaddressinfo(address1))
+        # mock_psbt = mock_wallet.walletcreatefundedpsbt([], {self.nodes[0].getnewaddress():0.5}, 0, {"includeWatching": True}, True)['psbt']
+        # mock_psbt_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt, bip32derivs=True)
+        # print(mock_psbt_signed)
+
+        psbt_orig = hww1.walletcreatefundedpsbt([], {self.nodes[0].getnewaddress():0.5}, 0, {"includeWatching": True}, True)['psbt']
+        psbt_processed = hww1.signerprocesspsbt(psbt_orig, "00000001")
+        assert_equal(psbt_processed['complete'], False) # TODO: should be true with a proper test PSBT
 
 if __name__ == '__main__':
     SignerTest().main()

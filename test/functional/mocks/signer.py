@@ -30,6 +30,15 @@ def getkeys(args):
 def displayaddress(args):
     return sys.stdout.write(json.dumps(None))
 
+def signtx(args):
+    if args.fingerprint == "d95fc47e" or args.fingerprint == "00000001" :
+        # TODO: generate more realistic psbt and get rid of temporary extra fingerprint
+        sys.stdout.write(json.dumps({
+            "psbt": "cHNidP8BAHUCAAAAASaBcTce3/KF6Tet7qSze3gADAVmy7OtZGQXE8pCFxv2AAAAAAD+////AtPf9QUAAAAAGXapFNDFmQPFusKGh2DpD9UhpGZap2UgiKwA4fUFAAAAABepFDVF5uM7gyxHBQ8k0+65PJwDlIvHh7MuEwAAAQD9pQEBAAAAAAECiaPHHqtNIOA3G7ukzGmPopXJRjr6Ljl/hTPMti+VZ+UBAAAAFxYAFL4Y0VKpsBIDna89p95PUzSe7LmF/////4b4qkOnHf8USIk6UwpyN+9rRgi7st0tAXHmOuxqSJC0AQAAABcWABT+Pp7xp0XpdNkCxDVZQ6vLNL1TU/////8CAMLrCwAAAAAZdqkUhc/xCX/Z4Ai7NK9wnGIZeziXikiIrHL++E4sAAAAF6kUM5cluiHv1irHU6m80GfWx6ajnQWHAkcwRAIgJxK+IuAnDzlPVoMR3HyppolwuAJf3TskAinwf4pfOiQCIAGLONfc0xTnNMkna9b7QPZzMlvEuqFEyADS8vAtsnZcASED0uFWdJQbrUqZY3LLh+GFbTZSYG2YVi/jnF6efkE/IQUCSDBFAiEA0SuFLYXc2WHS9fSrZgZU327tzHlMDDPOXMMJ/7X85Y0CIGczio4OFyXBl/saiK9Z9R5E5CVbIBZ8hoQDHAXR8lkqASECI7cr7vCWXRC+B3jv7NYfysb3mk6haTkzgHNEZPhPKrMAAAAAAAAA"
+        }))
+    else:
+        sys.stdout.write(json.dumps({"psbt": args.psbt}))
+
 parser = argparse.ArgumentParser(prog='./signer.py', description='External signer mock')
 parser.add_argument('--fingerprint')
 parser.add_argument('--testnet', action='store_true')
@@ -46,6 +55,11 @@ parser_getkeys.set_defaults(func=getkeys)
 parser_displayaddress = subparsers.add_parser('displayaddress', help='display address on signer')
 parser_displayaddress.add_argument('--desc', metavar='desc')
 parser_displayaddress.set_defaults(func=displayaddress)
+
+parser_signtx = subparsers.add_parser('signtx')
+parser_signtx.add_argument('--psbt', metavar='psbt')
+
+parser_signtx.set_defaults(func=signtx)
 
 if len(sys.argv) == 1:
   args = parser.parse_args(['-h'])

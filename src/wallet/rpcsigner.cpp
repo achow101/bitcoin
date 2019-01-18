@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparamsbase.h>
+#include <core_io.h>
 #include <key_io.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
@@ -331,6 +332,102 @@ UniValue signerfetchkeys(const JSONRPCRequest& request)
     return result;
 }
 
+bool signer_process_psbt(ExternalSigner *signer, PartiallySignedTransaction &psbtx) {
+    assert(signer != nullptr);
+
+    // Check if signer fingerpint matches any input master key fingerprint
+    bool match = false;
+    for (unsigned int i = 0; i < psbtx.inputs.size(); ++i) {
+        const PSBTInput& input = psbtx.inputs[i];
+        for (auto entry : input.hd_keypaths) {
+            if (signer->m_fingerprint == strprintf("%08x", ReadBE32(entry.second.fingerprint))) match = true;
+        }
+    }
+
+    if (!match) JSONRPCError(RPC_WALLET_ERROR, "Signer fingerprint does not match any of the inputs");
+
+    // Serialize the PSBT
+    // TODO: ExternalSigner signTransaction should take PartiallySignedTransaction argument and serialize that
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << psbtx;
+
+    const UniValue signer_result = signer->signTransaction(EncodeBase64(ssTx.str()));
+    if (!find_value(signer_result, "psbt").isStr()) JSONRPCError(RPC_WALLET_ERROR, "Unexpected result from signer");
+
+    // Process result from signer:
+    std::string signer_psbt_error;
+    PartiallySignedTransaction signer_psbtx;
+    if (!DecodePSBT(signer_psbtx, find_value(signer_result, "psbt").get_str(), signer_psbt_error)) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", signer_psbt_error));
+    }
+
+    // TODO: deduplicate completeness check from finalizepsbt:
+    // Finalize input signatures -- in case we have partial signatures that add up to a complete
+    //   signature, but have not combined them yet (e.g. because the combiner that created this
+    //   PartiallySignedTransaction did not understand them), this will combine them into a final
+    //   script.
+    bool complete = true;
+    for (unsigned int i = 0; i < signer_psbtx.tx->vin.size(); ++i) {
+        complete &= SignPSBTInput(DUMMY_SIGNING_PROVIDER, signer_psbtx, i, SIGHASH_ALL); // Or use SIGHASH type in the PSBT??
+    }
+
+    psbtx = signer_psbtx;
+
+    return complete;
+}
+
+UniValue signerprocesspsbt(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
+        throw std::runtime_error(
+            RPCHelpMan{"signerprocesspsbt",
+                "\nSign PSBT inputs using external signer\n"
+                "that we can sign for." +
+                    HelpRequiringPassphrase(pwallet) + "\n",
+                {
+                    {"psbt", RPCArg::Type::STR, /* opt */ false, /* default_val */ "", "The transaction base64 string"},
+                    {"fingerprint", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "master key fingerprint of signer"},
+                }}
+                .ToString() +
+            "\nResult:\n"
+            "{\n"
+            "  \"psbt\" : \"value\",          (string) The base64-encoded partially signed transaction\n"
+            "  \"complete\" : true|false,   (boolean) If the transaction has a complete set of signatures\n"
+            "  ]\n"
+            "}\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("signerprocesspsbt", "\"psbt\"")
+        );
+
+    RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VSTR});
+
+    // Unserialize the transaction
+    PartiallySignedTransaction psbtx;
+    std::string error;
+    if (!DecodePSBT(psbtx, request.params[0].get_str(), error)) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", error));
+    }
+
+    ExternalSigner *signer = GetSignerForJSONRPCRequest(request, 1, pwallet);
+
+    bool complete = signer_process_psbt(signer, psbtx);
+
+    UniValue result(UniValue::VOBJ);
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << psbtx;
+    result.pushKV("psbt", EncodeBase64(ssTx.str()));
+    result.pushKV("complete", complete);
+    return result;
+}
+
 // clang-format off
 static const CRPCCommand commands[] =
 { //  category              name                                actor (function)                argNames
@@ -339,6 +436,7 @@ static const CRPCCommand commands[] =
     { "signer",             "signerdissociate",                 &signerdissociate,              {"fingerprint"} },
     { "signer",             "signerdisplayaddress",             &signerdisplayaddress,          {"address", "fingerprint"} },
     { "signer",             "signerfetchkeys",                  &signerfetchkeys,               {"fingerprint"} },
+    { "signer",             "signerprocesspsbt",                &signerprocesspsbt,             {"psbt", "fingerprint"} },
 };
 // clang-format on
 

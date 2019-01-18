@@ -38,3 +38,8 @@ UniValue ExternalSigner::displayAddress(const std::string& descriptor)
 {
     return runCommandParseJSON(m_command + " --fingerprint \"" + m_fingerprint + "\"" + (m_mainnet ? "" : " --testnet ") + " displayaddress --desc \"" + descriptor + "\"");
 }
+
+UniValue ExternalSigner::signTransaction(const std::string& psbt)
+{
+    return runCommandParseJSON(m_command + " --fingerprint \"" + m_fingerprint + "\"" + (m_mainnet ? "" : " --testnet ") + " signtx --psbt=\"" + psbt + "\"");
+}

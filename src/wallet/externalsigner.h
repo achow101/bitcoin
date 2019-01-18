@@ -34,6 +34,7 @@ public:
 
     UniValue displayAddress(const std::string& descriptor);
     UniValue getKeys(const std::string& descriptor);
+    UniValue signTransaction(const std::string& psbt);
 };
 
 #endif // BITCOIN_WALLET_EXTERNALSIGNER_H
