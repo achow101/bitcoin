@@ -122,5 +122,19 @@ class SignerTest(BitcoinTestFramework):
         psbt_processed = hww1.signerprocesspsbt(psbt_orig, "00000001")
         assert_equal(psbt_processed['complete'], False) # TODO: should be true with a proper test PSBT
 
+        self.log.info('Test signersend')
+        dest = self.nodes[0].getnewaddress()
+        res = hww1.signersend([], {dest:0.5}, 0, None, "00000001")
+        # TODO once we have a proper test PSBT, complete should be true and then transaction should be broadcast:
+        assert_equal(res['complete'], False)
+
+        # self.nodes[0].generate(1)
+        # self.sync_all()
+        # assert_equal(self.nodes[0].getreceivedbyaddress(dest), 0.5)
+
+        hww1.signerdissociate("00000002")
+        hww1.signerdissociate("d95fc47e")
+        hww1.signersend([], {dest:0.01}, 0, None)
+
 if __name__ == '__main__':
     SignerTest().main()

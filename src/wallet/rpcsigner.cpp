@@ -5,12 +5,14 @@
 #include <chainparamsbase.h>
 #include <core_io.h>
 #include <key_io.h>
+#include <rpc/rawtransaction.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
 #include <script/descriptor.h>
 #include <validation.h>
 #include <wallet/rpcdump.h>
 #include <wallet/rpcwallet.h>
+
 
 #include <univalue.h>
 
@@ -428,6 +430,151 @@ UniValue signerprocesspsbt(const JSONRPCRequest& request)
     return result;
 }
 
+UniValue signersend(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() < 2 || request.params.size() > 5)
+        throw std::runtime_error(
+            RPCHelpMan{"signersend",
+                "\nCreates, funds and broadcasts a transaction.\n",
+                {
+                    {"inputs", RPCArg::Type::ARR, /* opt */ false, /* default_val */ "", "A json array of json objects. Inputs will be added if supplied inputs are not enough.",
+                        {
+                            {"", RPCArg::Type::OBJ, /* opt */ false, /* default_val */ "", "",
+                                {
+                                    {"txid", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "The transaction id"},
+                                    {"vout", RPCArg::Type::NUM, /* opt */ false, /* default_val */ "", "The output number"},
+                                    {"sequence", RPCArg::Type::NUM, /* opt */ false, /* default_val */ "", "The sequence number"},
+                                },
+                            },
+                        },
+                    },
+                    {"outputs", RPCArg::Type::ARR, /* opt */ false, /* default_val */ "", "a json array with outputs (key-value pairs), where none of the keys are duplicated.\n"
+                            "That is, each address can only appear once and there can only be one 'data' object.\n"
+                            "For compatibility reasons, a dictionary, which holds the key-value pairs directly, is also\n"
+                            "                             accepted as second parameter.",
+                        {
+                            {"", RPCArg::Type::OBJ, /* opt */ true, /* default_val */ "", "",
+                                {
+                                    {"address", RPCArg::Type::AMOUNT, /* opt */ false, /* default_val */ "", "A key-value pair. The key (string) is the bitcoin address, the value (float or string) is the amount in " + CURRENCY_UNIT + ""},
+                                },
+                                },
+                            {"", RPCArg::Type::OBJ, /* opt */ true, /* default_val */ "", "",
+                                {
+                                    {"data", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "A key-value pair. The key must be \"data\", the value is hex-encoded data"},
+                                },
+                            },
+                        },
+                    },
+                    {"locktime", RPCArg::Type::NUM, /* opt */ true, /* default_val */ "0", "Raw locktime. Non-0 value also locktime-activates inputs\n"
+                            "                             Allows this transaction to be replaced by a transaction with higher fees. If provided, it is an error if explicit sequence numbers are incompatible."},
+                    {"options", RPCArg::Type::OBJ, /* opt */ true, /* default_val */ "null", "",
+                        {
+                            {"changeAddress", RPCArg::Type::STR_HEX, /* opt */ true, /* default_val */ "pool address", "The bitcoin address to receive the change"},
+                            {"changePosition", RPCArg::Type::NUM, /* opt */ true, /* default_val */ "random", "The index of the change output"},
+                            {"change_type", RPCArg::Type::STR, /* opt */ true, /* default_val */ "set by -changetype", "The output type to use. Only valid if changeAddress is not specified. Options are \"legacy\", \"p2sh-segwit\", and \"bech32\"."},
+                            {"feeRate", RPCArg::Type::AMOUNT, /* opt */ true, /* default_val */ "not set: makes wallet determine the fee", "Set a specific fee rate in " + CURRENCY_UNIT + "/kB"},
+                            {"subtractFeeFromOutputs", RPCArg::Type::ARR, /* opt */ true, /* default_val */ "empty array", "A json array of integers.\n"
+                            "                              The fee will be equally deducted from the amount of each specified output.\n"
+                            "                              Those recipients will receive less bitcoins than you enter in their corresponding amount field.\n"
+                            "                              If no outputs are specified here, the sender pays the fee.",
+                                {
+                                    {"vout_index", RPCArg::Type::NUM, /* opt */ true, /* default_val */ "", "The zero-based output index, before a change output is added."},
+                                },
+                            },
+                            {"replaceable", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Marks this transaction as BIP125 replaceable.\n"
+                            "                              Allows this transaction to be replaced by a transaction with higher fees"},
+                            {"conf_target", RPCArg::Type::NUM, /* opt */ true, /* default_val */ "Fallback to wallet's confirmation target", "Confirmation target (in blocks)"},
+                            {"estimate_mode", RPCArg::Type::STR, /* opt */ true, /* default_val */ "ECONOMICAL", "The fee estimate mode, must be one of:\n"
+                            "         \"UNSET\"\n"
+                            "         \"ECONOMICAL\"\n"
+                            "         \"CONSERVATIVE\""},
+                        },
+                        "options"},
+                    {"fingerprint", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "master key fingerprint of signer"}
+                }}
+                .ToString() +
+                            "\nResult:\n"
+                            "{\n"
+                            "  \"psbt\": \"value\",        (string)  The resulting raw transaction (base64-encoded string)\n"
+                            "  \"fee\":       n,         (numeric) Fee in " + CURRENCY_UNIT + " the resulting transaction pays\n"
+                            "  \"changepos\": n          (numeric) The position of the added change output, or -1\n"
+                            "}\n"
+                            "\nExamples:\n"
+                            "\nSend 0.1 BTC\n"
+                            + HelpExampleCli("signersend", "\"[]\" \"[{\\\"bc1qkallence7tjawwvy0dwt4twc62qjgaw8f4vlhyd006d99f09\\\": 0.1}]\"")
+                            );
+
+    RPCTypeCheck(request.params, {
+        UniValue::VARR,
+        UniValueType(), // ARR or OBJ, checked later
+        UniValue::VNUM,
+        UniValue::VOBJ
+        }, true
+    );
+
+    // TODO: call enumeratesigners if needed (add as param to GetSignerForJSONRPCRequest)
+    // TODO: if fingerprint argument is absent, infer which signer we need from the PSBT, fail if ambiguous
+    ExternalSigner *signer = GetSignerForJSONRPCRequest(request, 4, pwallet);
+
+    CAmount fee;
+    int change_position;
+    CMutableTransaction rawTx = ConstructTransaction(request.params[0], request.params[1], request.params[2], request.params[3]["replaceable"]);
+    UniValue options = request.params[3];
+    if (options.isNull() ) options = UniValue::VOBJ;
+    options.pushKV("includeWatching", true); // TODO: add as param to FundTransaction
+
+    FundTransaction(pwallet, rawTx, fee, change_position, options);
+
+    // Make a blank psbt
+    PartiallySignedTransaction psbtx(rawTx);
+
+    // Fill transaction with out data but don't sign
+    FillPSBT(pwallet, psbtx, 1, false, true);
+
+    // Send to signer and process result
+    const bool complete = signer_process_psbt(signer, psbtx);
+
+    UniValue result(UniValue::VOBJ);
+
+    if (complete) {
+        // Obtain  transaction hex
+        CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+        CMutableTransaction mtx(*psbtx.tx);
+        for (unsigned int i = 0; i < mtx.vin.size(); ++i) {
+            mtx.vin[i].scriptSig = psbtx.inputs[i].final_script_sig;
+            mtx.vin[i].scriptWitness = psbtx.inputs[i].final_script_witness;
+        }
+        ssTx << mtx;
+        std::string hex = HexStr(ssTx.str());
+
+        // Broadcast transaction
+        // TODO: get rid of hack
+        std::string txid = sendrawtransaction(hex, false);
+        result.pushKV("txid", txid);
+
+
+        // Add transaction id to result
+    } else {
+        // Add PSBT to result so the user can pass it on
+        CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+        ssTx << psbtx;
+        result.pushKV("psbt", EncodeBase64(ssTx.str()));
+    }
+
+    result.pushKV("fee", ValueFromAmount(fee));
+    result.pushKV("changepos", change_position);
+    result.pushKV("complete", complete);
+
+    return result;
+}
+
 // clang-format off
 static const CRPCCommand commands[] =
 { //  category              name                                actor (function)                argNames
@@ -437,6 +584,7 @@ static const CRPCCommand commands[] =
     { "signer",             "signerdisplayaddress",             &signerdisplayaddress,          {"address", "fingerprint"} },
     { "signer",             "signerfetchkeys",                  &signerfetchkeys,               {"fingerprint"} },
     { "signer",             "signerprocesspsbt",                &signerprocesspsbt,             {"psbt", "fingerprint"} },
+    { "signer",             "signersend",                       &signersend,                    {"inputs","outputs","locktime","options"} },
 };
 // clang-format on
 
