@@ -1005,44 +1005,20 @@ UniValue signrawtransaction(const JSONRPCRequest& request)
         "Clients should transition to using signrawtransactionwithkey and signrawtransactionwithwallet");
 }
 
-static UniValue sendrawtransaction(const JSONRPCRequest& request)
-{
-    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
-        throw std::runtime_error(
-            RPCHelpMan{"sendrawtransaction",
-                "\nSubmits raw transaction (serialized, hex-encoded) to local node and network.\n"
-                "\nAlso see createrawtransaction and signrawtransactionwithkey calls.\n",
-                {
-                    {"hexstring", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "The hex string of the raw transaction"},
-                    {"allowhighfees", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Allow high fees"},
-                }}
-                .ToString() +
-            "\nResult:\n"
-            "\"hex\"             (string) The transaction hash in hex\n"
-            "\nExamples:\n"
-            "\nCreate a transaction\n"
-            + HelpExampleCli("createrawtransaction", "\"[{\\\"txid\\\" : \\\"mytxid\\\",\\\"vout\\\":0}]\" \"{\\\"myaddress\\\":0.01}\"") +
-            "Sign the transaction, and get back the hex\n"
-            + HelpExampleCli("signrawtransactionwithwallet", "\"myhex\"") +
-            "\nSend the transaction (signed hex)\n"
-            + HelpExampleCli("sendrawtransaction", "\"signedhex\"") +
-            "\nAs a JSON-RPC call\n"
-            + HelpExampleRpc("sendrawtransaction", "\"signedhex\"")
-        );
-
+std::string sendrawtransaction(std::string txhex, bool allowhighfees) {
     std::promise<void> promise;
-
-    RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VBOOL});
 
     // parse hex string from parameter
     CMutableTransaction mtx;
-    if (!DecodeHexTx(mtx, request.params[0].get_str()))
+    if (!DecodeHexTx(mtx, txhex))
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
     CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
     const uint256& hashTx = tx->GetHash();
 
     CAmount nMaxRawTxFee = maxTxFee;
-    if (!request.params[1].isNull() && request.params[1].get_bool())
+    // TODO: fix this
+    // if (!request.params[1].isNull() && allowhighfees)
+    if (allowhighfees)
         nMaxRawTxFee = 0;
 
     { // cs_main scope
@@ -1100,6 +1076,36 @@ static UniValue sendrawtransaction(const JSONRPCRequest& request)
     });
 
     return hashTx.GetHex();
+}
+
+static UniValue sendrawtransaction(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
+        throw std::runtime_error(
+            RPCHelpMan{"sendrawtransaction",
+                "\nSubmits raw transaction (serialized, hex-encoded) to local node and network.\n"
+                "\nAlso see createrawtransaction and signrawtransactionwithkey calls.\n",
+                {
+                    {"hexstring", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "The hex string of the raw transaction"},
+                    {"allowhighfees", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Allow high fees"},
+                }}
+                .ToString() +
+            "\nResult:\n"
+            "\"hex\"             (string) The transaction hash in hex\n"
+            "\nExamples:\n"
+            "\nCreate a transaction\n"
+            + HelpExampleCli("createrawtransaction", "\"[{\\\"txid\\\" : \\\"mytxid\\\",\\\"vout\\\":0}]\" \"{\\\"myaddress\\\":0.01}\"") +
+            "Sign the transaction, and get back the hex\n"
+            + HelpExampleCli("signrawtransactionwithwallet", "\"myhex\"") +
+            "\nSend the transaction (signed hex)\n"
+            + HelpExampleCli("sendrawtransaction", "\"signedhex\"") +
+            "\nAs a JSON-RPC call\n"
+            + HelpExampleRpc("sendrawtransaction", "\"signedhex\"")
+        );
+
+    RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VBOOL});
+
+    return sendrawtransaction(request.params[0].get_str(), request.params[1].get_bool());
 }
 
 static UniValue testmempoolaccept(const JSONRPCRequest& request)

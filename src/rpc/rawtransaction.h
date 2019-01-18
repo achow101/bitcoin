@@ -13,6 +13,8 @@ namespace interfaces {
 class Chain;
 } // namespace interfaces
 
+std::string sendrawtransaction(std::string txhex, bool allowhighfees);
+
 /** Sign a transaction with the given keystore and previous transactions */
 UniValue SignTransaction(interfaces::Chain& chain, CMutableTransaction& mtx, const UniValue& prevTxs, CBasicKeyStore *keystore, bool tempKeystore, const UniValue& hashType);
 
