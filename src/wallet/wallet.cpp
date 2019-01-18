@@ -3387,6 +3387,7 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
             WalletLogPrintf("keypool added %d keys (%d internal), size=%u (%u internal)\n", missingInternal + missingExternal, missingInternal, setInternalKeyPool.size() + setExternalKeyPool.size() + set_pre_split_keypool.size(), setInternalKeyPool.size());
         }
     }
+    NotifyKeypoolChanged();
     return true;
 }
 
@@ -3405,6 +3406,7 @@ void CWallet::AddKeypoolPubkey(const CPubKey& pubkey, const bool internal)
         setExternalKeyPool.insert(index);
     }
     m_pool_key_to_index[pubkey.GetID()] = index;
+    NotifyKeypoolChanged();
 }
 
 bool CWallet::ReserveKeyFromKeyPool(int64_t& nIndex, CKeyPool& keypool, bool fRequestedInternal)
@@ -3450,6 +3452,7 @@ bool CWallet::ReserveKeyFromKeyPool(int64_t& nIndex, CKeyPool& keypool, bool fRe
         m_pool_key_to_index.erase(keypool.vchPubKey.GetID());
         WalletLogPrintf("keypool reserve %d\n", nIndex);
     }
+    NotifyKeypoolChanged();
     return true;
 }
 
@@ -3474,6 +3477,7 @@ void CWallet::ReturnKey(int64_t nIndex, bool fInternal, const CPubKey& pubkey)
             setExternalKeyPool.insert(nIndex);
         }
         m_pool_key_to_index[pubkey.GetID()] = nIndex;
+        NotifyKeypoolChanged();
     }
     WalletLogPrintf("keypool return %d\n", nIndex);
 }

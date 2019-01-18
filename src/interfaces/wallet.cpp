@@ -488,6 +488,10 @@ public:
     {
         return MakeHandler(m_wallet.NotifyWatchonlyChanged.connect(fn));
     }
+    std::unique_ptr<Handler> handleKeypoolChanged(KeypoolChangedFn fn) override
+    {
+        return MakeHandler(m_wallet.NotifyKeypoolChanged.connect(fn));
+    }
 
     std::shared_ptr<CWallet> m_shared_wallet;
     CWallet& m_wallet;

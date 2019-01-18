@@ -75,6 +75,7 @@ private Q_SLOTS:
     void copyLabel();
     void copyMessage();
     void copyAmount();
+    void updateReceiveButton();
 };
 
 #endif // BITCOIN_QT_RECEIVECOINSDIALOG_H

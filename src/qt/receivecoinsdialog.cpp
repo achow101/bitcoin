@@ -102,7 +102,15 @@ void ReceiveCoinsDialog::setModel(WalletModel *_model)
 
         // eventually disable the main receive button if private key operations are disabled
         ui->receiveButton->setEnabled(!model->privateKeysDisabled());
+
+        // Show new address button when keypool has new keys
+        connect(_model, &WalletModel::notifyKeypoolChanged, this, &ReceiveCoinsDialog::updateReceiveButton);
     }
+}
+
+void ReceiveCoinsDialog::updateReceiveButton()
+{
+    ui->receiveButton->setEnabled(!model->privateKeysDisabled());
 }
 
 ReceiveCoinsDialog::~ReceiveCoinsDialog()
