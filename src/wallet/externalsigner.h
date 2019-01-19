@@ -20,9 +20,12 @@ private:
     std::string m_command;
 
 public:
-    ExternalSigner(const std::string& command, const std::string& fingerprint);
+    ExternalSigner(const std::string& command, const std::string& fingerprint, bool mainnet);
 
     std::string m_fingerprint;
+    bool m_mainnet;
+
+    static UniValue Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, bool mainnet = true);
 };
 
 #endif // BITCOIN_WALLET_EXTERNALSIGNER_H

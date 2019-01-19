@@ -35,5 +35,22 @@ class SignerTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].getbalance(), 1250)
         assert_equal(self.nodes[1].getbalance(), 1250)
 
+        assert_raises_rpc_error(-4, 'Error: restart bitcoind with -signer=<cmd>',
+            self.nodes[0].enumeratesigners
+        )
+
+        # Create new wallets with private keys disabled:
+        self.nodes[1].createwallet('hww', True)
+        hww1 = self.nodes[1].get_wallet_rpc('hww')
+        self.nodes[2].createwallet('hww', True)
+        hww2 = self.nodes[2].get_wallet_rpc('hww')
+        self.nodes[3].createwallet('hww', True)
+        hww3 = self.nodes[3].get_wallet_rpc('hww')
+
+        result = hww1.enumeratesigners()
+        assert_equal(len(result['signers']), 3)
+        hww2.enumeratesigners()
+        hww3.enumeratesigners()
+
 if __name__ == '__main__':
     SignerTest().main()
