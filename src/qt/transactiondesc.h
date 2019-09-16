@@ -29,7 +29,7 @@ public:
 private:
     TransactionDesc() {}
 
-    static QString FormatTxStatus(const interfaces::WalletTx& wtx, const interfaces::WalletTxStatus& status, bool inMempool, int numBlocks);
+    static QString FormatTxStatus(int lock_time, const interfaces::WalletTxStatus& status, bool inMempool, int numBlocks);
 };
 
 #endif // BITCOIN_QT_TRANSACTIONDESC_H

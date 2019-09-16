@@ -37,24 +37,37 @@ namespace {
 WalletTx MakeWalletTx(interfaces::Chain::Lock& locked_chain, CWallet& wallet, const CWalletTx& wtx)
 {
     WalletTx result;
-    result.tx = wtx.GetTx();
-    result.txin_is_mine.reserve(result.tx->vin.size());
-    for (const auto& txin : result.tx->vin) {
+    result.txid = wtx.GetHash();
+    result.txin_is_mine.reserve(wtx.stx.vin.size());
+    for (const auto& txin : wtx.stx.vin) {
         result.txin_is_mine.emplace_back(wallet.IsMine(txin));
     }
-    result.txout_is_mine.reserve(result.tx->vout.size());
-    result.txout_address.reserve(result.tx->vout.size());
-    result.txout_address_is_mine.reserve(result.tx->vout.size());
-    for (const auto& txout : result.tx->vout) {
-        result.txout_is_mine.emplace_back(wallet.IsMine(txout));
+    result.txout_is_mine.reserve(wtx.stx.num_txouts);
+    result.txout_address.reserve(wtx.stx.num_txouts);
+    result.txout_address_is_mine.reserve(wtx.stx.num_txouts);
+    for (int i = 0; i < wtx.stx.num_txouts; ++i) {
         result.txout_address.emplace_back();
+
+        const auto& it = wallet.m_map_utxos.find(COutPoint(wtx.GetHash(), i));
+        if (it == wallet.m_map_utxos.end()) {
+            result.txout_value.emplace_back(-1);
+            result.txout_is_mine.emplace_back(ISMINE_NO);
+            result.txout_address_is_mine.emplace_back(ISMINE_NO);
+            continue;
+        }
+        const CTxOut& txout = it->second;
+
+        result.txout_value.emplace_back(txout.nValue);
+        result.txout_is_mine.emplace_back(wallet.IsMine(txout));
         result.txout_address_is_mine.emplace_back(ExtractDestination(txout.scriptPubKey, result.txout_address.back()) ?
                                                       IsMine(wallet, result.txout_address.back()) :
                                                       ISMINE_NO);
     }
+
     result.credit = wtx.GetCredit(locked_chain, ISMINE_ALL);
     result.debit = wtx.GetDebit(ISMINE_ALL);
     result.change = wtx.GetChange();
+    result.value_out = wtx.stx.value_out;
     result.time = wtx.GetTxTime();
     result.value_map = wtx.mapValue;
     result.is_coinbase = wtx.IsCoinBase();

@@ -392,12 +392,17 @@ struct StrippedTx : CMutableTransaction
     size_t tx_size;
     size_t num_txouts;
     uint256 txid;
+    CAmount value_out;
 
     void StripTransaction()
     {
         for (CTxIn& txin : vin) {
             txin.scriptSig.clear();
             txin.scriptWitness.SetNull();
+        }
+        value_out = 0;
+        for (CTxOut& txout : vout) {
+            value_out += txout.nValue;
         }
         num_txouts = vout.size();
         vout.clear();

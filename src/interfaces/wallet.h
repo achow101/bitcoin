@@ -330,14 +330,16 @@ struct WalletBalances
 // Wallet transaction information.
 struct WalletTx
 {
-    CTransactionRef tx;
+    uint256 txid;
     std::vector<isminetype> txin_is_mine;
     std::vector<isminetype> txout_is_mine;
     std::vector<CTxDestination> txout_address;
     std::vector<isminetype> txout_address_is_mine;
+    std::vector<CAmount> txout_value;
     CAmount credit;
     CAmount debit;
     CAmount change;
+    CAmount value_out;
     int64_t time;
     std::map<std::string, std::string> value_map;
     bool is_coinbase;
