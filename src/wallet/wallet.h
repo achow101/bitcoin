@@ -268,6 +268,32 @@ public:
 //Get the marginal bytes of spending the specified output
 int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* pwallet, bool use_max_sig = false);
 
+class WalletTXO
+{
+public:
+    COutPoint m_outpoint; //! The outpoint for this output
+    CTxOut m_txo; //! The output itself
+
+    uint256 m_blockhash; //! Hash of the block in the main chain containing the transaction for this output.
+    int m_depth; //! Depth in the main chain, negative if conflicting (maybe I shouldn't do that)
+    bool m_spent; //! Whether this has been spent
+
+    WalletTXO(const COutPoint& outpoint) : m_outpoint(outpoint) {}
+    WalletTXO(const COutPoint& outpoint, const CTxOut& txo) : m_outpoint(outpoint), m_txo(txo) {}
+
+    template<typename Stream>
+    void Unserialize(Stream& s)
+    {
+        s >> m_txo >> m_blockhash >> m_depth >> m_spent;
+    }
+
+    template<typename Stream>
+    void Serialize(Stream& s) const
+    {
+        s << m_txo << m_blockhash << m_depth << m_spent;
+    }
+};
+
 /**
  * A transaction with a bunch of additional info that only the owner cares about.
  * It includes any unrecorded transactions needed to link it back to the block chain.

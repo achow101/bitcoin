@@ -46,6 +46,7 @@ const std::string WALLETDESCRIPTOR{"walletdescriptor"};
 const std::string WALLETDESCRIPTORCACHE{"walletdescriptorcache"};
 const std::string WALLETDESCRIPTORCKEY{"walletdescriptorckey"};
 const std::string WALLETDESCRIPTORKEY{"walletdescriptorkey"};
+const std::string WALLETTXO{"wallettxo"};
 const std::string WATCHMETA{"watchmeta"};
 const std::string WATCHS{"watchs"};
 } // namespace DBKeys
@@ -74,6 +75,11 @@ bool WalletBatch::WritePurpose(const std::string& strAddress, const std::string&
 bool WalletBatch::ErasePurpose(const std::string& strAddress)
 {
     return EraseIC(std::make_pair(DBKeys::PURPOSE, strAddress));
+}
+
+bool WalletBatch::WriteWalletTXO(const WalletTXO& txo)
+{
+    return WriteIC(std::make_pair(DBKeys::WALLETTXO, txo.m_outpoint), txo);
 }
 
 bool WalletBatch::WriteTx(const CWalletTx& wtx)
@@ -649,6 +655,11 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
 
             wss.m_descriptor_crypt_keys.insert(std::make_pair(std::make_pair(desc_id, pubkey.GetID()), std::make_pair(pubkey, privkey)));
             wss.fIsEncrypted = true;
+        } else if (strType != DBKeys::WALLETTXO) {
+            COutPoint o;
+            ssKey >> o;
+            WalletTXO w(o);
+            ssValue >> w;
         } else if (strType != DBKeys::BESTBLOCK && strType != DBKeys::BESTBLOCK_NOMERKLE &&
                    strType != DBKeys::MINVERSION && strType != DBKeys::ACENTRY &&
                    strType != DBKeys::VERSION && strType != DBKeys::SETTINGS) {

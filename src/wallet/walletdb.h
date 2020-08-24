@@ -39,6 +39,7 @@ class CWallet;
 class CWalletTx;
 class uint160;
 class uint256;
+class WalletTXO;
 
 /** Error statuses for the wallet database */
 enum class DBErrors
@@ -78,6 +79,7 @@ extern const std::string VERSION;
 extern const std::string WALLETDESCRIPTOR;
 extern const std::string WALLETDESCRIPTORCKEY;
 extern const std::string WALLETDESCRIPTORKEY;
+extern const std::string WALLETTXO;
 extern const std::string WATCHMETA;
 extern const std::string WATCHS;
 } // namespace DBKeys
@@ -217,6 +219,8 @@ public:
 
     bool WritePurpose(const std::string& strAddress, const std::string& purpose);
     bool ErasePurpose(const std::string& strAddress);
+
+    bool WriteWalletTXO(const WalletTXO& txo);
 
     bool WriteTx(const CWalletTx& wtx);
     bool EraseTx(uint256 hash);
