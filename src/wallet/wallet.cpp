@@ -4578,3 +4578,8 @@ ScriptPubKeyMan* CWallet::AddWalletDescriptor(WalletDescriptor& desc, const Flat
 
     return ret;
 }
+
+void CWallet::LoadWalletTXO(const WalletTXO& txo)
+{
+    m_txos.emplace(txo.m_outpoint, txo);
+}
