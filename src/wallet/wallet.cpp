@@ -198,6 +198,9 @@ WalletCreationStatus CreateWallet(interfaces::Chain& chain, const SecureString& 
         wallet_creation_flags |= WALLET_FLAG_BLANK_WALLET;
     }
 
+    // New wallets always have stored txos
+    wallet_creation_flags |= WALLET_FLAG_STORE_TXOS;
+
     // Check the wallet file location
     WalletLocation location(name);
     if (location.Exists()) {
@@ -517,6 +520,13 @@ void CWallet::AddToSpends(const COutPoint& outpoint, const uint256& wtxid)
 
     setLockedCoins.erase(outpoint);
 
+    // Lookup the txo and mark it
+    auto it = m_txos.find(outpoint);
+    if (it != m_txos.end()) {
+        WalletTXO& txo = it->second;
+        txo.m_spent = true;
+    }
+
     std::pair<TxSpends::iterator, TxSpends::iterator> range;
     range = mapTxSpends.equal_range(outpoint);
     SyncMetaData(range);
@@ -823,6 +833,17 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const CWalletTx::Confirmatio
     auto ret = mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(hash), std::forward_as_tuple(this, tx));
     CWalletTx& wtx = (*ret.first).second;
     bool fInsertedNew = ret.second;
+
+    // Insert the outputs into m_txos
+    for (unsigned int i = 0; i < tx->vout.size(); ++i) {
+        const CTxOut& txout = tx->vout.at(i);
+        COutPoint outpoint(hash, i);
+        if (IsMine(txout)) {
+            auto txos_ret = m_txos.emplace(outpoint, WalletTXO(outpoint, txout));
+            assert(fInsertedNew == txos_ret.second);
+        }
+    }
+
     bool fUpdated = update_wtx && update_wtx(wtx, fInsertedNew);
     if (fInsertedNew) {
         wtx.m_confirm = confirm;
@@ -841,6 +862,16 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const CWalletTx::Confirmatio
             wtx.m_confirm.hashBlock = confirm.hashBlock;
             wtx.m_confirm.block_height = confirm.block_height;
             fUpdated = true;
+
+            for (unsigned int i = 0; i < tx->vout.size(); ++i) {
+                COutPoint outpoint(hash, i);
+                auto it = m_txos.find(outpoint);
+                if (it != m_txos.end()) {
+                    WalletTXO& txo = it->second;
+                    txo.m_blockhash = wtx.m_confirm.hashBlock;
+                    txo.m_depth = wtx.GetDepthInMainChain();
+                }
+            }
         } else {
             assert(wtx.m_confirm.nIndex == confirm.nIndex);
             assert(wtx.m_confirm.hashBlock == confirm.hashBlock);
@@ -934,6 +965,24 @@ bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx
             }
         }
     }
+
+    // Update to using m_txos if not already
+    if (!IsWalletFlagSet(WALLET_FLAG_STORE_TXOS)) {
+        for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
+            COutPoint outpoint(hash, i);
+            const CTxOut& txout = wtx.tx->vout.at(i);
+            if (IsMine(txout)) {
+                auto ret = m_txos.emplace(outpoint, WalletTXO(outpoint, wtx.tx->vout.at(i)));
+                assert(ret.second);
+                WalletTXO& txo = ret.first->second;
+                txo.m_depth = wtx.GetDepthInMainChain();
+                txo.m_blockhash = wtx.m_confirm.hashBlock;
+                txo.m_spent = mapTxSpends.find(outpoint) != mapTxSpends.end();
+            }
+        }
+        SetWalletFlag(WALLET_FLAG_STORE_TXOS);
+    }
+
     return true;
 }
 

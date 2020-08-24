@@ -42,6 +42,9 @@ enum WalletFlags : uint64_t {
     // Indicates that the metadata has already been upgraded to contain key origins
     WALLET_FLAG_KEY_ORIGIN_METADATA = (1ULL << 1),
 
+    // Indicates that the wallet has already been upgraded to store txouts
+    WALLET_FLAG_STORE_TXOS = (1ULL << 2),
+
     // will enforce the rule that the wallet can't contain any private keys (only watch-only/pubkeys)
     WALLET_FLAG_DISABLE_PRIVATE_KEYS = (1ULL << 32),
 
