@@ -81,15 +81,17 @@ WalletTxStatus MakeWalletTxStatus(CWallet& wallet, const CWalletTx& wtx)
 
 //! Construct wallet TxOut struct.
 WalletTxOut MakeWalletTxOut(CWallet& wallet,
-    const CWalletTx& wtx,
-    int n,
+    const COutPoint& outpoint,
+    const CTxOut& txout,
     int depth) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     WalletTxOut result;
-    result.txout = wtx.tx->vout[n];
-    result.time = wtx.GetTxTime();
+    const CWalletTx* wtx = wallet.GetWalletTx(outpoint.hash);
+    assert(wtx);
+    result.txout = txout;
+    result.time = wtx->GetTxTime();
     result.depth_in_main_chain = depth;
-    result.is_spent = wallet.IsSpent(wtx.GetHash(), n);
+    result.is_spent = wallet.IsSpent(outpoint.hash, outpoint.n);
     return result;
 }
 
@@ -397,8 +399,8 @@ public:
         for (const auto& entry : m_wallet->ListCoins()) {
             auto& group = result[entry.first];
             for (const auto& coin : entry.second) {
-                group.emplace_back(COutPoint(coin.tx->GetHash(), coin.i),
-                    MakeWalletTxOut(*m_wallet, *coin.tx, coin.i, coin.nDepth));
+                group.emplace_back(coin.m_outpoint,
+                    MakeWalletTxOut(*m_wallet, coin.m_outpoint, coin.m_txout, coin.nDepth));
             }
         }
         return result;
@@ -414,7 +416,7 @@ public:
             if (it != m_wallet->mapWallet.end()) {
                 int depth = it->second.GetDepthInMainChain();
                 if (depth >= 0) {
-                    result.back() = MakeWalletTxOut(*m_wallet, it->second, output.n, depth);
+                    result.back() = MakeWalletTxOut(*m_wallet, output, it->second.tx->vout[output.n], depth);
                 }
             }
         }

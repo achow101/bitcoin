@@ -275,22 +275,27 @@ public:
     CTxOut m_txo; //! The output itself
 
     uint256 m_blockhash; //! Hash of the block in the main chain containing the transaction for this output.
-    int m_depth; //! Depth in the main chain, negative if conflicting (maybe I shouldn't do that)
+    int m_block_height; //! Height of blockhash in the main chain
     bool m_spent; //! Whether this has been spent
 
     WalletTXO(const COutPoint& outpoint) : m_outpoint(outpoint) {}
     WalletTXO(const COutPoint& outpoint, const CTxOut& txo) : m_outpoint(outpoint), m_txo(txo) {}
 
+    int GetSpendSize(const CWallet* wallet, bool use_max_sig) const
+    {
+        return CalculateMaximumSignedInputSize(m_txo, wallet, use_max_sig);
+    }
+
     template<typename Stream>
     void Unserialize(Stream& s)
     {
-        s >> m_txo >> m_blockhash >> m_depth >> m_spent;
+        s >> m_txo >> m_blockhash >> m_block_height >> m_spent;
     }
 
     template<typename Stream>
     void Serialize(Stream& s) const
     {
-        s << m_txo << m_blockhash << m_depth << m_spent;
+        s << m_txo << m_blockhash << m_block_height << m_spent;
     }
 };
 
@@ -592,8 +597,8 @@ public:
 class COutput
 {
 public:
-    const CWalletTx *tx;
-    int i;
+    COutPoint m_outpoint;
+    CTxOut m_txout;
     int nDepth;
 
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
@@ -615,21 +620,34 @@ public:
      */
     bool fSafe;
 
-    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool use_max_sig_in = false)
+    /** Whether this output is in a transaction originated by us */
+    bool m_from_me;
+
+    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, bool use_max_sig_in)
+        : m_outpoint(COutPoint(txIn->GetHash(), iIn)), m_txout(txIn->tx->vout.at(iIn))
     {
-        tx = txIn; i = iIn; nDepth = nDepthIn; fSpendable = fSpendableIn; fSolvable = fSolvableIn; fSafe = fSafeIn; nInputBytes = -1; use_max_sig = use_max_sig_in;
+        nDepth = nDepthIn; fSpendable = fSpendableIn; fSolvable = fSolvableIn; fSafe = fSafeIn; nInputBytes = -1; use_max_sig = use_max_sig_in;
+        m_from_me = from_me;
         // If known and signable by the given wallet, compute nInputBytes
         // Failure will keep this value -1
-        if (fSpendable && tx) {
-            nInputBytes = tx->GetSpendSize(i, use_max_sig);
+        if (fSpendable && txIn) {
+            nInputBytes = txIn->GetSpendSize(iIn, use_max_sig);
         }
     }
+    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool use_max_sig_in = false) : COutput(txIn, iIn, nDepthIn, fSpendableIn, fSolvableIn, fSafeIn, txIn->IsFromMe(ISMINE_ALL), use_max_sig_in) {}
+    COutput(const WalletTXO& txo, int depth, bool spendable, bool solvable, bool safe, bool from_me, const CWallet* wallet, bool use_max_sig = false)
+        : m_outpoint(txo.m_outpoint), m_txout(txo.m_txo), nDepth(depth), nInputBytes(-1), fSpendable(spendable), fSolvable(solvable), use_max_sig(use_max_sig), fSafe(safe), m_from_me(from_me)
+    {
+        if (fSpendable) {
+            nInputBytes = txo.GetSpendSize(wallet, use_max_sig);
+        }
+    } 
 
     std::string ToString() const;
 
     inline CInputCoin GetInputCoin() const
     {
-        return CInputCoin(tx->tx, i, nInputBytes);
+        return CInputCoin(m_outpoint, m_txout, nInputBytes);
     }
 };
 

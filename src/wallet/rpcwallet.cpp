@@ -2870,16 +2870,16 @@ static UniValue listunspent(const JSONRPCRequest& request)
 
     for (const COutput& out : vecOutputs) {
         CTxDestination address;
-        const CScript& scriptPubKey = out.tx->tx->vout[out.i].scriptPubKey;
+        const CScript& scriptPubKey = out.m_txout.scriptPubKey;
         bool fValidAddress = ExtractDestination(scriptPubKey, address);
-        bool reused = avoid_reuse && pwallet->IsSpentKey(out.tx->GetHash(), out.i);
+        bool reused = avoid_reuse && pwallet->IsSpentKey(out.m_outpoint.hash, out.m_outpoint.n);
 
         if (destinations.size() && (!fValidAddress || !destinations.count(address)))
             continue;
 
         UniValue entry(UniValue::VOBJ);
-        entry.pushKV("txid", out.tx->GetHash().GetHex());
-        entry.pushKV("vout", out.i);
+        entry.pushKV("txid", out.m_outpoint.hash.GetHex());
+        entry.pushKV("vout", (uint64_t)out.m_outpoint.n);
 
         if (fValidAddress) {
             entry.pushKV("address", EncodeDestination(address));
@@ -2924,7 +2924,7 @@ static UniValue listunspent(const JSONRPCRequest& request)
         }
 
         entry.pushKV("scriptPubKey", HexStr(scriptPubKey));
-        entry.pushKV("amount", ValueFromAmount(out.tx->tx->vout[out.i].nValue));
+        entry.pushKV("amount", ValueFromAmount(out.m_txout.nValue));
         entry.pushKV("confirmations", out.nDepth);
         entry.pushKV("spendable", out.fSpendable);
         entry.pushKV("solvable", out.fSolvable);

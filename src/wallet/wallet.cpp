@@ -274,7 +274,7 @@ const uint256 CWalletTx::ABANDON_HASH(UINT256_ONE());
 
 std::string COutput::ToString() const
 {
-    return strprintf("COutput(%s, %d, %d) [%s]", tx->GetHash().ToString(), i, nDepth, FormatMoney(tx->tx->vout[i].nValue));
+    return strprintf("COutput(%s, %d, %d) [%s]", m_outpoint.hash.ToString(), m_outpoint.n, nDepth, FormatMoney(m_txout.nValue));
 }
 
 const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
@@ -852,6 +852,15 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const CWalletTx::Confirmatio
         wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
         wtx.nTimeSmart = ComputeTimeSmart(wtx);
         AddToSpends(hash);
+        for (unsigned int i = 0; i < tx->vout.size(); ++i) {
+            COutPoint outpoint(hash, i);
+            auto it = m_txos.find(outpoint);
+            if (it != m_txos.end()) {
+                WalletTXO& txo = it->second;
+                txo.m_blockhash = wtx.m_confirm.hashBlock;
+                txo.m_block_height = wtx.m_confirm.block_height;
+            }
+        }
     }
 
     if (!fInsertedNew)
@@ -869,7 +878,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const CWalletTx::Confirmatio
                 if (it != m_txos.end()) {
                     WalletTXO& txo = it->second;
                     txo.m_blockhash = wtx.m_confirm.hashBlock;
-                    txo.m_depth = wtx.GetDepthInMainChain();
+                    txo.m_block_height = wtx.m_confirm.block_height;
                 }
             }
         } else {
@@ -975,7 +984,7 @@ bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx
                 auto ret = m_txos.emplace(outpoint, WalletTXO(outpoint, wtx.tx->vout.at(i)));
                 assert(ret.second);
                 WalletTXO& txo = ret.first->second;
-                txo.m_depth = wtx.GetDepthInMainChain();
+                txo.m_block_height = wtx.m_confirm.block_height;
                 txo.m_blockhash = wtx.m_confirm.hashBlock;
                 txo.m_spent = mapTxSpends.find(outpoint) != mapTxSpends.end();
             }
@@ -2157,7 +2166,7 @@ CAmount CWallet::GetAvailableBalance(const CCoinControl* coinControl) const
     AvailableCoins(vCoins, true, coinControl);
     for (const COutput& out : vCoins) {
         if (out.fSpendable) {
-            balance += out.tx->tx->vout[out.i].nValue;
+            balance += out.m_txout.nValue;
         }
     }
     return balance;
@@ -2175,117 +2184,137 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
     const int min_depth = {coinControl ? coinControl->m_min_depth : DEFAULT_MIN_DEPTH};
     const int max_depth = {coinControl ? coinControl->m_max_depth : DEFAULT_MAX_DEPTH};
 
+    std::map<uint256, std::tuple<int, bool, bool>> txids; // Also tracks whether we've seen this txid
+    std::set<uint256> txids_ignore;
     std::set<uint256> trusted_parents;
-    for (const auto& entry : mapWallet)
+    for (const auto& entry : m_txos)
     {
-        const uint256& wtxid = entry.first;
-        const CWalletTx& wtx = entry.second;
+        const COutPoint& outpoint = entry.first;
+        const WalletTXO& txo = entry.second;
 
-        if (!chain().checkFinalTx(*wtx.tx)) {
+        const uint256& txid = outpoint.hash;
+
+        // Lookup the transaction if we aren't ignoring it
+        if (txids.count(txid) > 0 &&  txids_ignore.count(txid) > 0) {
             continue;
         }
+        if (txids.count(txid) == 0) {
+            const auto& it = mapWallet.find(txid);
+            assert(it != mapWallet.end());
+            const CWalletTx& wtx = it->second;
 
-        if (wtx.IsImmatureCoinBase())
-            continue;
+            int nDepth = wtx.GetDepthInMainChain();
+            txids.emplace(txid, std::make_tuple(0, false, false)); // Values in tuple don't matter if the tx is ignored
 
-        int nDepth = wtx.GetDepthInMainChain();
-        if (nDepth < 0)
-            continue;
-
-        // We should not consider coins which aren't at least in our mempool
-        // It's possible for these to be conflicted via ancestors which we may never be able to detect
-        if (nDepth == 0 && !wtx.InMempool())
-            continue;
-
-        bool safeTx = wtx.IsTrusted(trusted_parents);
-
-        // We should not consider coins from transactions that are replacing
-        // other transactions.
-        //
-        // Example: There is a transaction A which is replaced by bumpfee
-        // transaction B. In this case, we want to prevent creation of
-        // a transaction B' which spends an output of B.
-        //
-        // Reason: If transaction A were initially confirmed, transactions B
-        // and B' would no longer be valid, so the user would have to create
-        // a new transaction C to replace B'. However, in the case of a
-        // one-block reorg, transactions B' and C might BOTH be accepted,
-        // when the user only wanted one of them. Specifically, there could
-        // be a 1-block reorg away from the chain where transactions A and C
-        // were accepted to another chain where B, B', and C were all
-        // accepted.
-        if (nDepth == 0 && wtx.mapValue.count("replaces_txid")) {
-            safeTx = false;
-        }
-
-        // Similarly, we should not consider coins from transactions that
-        // have been replaced. In the example above, we would want to prevent
-        // creation of a transaction A' spending an output of A, because if
-        // transaction B were initially confirmed, conflicting with A and
-        // A', we wouldn't want to the user to create a transaction D
-        // intending to replace A', but potentially resulting in a scenario
-        // where A, A', and D could all be accepted (instead of just B and
-        // D, or just A and A' like the user would want).
-        if (nDepth == 0 && wtx.mapValue.count("replaced_by_txid")) {
-            safeTx = false;
-        }
-
-        if (fOnlySafe && !safeTx) {
-            continue;
-        }
-
-        if (nDepth < min_depth || nDepth > max_depth) {
-            continue;
-        }
-
-        for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
-            // Only consider selected coins if add_inputs is false
-            if (coinControl && !coinControl->m_add_inputs && !coinControl->IsSelected(COutPoint(entry.first, i))) {
+            if (!chain().checkFinalTx(*wtx.tx)) {
+                txids_ignore.insert(txid);
                 continue;
             }
 
-            if (wtx.tx->vout[i].nValue < nMinimumAmount || wtx.tx->vout[i].nValue > nMaximumAmount)
-                continue;
-
-            if (coinControl && coinControl->HasSelected() && !coinControl->fAllowOtherInputs && !coinControl->IsSelected(COutPoint(entry.first, i)))
-                continue;
-
-            if (IsLockedCoin(entry.first, i))
-                continue;
-
-            if (IsSpent(wtxid, i))
-                continue;
-
-            isminetype mine = IsMine(wtx.tx->vout[i]);
-
-            if (mine == ISMINE_NO) {
+            if (wtx.IsImmatureCoinBase()) {
+                txids_ignore.insert(txid);
                 continue;
             }
 
-            if (!allow_used_addresses && IsSpentKey(wtxid, i)) {
+            if (nDepth < 0) {
+                txids_ignore.insert(txid);
                 continue;
             }
 
-            std::unique_ptr<SigningProvider> provider = GetSolvingProvider(wtx.tx->vout[i].scriptPubKey);
-
-            bool solvable = provider ? IsSolvable(*provider, wtx.tx->vout[i].scriptPubKey) : false;
-            bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
-
-            vCoins.push_back(COutput(&wtx, i, nDepth, spendable, solvable, safeTx, (coinControl && coinControl->fAllowWatchOnly)));
-
-            // Checks the sum amount of all UTXO's.
-            if (nMinimumSumAmount != MAX_MONEY) {
-                nTotal += wtx.tx->vout[i].nValue;
-
-                if (nTotal >= nMinimumSumAmount) {
-                    return;
-                }
+            // We should not consider coins which aren't at least in our mempool
+            // It's possible for these to be conflicted via ancestors which we may never be able to detect
+            if (nDepth == 0 && !wtx.InMempool()) {
+                txids_ignore.insert(txid);
+                continue;
             }
 
-            // Checks the maximum number of UTXO's.
-            if (nMaximumCount > 0 && vCoins.size() >= nMaximumCount) {
+            bool safeTx = wtx.IsTrusted(trusted_parents);
+
+            // We should not consider coins from transactions that are replacing
+            // other transactions.
+            //
+            // Example: There is a transaction A which is replaced by bumpfee
+            // transaction B. In this case, we want to prevent creation of
+            // a transaction B' which spends an output of B.
+            //
+            // Reason: If transaction A were initially confirmed, transactions B
+            // and B' would no longer be valid, so the user would have to create
+            // a new transaction C to replace B'. However, in the case of a
+            // one-block reorg, transactions B' and C might BOTH be accepted,
+            // when the user only wanted one of them. Specifically, there could
+            // be a 1-block reorg away from the chain where transactions A and C
+            // were accepted to another chain where B, B', and C were all
+            // accepted.
+            if (nDepth == 0 && wtx.mapValue.count("replaces_txid")) {
+                safeTx = false;
+            }
+
+            // Similarly, we should not consider coins from transactions that
+            // have been replaced. In the example above, we would want to prevent
+            // creation of a transaction A' spending an output of A, because if
+            // transaction B were initially confirmed, conflicting with A and
+            // A', we wouldn't want to the user to create a transaction D
+            // intending to replace A', but potentially resulting in a scenario
+            // where A, A', and D could all be accepted (instead of just B and
+            // D, or just A and A' like the user would want).
+            if (nDepth == 0 && wtx.mapValue.count("replaced_by_txid")) {
+                safeTx = false;
+            }
+
+            if (fOnlySafe && !safeTx) {
+                txids_ignore.insert(txid);
+                continue;
+            }
+
+            if (nDepth < min_depth || nDepth > max_depth) {
+                txids_ignore.insert(txid);
+                continue;
+            }
+
+            txids[txid] = std::make_tuple(nDepth, safeTx, wtx.IsFromMe(ISMINE_ALL));
+        }
+
+        // Only consider selected coins if add_inputs is false
+        if (coinControl && !coinControl->m_add_inputs && !coinControl->IsSelected(outpoint)) {
+            continue;
+        }
+
+        if (txo.m_txo.nValue < nMinimumAmount || txo.m_txo.nValue > nMaximumAmount)
+            continue;
+
+        if (coinControl && coinControl->HasSelected() && !coinControl->fAllowOtherInputs && !coinControl->IsSelected(outpoint))
+            continue;
+
+        if (IsLockedCoin(outpoint.hash, outpoint.n))
+            continue;
+
+        if (txo.m_spent)
+            continue;
+
+        if (!allow_used_addresses && IsSpentKey(outpoint.hash, outpoint.n)) {
+            continue;
+        }
+
+        std::unique_ptr<SigningProvider> provider = GetSolvingProvider(txo.m_txo.scriptPubKey);
+        isminetype mine = IsMine(txo.m_txo);
+        bool solvable = provider ? IsSolvable(*provider, txo.m_txo.scriptPubKey) : false;
+        bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
+
+        auto txinfo = txids[txid];
+        vCoins.push_back(COutput(txo, std::get<0>(txinfo), spendable, solvable, std::get<1>(txinfo), std::get<2>(txinfo), this, (coinControl && coinControl->fAllowWatchOnly)));
+
+        // Checks the sum amount of all UTXO's.
+        if (nMinimumSumAmount != MAX_MONEY) {
+            nTotal += txo.m_txo.nValue;
+
+            if (nTotal >= nMinimumSumAmount) {
                 return;
             }
+        }
+
+        // Checks the maximum number of UTXO's.
+        if (nMaximumCount > 0 && vCoins.size() >= nMaximumCount) {
+            return;
         }
     }
 }
@@ -2302,7 +2331,7 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
     for (const COutput& coin : availableCoins) {
         CTxDestination address;
         if ((coin.fSpendable || (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.fSolvable)) &&
-            ExtractDestination(FindNonChangeParentOutput(*coin.tx->tx, coin.i).scriptPubKey, address)) {
+            ExtractDestination(FindNonChangeParentOutput(*GetWalletTx(coin.m_outpoint.hash)->tx, coin.m_outpoint.n).scriptPubKey, address)) {
             result[address].emplace_back(std::move(coin));
         }
     }
@@ -2409,7 +2438,7 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
         {
             if (!out.fSpendable)
                  continue;
-            nValueRet += out.tx->tx->vout[out.i].nValue;
+            nValueRet += out.m_txout.nValue;
             setCoinsRet.insert(out.GetInputCoin());
         }
         return (nValueRet >= nTargetValue);
@@ -4266,8 +4295,8 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
             CInputCoin input_coin = output.GetInputCoin();
 
             size_t ancestors, descendants;
-            chain().getTransactionAncestry(output.tx->GetHash(), ancestors, descendants);
-            if (!single_coin && ExtractDestination(output.tx->tx->vout[output.i].scriptPubKey, dst)) {
+            chain().getTransactionAncestry(output.m_outpoint.hash, ancestors, descendants);
+            if (!single_coin && ExtractDestination(output.m_txout.scriptPubKey, dst)) {
                 auto it = gmap.find(dst);
                 if (it != gmap.end()) {
                     // Limit output groups to no more than OUTPUT_GROUP_MAX_ENTRIES
@@ -4280,12 +4309,12 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
                         it->second = OutputGroup{};
                         full_groups.insert(dst);
                     }
-                    it->second.Insert(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants);
+                    it->second.Insert(input_coin, output.nDepth, output.m_from_me, ancestors, descendants);
                 } else {
-                    gmap[dst].Insert(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants);
+                    gmap[dst].Insert(input_coin, output.nDepth, output.m_from_me, ancestors, descendants);
                 }
             } else {
-                groups.emplace_back(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants);
+                groups.emplace_back(input_coin, output.nDepth, output.m_from_me, ancestors, descendants);
             }
         }
     }

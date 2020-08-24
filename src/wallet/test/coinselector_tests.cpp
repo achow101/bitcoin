@@ -67,18 +67,8 @@ static void add_coin(CWallet& wallet, const CAmount& nValue, int nAge = 6*24, bo
         assert(wallet.GetNewDestination(OutputType::BECH32, "", dest, error));
         tx.vout[nInput].scriptPubKey = GetScriptForDestination(dest);
     }
-    if (fIsFromMe) {
-        // IsFromMe() returns (GetDebit() > 0), and GetDebit() is 0 if vin.empty(),
-        // so stop vin being empty, and cache a non-zero Debit to fake out IsFromMe()
-        tx.vin.resize(1);
-    }
     CWalletTx* wtx = wallet.AddToWallet(MakeTransactionRef(std::move(tx)), /* confirm= */ {});
-    if (fIsFromMe)
-    {
-        wtx->m_amounts[CWalletTx::DEBIT].Set(ISMINE_SPENDABLE, 1);
-        wtx->m_is_cache_empty = false;
-    }
-    COutput output(wtx, nInput, nAge, true /* spendable */, true /* solvable */, true /* safe */);
+    COutput output(wtx, nInput, nAge, true /* spendable */, true /* solvable */, true /* safe */, fIsFromMe);
     vCoins.push_back(output);
 }
 static void add_coin(const CAmount& nValue, int nAge = 6*24, bool fIsFromMe = false, int nInput=0, bool spendable = false)
@@ -122,7 +112,7 @@ inline std::vector<OutputGroup>& GroupCoins(const std::vector<COutput>& coins)
 {
     static std::vector<OutputGroup> static_groups;
     static_groups.clear();
-    for (auto& coin : coins) static_groups.emplace_back(coin.GetInputCoin(), coin.nDepth, coin.tx->m_amounts[CWalletTx::DEBIT].m_cached[ISMINE_SPENDABLE] && coin.tx->m_amounts[CWalletTx::DEBIT].m_value[ISMINE_SPENDABLE] == 1 /* HACK: we can't figure out the is_me flag so we use the conditions defined above; perhaps set safe to false for !fIsFromMe in add_coin() */, 0, 0);
+    for (auto& coin : coins) static_groups.emplace_back(coin.GetInputCoin(), coin.nDepth, coin.m_from_me, 0, 0);
     return static_groups;
 }
 
@@ -293,7 +283,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         add_coin(*wallet, 2 * CENT, 6 * 24, false, 0, true);
         CCoinControl coin_control;
         coin_control.fAllowOtherInputs = true;
-        coin_control.Select(COutPoint(vCoins.at(0).tx->GetHash(), vCoins.at(0).i));
+        coin_control.Select(vCoins.at(0).m_outpoint);
         coin_selection_params_bnb.effective_fee = CFeeRate(0);
         BOOST_CHECK(wallet->SelectCoins(vCoins, 10 * CENT, setCoinsRet, nValueRet, coin_control, coin_selection_params_bnb, bnb_used));
         BOOST_CHECK(bnb_used);
