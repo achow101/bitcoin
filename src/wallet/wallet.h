@@ -562,6 +562,7 @@ class COutput
 public:
     const CWalletTx *tx;
     int i;
+    COutPoint outpoint;
     int nDepth;
 
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
@@ -586,6 +587,7 @@ public:
     COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool use_max_sig_in = false) :
         tx(txIn),
         i(iIn),
+        outpoint(tx->GetHash(), i),
         nDepth(nDepthIn),
         nInputBytes(-1),
         fSpendable(fSpendableIn),
