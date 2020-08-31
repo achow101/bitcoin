@@ -338,3 +338,12 @@ bool OutputGroup::EligibleForSpending(const CoinEligibilityFilter& eligibility_f
         && m_ancestors <= eligibility_filter.max_ancestors
         && m_descendants <= eligibility_filter.max_descendants;
 }
+
+std::set<COutPoint> OutputGroup::GetOutpoints() const
+{
+    std::set<COutPoint> ret;
+    for (const auto& output : m_outputs) {
+        ret.insert(output.outpoint);
+    }
+    return ret;
+}
