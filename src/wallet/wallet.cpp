@@ -2442,17 +2442,19 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
                 return false;
             }
             // Just to calculate the marginal byte size
-            CInputCoin coin(wtx.tx, outpoint.n, wtx.GetSpendSize(outpoint.n, false));
-            nValueFromPresetInputs += coin.txout.nValue;
-            if (coin.m_input_bytes <= 0) {
+            CAmount value = wtx.tx->vout[outpoint.n].nValue;
+            nValueFromPresetInputs += value;
+            int spend_size = wtx.GetSpendSize(outpoint.n, false);
+            if (spend_size <= 0) {
                 return false; // Not solvable, can't estimate size for fee
             }
-            coin.effective_value = coin.txout.nValue - coin_selection_params.effective_fee.GetFee(coin.m_input_bytes);
+            CAmount effective_value = value - coin_selection_params.effective_fee.GetFee(spend_size);
             if (coin_selection_params.use_bnb) {
-                value_to_select -= coin.effective_value;
+                value_to_select -= effective_value;
             } else {
-                value_to_select -= coin.txout.nValue;
+                value_to_select -= value;
             }
+            CInputCoin coin(wtx.tx, outpoint.n, spend_size);
             setPresetCoins.insert(coin);
         } else {
             return false; // TODO: Allow non-wallet inputs
