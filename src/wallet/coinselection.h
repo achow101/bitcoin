@@ -25,8 +25,8 @@ public:
             throw std::out_of_range("The output index is out of range");
 
         outpoint = COutPoint(tx->GetHash(), i);
-        txout = tx->vout[i];
-        effective_value = txout.nValue;
+        m_value = tx->vout[i].nValue;
+        effective_value = m_value;
     }
 
     CInputCoin(const CTransactionRef& tx, unsigned int i, int input_bytes) : CInputCoin(tx, i)
@@ -35,7 +35,7 @@ public:
     }
 
     COutPoint outpoint;
-    CTxOut txout;
+    CAmount m_value;
     CAmount effective_value;
     CAmount m_fee{0};
     CAmount m_long_term_fee{0};
