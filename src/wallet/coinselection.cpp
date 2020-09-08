@@ -46,16 +46,16 @@ struct {
  * The Branch and Bound algorithm is described in detail in Murch's Master Thesis:
  * https://murch.one/wp-content/uploads/2016/11/erhardt2016coinselection.pdf
  *
- * @param const std::vector<CInputCoin>& utxo_pool The set of UTXOs that we are choosing from.
- *        These UTXOs will be sorted in descending order by effective value and the CInputCoins'
+ * @param const std::vector<OutputGroup>& utxo_pool The set of UTXOs that we are choosing from.
+ *        These UTXOs will be sorted in descending order by effective value and the OutputGroups'
  *        values are their effective values.
  * @param const CAmount& target_value This is the value that we want to select. It is the lower
  *        bound of the range.
  * @param const CAmount& cost_of_change This is the cost of creating and spending a change output.
  *        This plus target_value is the upper bound of the range.
- * @param std::set<CInputCoin>& out_set -> This is an output parameter for the set of CInputCoins
+ * @param std::vector<OutputGroup>& out_set -> This is an output parameter for the set of OutputGroups
  *        that have been selected.
- * @param CAmount& value_ret -> This is an output parameter for the total value of the CInputCoins
+ * @param CAmount& value_ret -> This is an output parameter for the total value of the OutputGroups
  *        that were selected.
  * @param CAmount not_input_fees -> The fees that need to be paid for the outputs and fixed size
  *        overhead (version, locktime, marker and flag)

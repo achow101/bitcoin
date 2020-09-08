@@ -17,47 +17,6 @@ static constexpr CAmount MIN_CHANGE{COIN / 100};
 //! final minimum change amount after paying for fees
 static const CAmount MIN_FINAL_CHANGE = MIN_CHANGE/2;
 
-class CInputCoin {
-public:
-    CInputCoin(const CTransactionRef& tx, unsigned int i)
-    {
-        if (!tx)
-            throw std::invalid_argument("tx should not be null");
-        if (i >= tx->vout.size())
-            throw std::out_of_range("The output index is out of range");
-
-        outpoint = COutPoint(tx->GetHash(), i);
-        m_value = tx->vout[i].nValue;
-        effective_value = m_value;
-    }
-
-    CInputCoin(const CTransactionRef& tx, unsigned int i, int input_bytes) : CInputCoin(tx, i)
-    {
-        m_input_bytes = input_bytes;
-    }
-
-    COutPoint outpoint;
-    CAmount m_value;
-    CAmount effective_value;
-    CAmount m_fee{0};
-    CAmount m_long_term_fee{0};
-
-    /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
-    int m_input_bytes{-1};
-
-    bool operator<(const CInputCoin& rhs) const {
-        return outpoint < rhs.outpoint;
-    }
-
-    bool operator!=(const CInputCoin& rhs) const {
-        return outpoint != rhs.outpoint;
-    }
-
-    bool operator==(const CInputCoin& rhs) const {
-        return outpoint == rhs.outpoint;
-    }
-};
-
 struct CoinEligibilityFilter
 {
     const int conf_mine;

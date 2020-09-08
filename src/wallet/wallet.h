@@ -610,11 +610,6 @@ public:
     const uint256& GetTxHash() const;
     uint32_t GetVoutIndex() const;
     const CTxOut& GetTxOut() const;
-
-    inline CInputCoin GetInputCoin() const
-    {
-        return CInputCoin(tx->tx, i, nInputBytes);
-    }
 };
 
 struct CoinSelectionParams
