@@ -62,7 +62,7 @@ struct {
 
 static const size_t TOTAL_TRIES = 100000;
 
-bool SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& target_value, const CAmount& cost_of_change, std::set<CInputCoin>& out_set, CAmount& value_ret, CAmount not_input_fees)
+bool SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& target_value, const CAmount& cost_of_change, std::vector<OutputGroup>& out_set, CAmount& value_ret, CAmount not_input_fees)
 {
     out_set.clear();
     CAmount curr_value = 0;
@@ -162,7 +162,7 @@ bool SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& target_v
     value_ret = 0;
     for (size_t i = 0; i < best_selection.size(); ++i) {
         if (best_selection.at(i)) {
-            util::insert(out_set, utxo_pool.at(i).m_outputs);
+            out_set.push_back(utxo_pool.at(i));
             value_ret += utxo_pool.at(i).m_value;
         }
     }
@@ -216,7 +216,7 @@ static void ApproximateBestSubset(const std::vector<OutputGroup>& groups, const 
     }
 }
 
-bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& groups, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet)
+bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& groups, std::vector<OutputGroup>& setCoinsRet, CAmount& nValueRet)
 {
     setCoinsRet.clear();
     nValueRet = 0;
@@ -230,7 +230,7 @@ bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& group
 
     for (const OutputGroup& group : groups) {
         if (group.m_value == nTargetValue) {
-            util::insert(setCoinsRet, group.m_outputs);
+            setCoinsRet.push_back(group);
             nValueRet += group.m_value;
             return true;
         } else if (group.m_value < nTargetValue + MIN_CHANGE) {
@@ -243,7 +243,7 @@ bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& group
 
     if (nTotalLower == nTargetValue) {
         for (const auto& group : applicable_groups) {
-            util::insert(setCoinsRet, group.m_outputs);
+            setCoinsRet.push_back(group);
             nValueRet += group.m_value;
         }
         return true;
@@ -251,7 +251,7 @@ bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& group
 
     if (nTotalLower < nTargetValue) {
         if (!lowest_larger) return false;
-        util::insert(setCoinsRet, lowest_larger->m_outputs);
+        setCoinsRet.push_back(*lowest_larger);
         nValueRet += lowest_larger->m_value;
         return true;
     }
@@ -270,12 +270,12 @@ bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& group
     //                                   or the next bigger coin is closer), return the bigger coin
     if (lowest_larger &&
         ((nBest != nTargetValue && nBest < nTargetValue + MIN_CHANGE) || lowest_larger->m_value <= nBest)) {
-        util::insert(setCoinsRet, lowest_larger->m_outputs);
+        setCoinsRet.push_back(*lowest_larger);
         nValueRet += lowest_larger->m_value;
     } else {
         for (unsigned int i = 0; i < applicable_groups.size(); i++) {
             if (vfBest[i]) {
-                util::insert(setCoinsRet, applicable_groups[i].m_outputs);
+                setCoinsRet.push_back(applicable_groups[i]);
                 nValueRet += applicable_groups[i].m_value;
             }
         }

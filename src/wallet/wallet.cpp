@@ -2368,7 +2368,7 @@ const CTxOut& CWallet::FindNonChangeParentOutput(const CTransaction& tx, int out
 }
 
 bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const CoinEligibilityFilter& eligibility_filter, std::vector<COutput> coins,
-                                 std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet, const CoinSelectionParams& coin_selection_params, bool& bnb_used) const
+                                 std::vector<OutputGroup>& setCoinsRet, CAmount& nValueRet, const CoinSelectionParams& coin_selection_params, bool& bnb_used) const
 {
     setCoinsRet.clear();
     nValueRet = 0;
@@ -2404,10 +2404,11 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const CoinEligibil
     }
 }
 
-bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet, const CCoinControl& coin_control, CoinSelectionParams& coin_selection_params, bool& bnb_used) const
+bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::vector<OutputGroup>& setCoinsRet, CAmount& nValueRet, const CCoinControl& coin_control, CoinSelectionParams& coin_selection_params, bool& bnb_used) const
 {
     std::vector<COutput> vCoins(vAvailableCoins);
     CAmount value_to_select = nTargetValue;
+    OutputGroup preset{};
 
     // Default to bnb was not used. If we use it, we set it later
     bnb_used = false;
@@ -2420,14 +2421,11 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
             if (!out.fSpendable)
                  continue;
             nValueRet += out.tx->tx->vout[out.i].nValue;
-            setCoinsRet.insert(out.GetInputCoin());
+            preset.Insert(out.GetInputCoin(), out.nDepth, out.tx->IsFromMe(ISMINE_ALL), 0, 0, false);
         }
+        setCoinsRet.push_back(preset);
         return (nValueRet >= nTargetValue);
     }
-
-    // calculate value from preset inputs and store them
-    std::set<CInputCoin> setPresetCoins;
-    CAmount nValueFromPresetInputs = 0;
 
     std::vector<COutPoint> vPresetInputs;
     coin_control.ListSelected(vPresetInputs);
@@ -2443,7 +2441,6 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
             }
             // Just to calculate the marginal byte size
             CAmount value = wtx.tx->vout[outpoint.n].nValue;
-            nValueFromPresetInputs += value;
             int spend_size = wtx.GetSpendSize(outpoint.n, false);
             if (spend_size <= 0) {
                 return false; // Not solvable, can't estimate size for fee
@@ -2455,16 +2452,17 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
                 value_to_select -= value;
             }
             CInputCoin coin(wtx.tx, outpoint.n, spend_size);
-            setPresetCoins.insert(coin);
+            preset.Insert(coin, /* Depth */ 999, wtx.IsFromMe(ISMINE_ALL), 0, 0, false);
         } else {
             return false; // TODO: Allow non-wallet inputs
         }
     }
 
     // remove preset inputs from vCoins
+    std::set<COutPoint> preset_outpoints = preset.GetOutpoints();
     for (std::vector<COutput>::iterator it = vCoins.begin(); it != vCoins.end() && coin_control.HasSelected();)
     {
-        if (setPresetCoins.count(it->GetInputCoin()))
+        if (preset_outpoints.count(it->outpoint))
             it = vCoins.erase(it);
         else
             ++it;
@@ -2495,10 +2493,10 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
         (m_spend_zero_conf_change && !fRejectLongChains && SelectCoinsMinConf(value_to_select, CoinEligibilityFilter(0, 1, std::numeric_limits<uint64_t>::max()), vCoins, setCoinsRet, nValueRet, coin_selection_params, bnb_used));
 
     // because SelectCoinsMinConf clears the setCoinsRet, we now add the possible inputs to the coinset
-    util::insert(setCoinsRet, setPresetCoins);
+    setCoinsRet.push_back(preset);
 
     // add preset inputs to the total value selected
-    nValueRet += nValueFromPresetInputs;
+    nValueRet += preset.m_value;
 
     return res;
 }
@@ -2776,7 +2774,7 @@ bool CWallet::CreateTransactionInternal(
     CAmount nFeeNeeded;
     int nBytes;
     {
-        std::set<CInputCoin> setCoins;
+        std::vector<OutputGroup> setCoins;
         LOCK(cs_wallet);
         txNew.nLockTime = GetLocktimeForNewTransaction(chain(), GetLastBlockHash(), GetLastBlockHeight());
         {
@@ -2954,7 +2952,9 @@ bool CWallet::CreateTransactionInternal(
                 // Dummy fill vin for maximum size estimation
                 //
                 for (const auto& coin : setCoins) {
-                    txNew.vin.push_back(CTxIn(coin.outpoint,CScript()));
+                    for (const auto& outpoint : coin.GetOutpoints()) {
+                        txNew.vin.push_back(CTxIn(outpoint, CScript()));
+                    }
                 }
 
                 nBytes = CalculateMaximumSignedTxSize(CTransaction(txNew), this, coin_control.fAllowWatchOnly);
@@ -3042,8 +3042,6 @@ bool CWallet::CreateTransactionInternal(
 
         // Shuffle selected coins and fill in final vin
         txNew.vin.clear();
-        std::vector<CInputCoin> selected_coins(setCoins.begin(), setCoins.end());
-        Shuffle(selected_coins.begin(), selected_coins.end(), FastRandomContext());
 
         // Note how the sequence number is set to non-maxint so that
         // the nLockTime set above actually works.
@@ -3054,9 +3052,12 @@ bool CWallet::CreateTransactionInternal(
         // and in the spirit of "smallest possible change from prior
         // behavior."
         const uint32_t nSequence = coin_control.m_signal_bip125_rbf.get_value_or(m_signal_rbf) ? MAX_BIP125_RBF_SEQUENCE : (CTxIn::SEQUENCE_FINAL - 1);
-        for (const auto& coin : selected_coins) {
-            txNew.vin.push_back(CTxIn(coin.outpoint, CScript(), nSequence));
+        for (const auto& coin : setCoins) {
+            for (const auto& outpoint : coin.GetOutpoints()) {
+                txNew.vin.push_back(CTxIn(outpoint, CScript(), nSequence));
+            }
         }
+        Shuffle(txNew.vin.begin(), txNew.vin.end(), FastRandomContext());
 
         if (sign && !SignTransaction(txNew)) {
             error = _("Signing transaction failed");

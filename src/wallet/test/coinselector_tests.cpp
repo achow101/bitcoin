@@ -24,7 +24,7 @@ BOOST_FIXTURE_TEST_SUITE(coinselector_tests, WalletTestingSetup)
 // we repeat those tests this many times and only complain if all iterations of the test fail
 #define RANDOM_REPEATS 5
 
-typedef std::set<CInputCoin> CoinSet;
+typedef std::vector<OutputGroup> CoinSet;
 
 static std::vector<COutput> vCoins;
 static NodeContext testNode;
@@ -37,20 +37,14 @@ CoinEligibilityFilter filter_confirmed(1, 1, 0);
 CoinEligibilityFilter filter_standard_extra(6, 6, 0);
 CoinSelectionParams coin_selection_params(false, 0, 0, CFeeRate(0), 0, false);
 
-static void add_coin(const CAmount& nValue, int nInput, std::vector<CInputCoin>& set)
-{
-    CMutableTransaction tx;
-    tx.vout.resize(nInput + 1);
-    tx.vout[nInput].nValue = nValue;
-    set.emplace_back(MakeTransactionRef(tx), nInput);
-}
-
 static void add_coin(const CAmount& nValue, int nInput, CoinSet& set)
 {
     CMutableTransaction tx;
     tx.vout.resize(nInput + 1);
     tx.vout[nInput].nValue = nValue;
-    set.emplace(MakeTransactionRef(tx), nInput);
+    OutputGroup group{};
+    group.Insert(CInputCoin(MakeTransactionRef(tx), nInput), 999, false, 0, 0, false);
+    set.push_back(group);
 }
 
 static void add_coin(CWallet& wallet, const CAmount& nValue, int nAge = 6*24, bool fIsFromMe = false, int nInput=0, bool spendable = false)
@@ -98,7 +92,7 @@ static bool equal_sets(CoinSet a, CoinSet b)
     return ret.first == a.end() && ret.second == b.end();
 }
 
-static CAmount make_hard_case(int utxos, std::vector<CInputCoin>& utxo_pool)
+static CAmount make_hard_case(int utxos, std::vector<OutputGroup>& utxo_pool)
 {
     utxo_pool.clear();
     CAmount target = 0;
@@ -108,17 +102,6 @@ static CAmount make_hard_case(int utxos, std::vector<CInputCoin>& utxo_pool)
         add_coin(((CAmount)1 << (utxos+i)) + ((CAmount)1 << (utxos-1-i)), 2*i + 1, utxo_pool);
     }
     return target;
-}
-
-inline std::vector<OutputGroup>& GroupCoins(const std::vector<CInputCoin>& coins)
-{
-    static std::vector<OutputGroup> static_groups;
-    static_groups.clear();
-    for (auto& coin : coins) {
-        static_groups.emplace_back();
-        static_groups.back().Insert(coin, 0, true, 0, 0, false);
-    }
-    return static_groups;
 }
 
 inline std::vector<OutputGroup>& GroupCoins(const std::vector<COutput>& coins)
@@ -140,7 +123,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     testWallet.SetupLegacyScriptPubKeyMan();
 
     // Setup
-    std::vector<CInputCoin> utxo_pool;
+    std::vector<OutputGroup> utxo_pool;
     CoinSet selection;
     CoinSet actual_selection;
     CAmount value_ret = 0;
@@ -151,7 +134,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     /////////////////////////
 
     // Empty utxo pool
-    BOOST_CHECK(!SelectCoinsBnB(GroupCoins(utxo_pool), 1 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(!SelectCoinsBnB(utxo_pool, 1 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     selection.clear();
 
     // Add utxos
@@ -162,7 +145,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
 
     // Select 1 Cent
     add_coin(1 * CENT, 1, actual_selection);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 1 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 1 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     BOOST_CHECK(equal_sets(selection, actual_selection));
     BOOST_CHECK_EQUAL(value_ret, 1 * CENT);
     actual_selection.clear();
@@ -170,7 +153,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
 
     // Select 2 Cent
     add_coin(2 * CENT, 2, actual_selection);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 2 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 2 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     BOOST_CHECK(equal_sets(selection, actual_selection));
     BOOST_CHECK_EQUAL(value_ret, 2 * CENT);
     actual_selection.clear();
@@ -179,27 +162,27 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     // Select 5 Cent
     add_coin(4 * CENT, 4, actual_selection);
     add_coin(1 * CENT, 1, actual_selection);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 5 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 5 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     BOOST_CHECK(equal_sets(selection, actual_selection));
     BOOST_CHECK_EQUAL(value_ret, 5 * CENT);
     actual_selection.clear();
     selection.clear();
 
     // Select 11 Cent, not possible
-    BOOST_CHECK(!SelectCoinsBnB(GroupCoins(utxo_pool), 11 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(!SelectCoinsBnB(utxo_pool, 11 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     actual_selection.clear();
     selection.clear();
 
     // Cost of change is greater than the difference between target value and utxo sum
     add_coin(1 * CENT, 1, actual_selection);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 0.9 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 0.9 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     BOOST_CHECK_EQUAL(value_ret, 1 * CENT);
     BOOST_CHECK(equal_sets(selection, actual_selection));
     actual_selection.clear();
     selection.clear();
 
     // Cost of change is less than the difference between target value and utxo sum
-    BOOST_CHECK(!SelectCoinsBnB(GroupCoins(utxo_pool), 0.9 * CENT, 0, selection, value_ret, not_input_fees));
+    BOOST_CHECK(!SelectCoinsBnB(utxo_pool, 0.9 * CENT, 0, selection, value_ret, not_input_fees));
     actual_selection.clear();
     selection.clear();
 
@@ -208,7 +191,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     add_coin(5 * CENT, 5, actual_selection);
     add_coin(4 * CENT, 4, actual_selection);
     add_coin(1 * CENT, 1, actual_selection);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 10 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 10 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     BOOST_CHECK(equal_sets(selection, actual_selection));
     BOOST_CHECK_EQUAL(value_ret, 10 * CENT);
     actual_selection.clear();
@@ -219,21 +202,21 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     add_coin(5 * CENT, 5, actual_selection);
     add_coin(3 * CENT, 3, actual_selection);
     add_coin(2 * CENT, 2, actual_selection);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 10 * CENT, 5000, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 10 * CENT, 5000, selection, value_ret, not_input_fees));
     BOOST_CHECK_EQUAL(value_ret, 10 * CENT);
     // FIXME: this test is redundant with the above, because 1 Cent is selected, not "too small"
     // BOOST_CHECK(equal_sets(selection, actual_selection));
 
     // Select 0.25 Cent, not possible
-    BOOST_CHECK(!SelectCoinsBnB(GroupCoins(utxo_pool), 0.25 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
+    BOOST_CHECK(!SelectCoinsBnB(utxo_pool, 0.25 * CENT, 0.5 * CENT, selection, value_ret, not_input_fees));
     actual_selection.clear();
     selection.clear();
 
     // Iteration exhaustion test
     CAmount target = make_hard_case(17, utxo_pool);
-    BOOST_CHECK(!SelectCoinsBnB(GroupCoins(utxo_pool), target, 0, selection, value_ret, not_input_fees)); // Should exhaust
+    BOOST_CHECK(!SelectCoinsBnB(utxo_pool, target, 0, selection, value_ret, not_input_fees)); // Should exhaust
     target = make_hard_case(14, utxo_pool);
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), target, 0, selection, value_ret, not_input_fees)); // Should not exhaust
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, target, 0, selection, value_ret, not_input_fees)); // Should not exhaust
 
     // Test same value early bailout optimization
     utxo_pool.clear();
@@ -250,7 +233,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     for (int i = 0; i < 50000; ++i) {
         add_coin(5 * CENT, 7, utxo_pool);
     }
-    BOOST_CHECK(SelectCoinsBnB(GroupCoins(utxo_pool), 30 * CENT, 5000, selection, value_ret, not_input_fees));
+    BOOST_CHECK(SelectCoinsBnB(utxo_pool, 30 * CENT, 5000, selection, value_ret, not_input_fees));
     BOOST_CHECK_EQUAL(value_ret, 30 * CENT);
     BOOST_CHECK(equal_sets(selection, actual_selection));
 
@@ -264,7 +247,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
     }
     // Run 100 times, to make sure it is never finding a solution
     for (int i = 0; i < 100; ++i) {
-        BOOST_CHECK(!SelectCoinsBnB(GroupCoins(utxo_pool), 1 * CENT, 2 * CENT, selection, value_ret, not_input_fees));
+        BOOST_CHECK(!SelectCoinsBnB(utxo_pool, 1 * CENT, 2 * CENT, selection, value_ret, not_input_fees));
     }
 
     // Make sure that effective value is working in SelectCoinsMinConf when BnB is used
