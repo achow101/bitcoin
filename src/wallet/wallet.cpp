@@ -4250,7 +4250,7 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
                     // a too-large transaction when using -avoidpartialspends to
                     // prevent breaking consensus or surprising users with a very
                     // high amount of fees.
-                    if (it->second.m_outputs.size() >= OUTPUT_GROUP_MAX_ENTRIES) {
+                    if (it->second.m_outpoints.size() >= OUTPUT_GROUP_MAX_ENTRIES) {
                         groups.push_back(it->second);
                         it->second = OutputGroup{effective_feerate, long_term_feerate};
                         full_groups.insert(dst);
@@ -4264,7 +4264,7 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
                 // This is for if each output gets it's own OutputGroup
                 OutputGroup coin(effective_feerate, long_term_feerate);
                 coin.Insert(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
-                if (coin.m_outputs.size() > 0 && coin.EligibleForSpending(filter)) groups.push_back(coin);
+                if (coin.m_outpoints.size() > 0 && coin.EligibleForSpending(filter)) groups.push_back(coin);
             }
         }
     }
@@ -4276,7 +4276,7 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
                 group.m_ancestors = max_ancestors - 1;
             }
             // If the OutputGroup is not eligible, don't add it
-            if (group.m_outputs.size() > 0 && group.EligibleForSpending(filter)) groups.push_back(group);
+            if (group.m_outpoints.size() > 0 && group.EligibleForSpending(filter)) groups.push_back(group);
         }
     }
     return groups;

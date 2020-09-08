@@ -69,7 +69,7 @@ struct CoinEligibilityFilter
 
 struct OutputGroup
 {
-    std::vector<CInputCoin> m_outputs;
+    std::vector<COutPoint> m_outpoints;
     bool m_from_me{true};
     CAmount m_value{0};
     int m_depth{999};
@@ -92,7 +92,7 @@ struct OutputGroup
     std::set<COutPoint> GetOutpoints() const;
 
     bool operator==(const OutputGroup& rhs) const {
-        return std::equal(m_outputs.begin(), m_outputs.end(), rhs.m_outputs.begin());
+        return std::equal(m_outpoints.begin(), m_outpoints.end(), rhs.m_outpoints.begin());
     }
 };
 

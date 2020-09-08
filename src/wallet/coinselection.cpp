@@ -308,17 +308,10 @@ void OutputGroup::Insert(const CInputCoin& output, int depth, bool from_me, size
     // Filter for positive only here before adding the coin
     if (positive_only && ev <= 0) return;
 
-    m_outputs.push_back(output);
-    CInputCoin& coin = m_outputs.back();
-
-    coin.m_fee = coin_fee;
-    fee += coin.m_fee;
-
-    coin.m_long_term_fee = coin.m_input_bytes < 0 ? 0 : m_long_term_feerate.GetFee(coin.m_input_bytes);
-    long_term_fee += coin.m_long_term_fee;
-
-    coin.effective_value = ev;
-    effective_value += coin.effective_value;
+    m_outpoints.push_back(output.outpoint);
+    fee += coin_fee;
+    long_term_fee += output.m_input_bytes < 0 ? 0 : m_long_term_feerate.GetFee(output.m_input_bytes);
+    effective_value += ev;
 
     m_from_me &= from_me;
     m_value += output.m_value;
@@ -342,8 +335,6 @@ bool OutputGroup::EligibleForSpending(const CoinEligibilityFilter& eligibility_f
 std::set<COutPoint> OutputGroup::GetOutpoints() const
 {
     std::set<COutPoint> ret;
-    for (const auto& output : m_outputs) {
-        ret.insert(output.outpoint);
-    }
+    util::insert(ret, m_outpoints);
     return ret;
 }
