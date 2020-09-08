@@ -43,7 +43,7 @@ static void add_coin(const CAmount& nValue, int nInput, CoinSet& set)
     tx.vout.resize(nInput + 1);
     tx.vout[nInput].nValue = nValue;
     OutputGroup group{};
-    group.Insert(CInputCoin(MakeTransactionRef(tx), nInput), 999, false, 0, 0, false);
+    group.Insert(nValue, nValue, 0, COutPoint(tx.GetHash(), nInput));
     set.push_back(group);
 }
 
@@ -110,7 +110,7 @@ inline std::vector<OutputGroup>& GroupCoins(const std::vector<COutput>& coins)
     static_groups.clear();
     for (auto& coin : coins) {
         static_groups.emplace_back();
-        static_groups.back().Insert(coin.GetInputCoin(), coin.nDepth, coin.tx->m_amounts[CWalletTx::DEBIT].m_cached[ISMINE_SPENDABLE] && coin.tx->m_amounts[CWalletTx::DEBIT].m_value[ISMINE_SPENDABLE] == 1 /* HACK: we can't figure out the is_me flag so we use the conditions defined above; perhaps set safe to false for !fIsFromMe in add_coin() */, 0, 0, false);
+        static_groups.back().Insert(coin, coin.tx->m_amounts[CWalletTx::DEBIT].m_cached[ISMINE_SPENDABLE] && coin.tx->m_amounts[CWalletTx::DEBIT].m_value[ISMINE_SPENDABLE] == 1 /* HACK: we can't figure out the is_me flag so we use the conditions defined above; perhaps set safe to false for !fIsFromMe in add_coin() */, 0, 0, false);
     }
     return static_groups;
 }

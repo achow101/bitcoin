@@ -10,6 +10,8 @@
 #include <primitives/transaction.h>
 #include <random.h>
 
+class COutput;
+
 //! target minimum change amount
 static constexpr CAmount MIN_CHANGE{COIN / 100};
 //! final minimum change amount after paying for fees
@@ -87,7 +89,9 @@ struct OutputGroup
         m_long_term_feerate(long_term_feerate)
     {}
 
-    void Insert(const CInputCoin& output, int depth, bool from_me, size_t ancestors, size_t descendants, bool positive_only);
+    void Insert(const COutput& output, bool from_me, size_t ancestors, size_t descendants, bool positive_only);
+    // Insert just values, OutputGroups where items were inserted with this function should not be used in actual coin selection
+    void Insert(CAmount effective_value, CAmount value, CAmount fee, const COutPoint& outpoint);
     bool EligibleForSpending(const CoinEligibilityFilter& eligibility_filter) const;
     std::set<COutPoint> GetOutpoints() const;
 

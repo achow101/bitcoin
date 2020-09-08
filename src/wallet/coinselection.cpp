@@ -8,6 +8,7 @@
 #include <policy/feerate.h>
 #include <util/system.h>
 #include <util/moneystr.h>
+#include <wallet/wallet.h>
 
 // Descending order comparator
 struct {
@@ -300,22 +301,22 @@ bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& group
 
  ******************************************************************************/
 
-void OutputGroup::Insert(const CInputCoin& output, int depth, bool from_me, size_t ancestors, size_t descendants, bool positive_only) {
+void OutputGroup::Insert(const COutput& output, bool from_me, size_t ancestors, size_t descendants, bool positive_only) {
     // Compute the effective value first
-    CAmount coin_fee = output.m_input_bytes < 0 ? 0 : m_effective_feerate.GetFee(output.m_input_bytes);
-    CAmount ev = output.m_value - coin_fee;
+    CAmount coin_fee = output.nInputBytes < 0 ? 0 : m_effective_feerate.GetFee(output.nInputBytes);
+    CAmount ev = output.GetValue() - coin_fee;
 
     // Filter for positive only here before adding the coin
     if (positive_only && ev <= 0) return;
 
     m_outpoints.push_back(output.outpoint);
     fee += coin_fee;
-    long_term_fee += output.m_input_bytes < 0 ? 0 : m_long_term_feerate.GetFee(output.m_input_bytes);
+    long_term_fee += output.nInputBytes < 0 ? 0 : m_long_term_feerate.GetFee(output.nInputBytes);
     effective_value += ev;
 
     m_from_me &= from_me;
-    m_value += output.m_value;
-    m_depth = std::min(m_depth, depth);
+    m_value += output.GetValue();
+    m_depth = std::min(m_depth, output.nDepth);
     // ancestors here express the number of ancestors the new coin will end up having, which is
     // the sum, rather than the max; this will overestimate in the cases where multiple inputs
     // have common ancestors
@@ -323,6 +324,14 @@ void OutputGroup::Insert(const CInputCoin& output, int depth, bool from_me, size
     // descendants is the count as seen from the top ancestor, not the descendants as seen from the
     // coin itself; thus, this value is counted as the max, not the sum
     m_descendants = std::max(m_descendants, descendants);
+}
+
+void OutputGroup::Insert(CAmount effective_value_in, CAmount value, CAmount fee_in, const COutPoint& outpoint)
+{
+    effective_value += effective_value_in;
+    m_value += value;
+    fee += fee_in;
+    m_outpoints.push_back(outpoint);
 }
 
 bool OutputGroup::EligibleForSpending(const CoinEligibilityFilter& eligibility_filter) const

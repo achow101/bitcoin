@@ -2451,7 +2451,7 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
             if (!out.fSpendable)
                  continue;
             nValueRet += out.tx->tx->vout[out.i].nValue;
-            preset.Insert(out.GetInputCoin(), out.nDepth, out.tx->IsFromMe(ISMINE_ALL), 0, 0, false);
+            preset.Insert(out, out.tx->IsFromMe(ISMINE_ALL), 0, 0, false);
         }
         setCoinsRet.push_back(preset);
         return (nValueRet >= nTargetValue);
@@ -2475,14 +2475,14 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
             if (spend_size <= 0) {
                 return false; // Not solvable, can't estimate size for fee
             }
-            CAmount effective_value = value - coin_selection_params.effective_fee.GetFee(spend_size);
+            CAmount fee = coin_selection_params.effective_fee.GetFee(spend_size);
+            CAmount effective_value = value - fee;
             if (coin_selection_params.use_bnb) {
                 value_to_select -= effective_value;
             } else {
                 value_to_select -= value;
             }
-            CInputCoin coin(wtx.tx, outpoint.n, spend_size);
-            preset.Insert(coin, /* Depth */ 999, wtx.IsFromMe(ISMINE_ALL), 0, 0, false);
+            preset.Insert(effective_value, value, fee, outpoint);
         } else {
             return false; // TODO: Allow non-wallet inputs
         }
@@ -4238,7 +4238,6 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
     for (const auto& output : outputs) {
         if (output.fSpendable) {
             CTxDestination dst;
-            CInputCoin input_coin = output.GetInputCoin();
 
             size_t ancestors, descendants;
             chain().getTransactionAncestry(output.tx->GetHash(), ancestors, descendants);
@@ -4255,15 +4254,15 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
                         it->second = OutputGroup{effective_feerate, long_term_feerate};
                         full_groups.insert(dst);
                     }
-                    it->second.Insert(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
+                    it->second.Insert(output, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
                 } else {
                     auto ins = gmap.emplace(dst, OutputGroup{effective_feerate, long_term_feerate});
-                    ins.first->second.Insert(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
+                    ins.first->second.Insert(output, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
                 }
             } else {
                 // This is for if each output gets it's own OutputGroup
                 OutputGroup coin(effective_feerate, long_term_feerate);
-                coin.Insert(input_coin, output.nDepth, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
+                coin.Insert(output, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
                 if (coin.m_outpoints.size() > 0 && coin.EligibleForSpending(filter)) groups.push_back(coin);
             }
         }
