@@ -604,6 +604,13 @@ public:
 
     std::string ToString() const;
 
+    CAmount GetValue() const;
+    int64_t GetTxTime() const;
+    const CScript& GetScriptPubKey() const;
+    const uint256& GetTxHash() const;
+    uint32_t GetVoutIndex() const;
+    const CTxOut& GetTxOut() const;
+
     inline CInputCoin GetInputCoin() const
     {
         return CInputCoin(tx->tx, i, nInputBytes);

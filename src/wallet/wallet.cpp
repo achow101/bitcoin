@@ -334,6 +334,36 @@ std::string COutput::ToString() const
     return strprintf("COutput(%s, %d, %d) [%s]", tx->GetHash().ToString(), i, nDepth, FormatMoney(tx->tx->vout[i].nValue));
 }
 
+CAmount COutput::GetValue() const
+{
+    return tx->tx->vout[i].nValue;
+}
+
+int64_t COutput::GetTxTime() const
+{
+    return tx->GetTxTime();
+}
+
+const CScript& COutput::GetScriptPubKey() const
+{
+    return tx->tx->vout[i].scriptPubKey;
+}
+
+const uint256& COutput::GetTxHash() const
+{
+    return tx->GetHash();
+}
+
+uint32_t COutput::GetVoutIndex() const
+{
+    return i;
+}
+
+const CTxOut& COutput::GetTxOut() const
+{
+    return tx->tx->vout[i];
+}
+
 const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
 {
     AssertLockHeld(cs_wallet);
