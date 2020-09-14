@@ -45,7 +45,7 @@ static void CoinSelection(benchmark::Bench& bench)
     // Create coins
     std::vector<COutput> coins;
     for (const auto& wtx : wtxs) {
-        coins.emplace_back(wtx.get(), 0 /* iIn */, 6 * 24 /* nDepthIn */, true /* spendable */, true /* solvable */, true /* safe */, wtx->IsFromMe(ISMINE_ALL), wtx->GetSpendSize(0), wtx->GetTxTime());
+        coins.emplace_back(wtx->tx->vout[0], COutPoint(wtx->GetHash(), 0), 6 * 24 /* nDepthIn */, true /* spendable */, true /* solvable */, true /* safe */, wtx->IsFromMe(ISMINE_ALL), wtx->GetSpendSize(0), wtx->GetTxTime());
     }
 
     const CoinEligibilityFilter filter_standard(1, 6, 0);
@@ -75,7 +75,7 @@ static void add_coin(const CAmount& nValue, int nInput, std::vector<OutputGroup>
     tx.vout[nInput].nValue = nValue;
     std::unique_ptr<CWalletTx> wtx = MakeUnique<CWalletTx>(&testWallet, MakeTransactionRef(std::move(tx)));
     set.emplace_back();
-    set.back().Insert(COutput(wtx.get(), nInput, 0, true, true, true, true, wtx->GetSpendSize(nInput), wtx->GetTxTime()), 0, 0, false);
+    set.back().Insert(COutput(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), 0, true, true, true, true, wtx->GetSpendSize(nInput), wtx->GetTxTime()), 0, 0, false);
     wtxn.emplace_back(std::move(wtx));
 }
 // Copied from src/wallet/test/coinselector_tests.cpp

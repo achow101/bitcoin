@@ -560,8 +560,7 @@ public:
 class COutput
 {
 public:
-    const CWalletTx *tx;
-    int i;
+    CTxOut txout;
     COutPoint outpoint;
     int nDepth;
 
@@ -587,10 +586,9 @@ public:
     /** The transaction time */
     int64_t m_time;
 
-    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time) :
-        tx(txIn),
-        i(iIn),
-        outpoint(tx->GetHash(), i),
+    COutput(const CTxOut& txout, const COutPoint& outpoint, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time) :
+        txout(txout),
+        outpoint(outpoint),
         nDepth(nDepthIn),
         nInputBytes(input_bytes),
         fSpendable(fSpendableIn),

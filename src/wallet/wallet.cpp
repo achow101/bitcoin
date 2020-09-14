@@ -336,7 +336,7 @@ std::string COutput::ToString() const
 
 CAmount COutput::GetValue() const
 {
-    return tx->tx->vout[i].nValue;
+    return txout.nValue;
 }
 
 int64_t COutput::GetTxTime() const
@@ -346,22 +346,22 @@ int64_t COutput::GetTxTime() const
 
 const CScript& COutput::GetScriptPubKey() const
 {
-    return tx->tx->vout[i].scriptPubKey;
+    return txout.scriptPubKey;
 }
 
 const uint256& COutput::GetTxHash() const
 {
-    return tx->GetHash();
+    return outpoint.hash;
 }
 
 uint32_t COutput::GetVoutIndex() const
 {
-    return i;
+    return outpoint.n;
 }
 
 const CTxOut& COutput::GetTxOut() const
 {
-    return tx->tx->vout[i];
+    return txout;
 }
 
 const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
@@ -2324,7 +2324,7 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
                 input_bytes = wtx.GetSpendSize(i, (coinControl && coinControl->fAllowWatchOnly));
             }
 
-            vCoins.push_back(COutput(&wtx, i, nDepth, spendable, solvable, safeTx, wtx.IsFromMe(ISMINE_ALL), input_bytes, wtx.GetTxTime()));
+            vCoins.push_back(COutput(wtx.tx->vout[i], COutPoint(wtx.GetHash(), i), nDepth, spendable, solvable, safeTx, wtx.IsFromMe(ISMINE_ALL), input_bytes, wtx.GetTxTime()));
 
             // Checks the sum amount of all UTXO's.
             if (nMinimumSumAmount != MAX_MONEY) {
@@ -2354,9 +2354,13 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
 
     for (const COutput& coin : availableCoins) {
         CTxDestination address;
-        if ((coin.fSpendable || (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.fSolvable)) &&
-            ExtractDestination(FindNonChangeParentOutput(*coin.tx->tx, coin.i).scriptPubKey, address)) {
-            result[address].emplace_back(std::move(coin));
+        if ((coin.fSpendable || (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.fSolvable))) {
+            // Lookup the transaction
+            auto it = mapWallet.find(coin.GetTxHash());
+            assert(it != mapWallet.end());
+            if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, coin.GetVoutIndex()).scriptPubKey, address)) {
+                result[address].emplace_back(std::move(coin));
+            }
         }
     }
 
@@ -2375,7 +2379,7 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
                 CTxDestination address;
                 if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, output.n).scriptPubKey, address)) {
                     result[address].emplace_back(
-                        &it->second, output.n, depth, true /* spendable */, true /* solvable */, false /* safe */, it->second.IsFromMe(ISMINE_ALL), it->second.GetSpendSize(output.n), it->second.GetTxTime());
+                        it->second.tx->vout[output.n], output, depth, true /* spendable */, true /* solvable */, false /* safe */, it->second.IsFromMe(ISMINE_ALL), it->second.GetSpendSize(output.n), it->second.GetTxTime());
                 }
             }
         }
