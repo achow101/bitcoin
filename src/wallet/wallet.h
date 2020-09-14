@@ -584,7 +584,10 @@ public:
     /** Whether this output is in a transaction we created */
     bool m_from_me;
 
-    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes) :
+    /** The transaction time */
+    int64_t m_time;
+
+    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time) :
         tx(txIn),
         i(iIn),
         outpoint(tx->GetHash(), i),
@@ -593,7 +596,8 @@ public:
         fSpendable(fSpendableIn),
         fSolvable(fSolvableIn),
         fSafe(fSafeIn),
-        m_from_me(from_me)
+        m_from_me(from_me),
+        m_time(time)
     {}
 
     std::string ToString() const;

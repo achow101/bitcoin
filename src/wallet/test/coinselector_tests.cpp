@@ -72,7 +72,7 @@ static void add_coin(CWallet& wallet, const CAmount& nValue, int nAge = 6*24, bo
         wtx->m_amounts[CWalletTx::DEBIT].Set(ISMINE_SPENDABLE, 1);
         wtx->m_is_cache_empty = false;
     }
-    COutput output(wtx, nInput, nAge, true /* spendable */, true /* solvable */, true /* safe */, fIsFromMe, wtx->GetSpendSize(nInput, true));
+    COutput output(wtx, nInput, nAge, true /* spendable */, true /* solvable */, true /* safe */, fIsFromMe, wtx->GetSpendSize(nInput, true), wtx->GetTxTime());
     vCoins.push_back(output);
 }
 static void add_coin(const CAmount& nValue, int nAge = 6*24, bool fIsFromMe = false, int nInput=0, bool spendable = false)
