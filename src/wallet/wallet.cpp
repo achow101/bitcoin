@@ -2319,7 +2319,12 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
             bool solvable = provider ? IsSolvable(*provider, wtx.tx->vout[i].scriptPubKey) : false;
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
 
-            vCoins.push_back(COutput(&wtx, i, nDepth, spendable, solvable, safeTx, wtx.IsFromMe(ISMINE_ALL), (coinControl && coinControl->fAllowWatchOnly)));
+            int input_bytes = -1;
+            if (spendable) {
+                input_bytes = wtx.GetSpendSize(i, (coinControl && coinControl->fAllowWatchOnly));
+            }
+
+            vCoins.push_back(COutput(&wtx, i, nDepth, spendable, solvable, safeTx, wtx.IsFromMe(ISMINE_ALL), input_bytes));
 
             // Checks the sum amount of all UTXO's.
             if (nMinimumSumAmount != MAX_MONEY) {
@@ -2370,7 +2375,7 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
                 CTxDestination address;
                 if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, output.n).scriptPubKey, address)) {
                     result[address].emplace_back(
-                        &it->second, output.n, depth, true /* spendable */, true /* solvable */, false /* safe */, it->second.IsFromMe(ISMINE_ALL));
+                        &it->second, output.n, depth, true /* spendable */, true /* solvable */, false /* safe */, it->second.IsFromMe(ISMINE_ALL), it->second.GetSpendSize(output.n));
                 }
             }
         }

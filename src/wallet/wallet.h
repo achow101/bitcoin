@@ -574,9 +574,6 @@ public:
     /** Whether we know how to spend this output, ignoring the lack of keys */
     bool fSolvable;
 
-    /** Whether to use the maximum sized, 72 byte signature when calculating the size of the input spend. This should only be set when watch-only outputs are allowed */
-    bool use_max_sig;
-
     /**
      * Whether this output is considered safe to spend. Unconfirmed transactions
      * from outside keys and unconfirmed replacement transactions are considered
@@ -587,24 +584,17 @@ public:
     /** Whether this output is in a transaction we created */
     bool m_from_me;
 
-    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, bool use_max_sig_in = false) :
+    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes) :
         tx(txIn),
         i(iIn),
         outpoint(tx->GetHash(), i),
         nDepth(nDepthIn),
-        nInputBytes(-1),
+        nInputBytes(input_bytes),
         fSpendable(fSpendableIn),
         fSolvable(fSolvableIn),
-        use_max_sig(use_max_sig_in),
         fSafe(fSafeIn),
         m_from_me(from_me)
-    {
-        // If known and signable by the given wallet, compute nInputBytes
-        // Failure will keep this value -1
-        if (fSpendable && tx) {
-            nInputBytes = tx->GetSpendSize(i, use_max_sig);
-        }
-    }
+    {}
 
     std::string ToString() const;
 
