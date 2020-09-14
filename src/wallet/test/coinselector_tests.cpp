@@ -72,7 +72,7 @@ static void add_coin(CWallet& wallet, const CAmount& nValue, int nAge = 6*24, bo
         wtx->m_amounts[CWalletTx::DEBIT].Set(ISMINE_SPENDABLE, 1);
         wtx->m_is_cache_empty = false;
     }
-    COutput output(wtx, nInput, nAge, true /* spendable */, true /* solvable */, true /* safe */);
+    COutput output(wtx, nInput, nAge, true /* spendable */, true /* solvable */, true /* safe */, fIsFromMe);
     vCoins.push_back(output);
 }
 static void add_coin(const CAmount& nValue, int nAge = 6*24, bool fIsFromMe = false, int nInput=0, bool spendable = false)
@@ -110,7 +110,7 @@ inline std::vector<OutputGroup>& GroupCoins(const std::vector<COutput>& coins)
     static_groups.clear();
     for (auto& coin : coins) {
         static_groups.emplace_back();
-        static_groups.back().Insert(coin, coin.tx->m_amounts[CWalletTx::DEBIT].m_cached[ISMINE_SPENDABLE] && coin.tx->m_amounts[CWalletTx::DEBIT].m_value[ISMINE_SPENDABLE] == 1 /* HACK: we can't figure out the is_me flag so we use the conditions defined above; perhaps set safe to false for !fIsFromMe in add_coin() */, 0, 0, false);
+        static_groups.back().Insert(coin, 0, 0, false);
     }
     return static_groups;
 }

@@ -584,7 +584,10 @@ public:
      */
     bool fSafe;
 
-    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool use_max_sig_in = false) :
+    /** Whether this output is in a transaction we created */
+    bool m_from_me;
+
+    COutput(const CWalletTx *txIn, int iIn, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, bool use_max_sig_in = false) :
         tx(txIn),
         i(iIn),
         outpoint(tx->GetHash(), i),
@@ -593,7 +596,8 @@ public:
         fSpendable(fSpendableIn),
         fSolvable(fSolvableIn),
         use_max_sig(use_max_sig_in),
-        fSafe(fSafeIn)
+        fSafe(fSafeIn),
+        m_from_me(from_me)
     {
         // If known and signable by the given wallet, compute nInputBytes
         // Failure will keep this value -1

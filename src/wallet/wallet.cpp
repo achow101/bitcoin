@@ -2319,7 +2319,7 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
             bool solvable = provider ? IsSolvable(*provider, wtx.tx->vout[i].scriptPubKey) : false;
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
 
-            vCoins.push_back(COutput(&wtx, i, nDepth, spendable, solvable, safeTx, (coinControl && coinControl->fAllowWatchOnly)));
+            vCoins.push_back(COutput(&wtx, i, nDepth, spendable, solvable, safeTx, wtx.IsFromMe(ISMINE_ALL), (coinControl && coinControl->fAllowWatchOnly)));
 
             // Checks the sum amount of all UTXO's.
             if (nMinimumSumAmount != MAX_MONEY) {
@@ -2370,7 +2370,7 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
                 CTxDestination address;
                 if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, output.n).scriptPubKey, address)) {
                     result[address].emplace_back(
-                        &it->second, output.n, depth, true /* spendable */, true /* solvable */, false /* safe */);
+                        &it->second, output.n, depth, true /* spendable */, true /* solvable */, false /* safe */, it->second.IsFromMe(ISMINE_ALL));
                 }
             }
         }
@@ -2451,7 +2451,7 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
             if (!out.fSpendable)
                  continue;
             nValueRet += out.GetValue();
-            preset.Insert(out, out.tx->IsFromMe(ISMINE_ALL), 0, 0, false);
+            preset.Insert(out, 0, 0, false);
         }
         setCoinsRet.push_back(preset);
         return (nValueRet >= nTargetValue);
@@ -4254,15 +4254,15 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
                         it->second = OutputGroup{effective_feerate, long_term_feerate};
                         full_groups.insert(dst);
                     }
-                    it->second.Insert(output, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
+                    it->second.Insert(output, ancestors, descendants, positive_only);
                 } else {
                     auto ins = gmap.emplace(dst, OutputGroup{effective_feerate, long_term_feerate});
-                    ins.first->second.Insert(output, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
+                    ins.first->second.Insert(output, ancestors, descendants, positive_only);
                 }
             } else {
                 // This is for if each output gets it's own OutputGroup
                 OutputGroup coin(effective_feerate, long_term_feerate);
-                coin.Insert(output, output.tx->IsFromMe(ISMINE_ALL), ancestors, descendants, positive_only);
+                coin.Insert(output, ancestors, descendants, positive_only);
                 if (coin.m_outpoints.size() > 0 && coin.EligibleForSpending(filter)) groups.push_back(coin);
             }
         }

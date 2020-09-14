@@ -301,7 +301,7 @@ bool KnapsackSolver(const CAmount& nTargetValue, std::vector<OutputGroup>& group
 
  ******************************************************************************/
 
-void OutputGroup::Insert(const COutput& output, bool from_me, size_t ancestors, size_t descendants, bool positive_only) {
+void OutputGroup::Insert(const COutput& output, size_t ancestors, size_t descendants, bool positive_only) {
     // Compute the effective value first
     CAmount coin_fee = output.nInputBytes < 0 ? 0 : m_effective_feerate.GetFee(output.nInputBytes);
     CAmount ev = output.GetValue() - coin_fee;
@@ -314,7 +314,7 @@ void OutputGroup::Insert(const COutput& output, bool from_me, size_t ancestors, 
     long_term_fee += output.nInputBytes < 0 ? 0 : m_long_term_feerate.GetFee(output.nInputBytes);
     effective_value += ev;
 
-    m_from_me &= from_me;
+    m_from_me &= output.m_from_me;
     m_value += output.GetValue();
     m_depth = std::min(m_depth, output.nDepth);
     // ancestors here express the number of ancestors the new coin will end up having, which is
