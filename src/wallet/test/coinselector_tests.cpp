@@ -282,7 +282,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         add_coin(*wallet, 2 * CENT, 6 * 24, false, 0, true);
         CCoinControl coin_control;
         coin_control.fAllowOtherInputs = true;
-        coin_control.Select(COutPoint(vCoins.at(0).tx->GetHash(), vCoins.at(0).i));
+        coin_control.Select(vCoins.at(0).outpoint);
         coin_selection_params_bnb.effective_fee = CFeeRate(0);
         BOOST_CHECK(wallet->SelectCoins(vCoins, 10 * CENT, setCoinsRet, nValueRet, coin_control, coin_selection_params_bnb, bnb_used));
         BOOST_CHECK(bnb_used);

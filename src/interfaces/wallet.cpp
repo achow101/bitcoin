@@ -414,7 +414,7 @@ public:
         for (const auto& entry : m_wallet->ListCoins()) {
             auto& group = result[entry.first];
             for (const auto& coin : entry.second) {
-                group.emplace_back(COutPoint(coin.tx->GetHash(), coin.i),
+                group.emplace_back(coin.outpoint,
                     MakeWalletTxOut(*m_wallet, coin));
             }
         }

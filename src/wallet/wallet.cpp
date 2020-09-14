@@ -331,7 +331,7 @@ std::shared_ptr<CWallet> CreateWallet(interfaces::Chain& chain, const std::strin
 
 std::string COutput::ToString() const
 {
-    return strprintf("COutput(%s, %d, %d) [%s]", tx->GetHash().ToString(), i, nDepth, FormatMoney(tx->tx->vout[i].nValue));
+    return strprintf("COutput(%s, %d, %d) [%s]", GetTxHash().ToString(), GetVoutIndex(), nDepth, FormatMoney(GetValue()));
 }
 
 CAmount COutput::GetValue() const
@@ -2205,7 +2205,7 @@ CAmount CWallet::GetAvailableBalance(const CCoinControl* coinControl) const
     AvailableCoins(vCoins, true, coinControl);
     for (const COutput& out : vCoins) {
         if (out.fSpendable) {
-            balance += out.tx->tx->vout[out.i].nValue;
+            balance += out.GetValue();
         }
     }
     return balance;
@@ -2450,7 +2450,7 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
         {
             if (!out.fSpendable)
                  continue;
-            nValueRet += out.tx->tx->vout[out.i].nValue;
+            nValueRet += out.GetValue();
             preset.Insert(out, out.tx->IsFromMe(ISMINE_ALL), 0, 0, false);
         }
         setCoinsRet.push_back(preset);
@@ -4240,8 +4240,8 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
             CTxDestination dst;
 
             size_t ancestors, descendants;
-            chain().getTransactionAncestry(output.tx->GetHash(), ancestors, descendants);
-            if (!single_coin && ExtractDestination(output.tx->tx->vout[output.i].scriptPubKey, dst)) {
+            chain().getTransactionAncestry(output.GetTxHash(), ancestors, descendants);
+            if (!single_coin && ExtractDestination(output.GetScriptPubKey(), dst)) {
                 auto it = gmap.find(dst);
                 if (it != gmap.end()) {
                     // Limit output groups to no more than OUTPUT_GROUP_MAX_ENTRIES
