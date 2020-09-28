@@ -316,7 +316,7 @@ void OutputGroup::Insert(const COutput& output, size_t ancestors, size_t descend
 
     m_from_me &= output.m_from_me;
     m_value += output.GetValue();
-    m_depth = std::min(m_depth, output.nDepth);
+    m_depth = std::min(m_depth, output.GetDepth(m_tip_height));
     // ancestors here express the number of ancestors the new coin will end up having, which is
     // the sum, rather than the max; this will overestimate in the cases where multiple inputs
     // have common ancestors

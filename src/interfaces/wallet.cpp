@@ -100,7 +100,7 @@ WalletTxOut MakeWalletTxOut(CWallet& wallet,
     WalletTxOut result;
     result.txout = output.GetTxOut();
     result.time = output.GetTxTime();
-    result.depth_in_main_chain = output.nDepth;
+    result.depth_in_main_chain = output.GetDepth(wallet.GetLastBlockHeight());
     result.is_spent = wallet.IsSpent(output.GetTxHash(), output.GetVoutIndex());
     return result;
 }

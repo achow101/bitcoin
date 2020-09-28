@@ -3019,7 +3019,7 @@ static RPCHelpMan listunspent()
 
         entry.pushKV("scriptPubKey", HexStr(scriptPubKey));
         entry.pushKV("amount", ValueFromAmount(out.GetValue()));
-        entry.pushKV("confirmations", out.nDepth);
+        entry.pushKV("confirmations", out.GetDepth(pwallet->GetLastBlockHeight()));
         entry.pushKV("spendable", out.fSpendable);
         entry.pushKV("solvable", out.fSolvable);
         if (out.fSolvable) {

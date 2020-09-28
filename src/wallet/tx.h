@@ -41,7 +41,6 @@ class COutput
 public:
     CTxOut txout;
     COutPoint outpoint;
-    int nDepth;
 
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
     int nInputBytes;
@@ -68,10 +67,9 @@ public:
     /** Confirmation status about this output */
     Confirmation m_confirm;
 
-    COutput(const CTxOut& txout, const COutPoint& outpoint, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time, Confirmation confirm) :
+    COutput(const CTxOut& txout, const COutPoint& outpoint, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time, Confirmation confirm) :
         txout(txout),
         outpoint(outpoint),
-        nDepth(nDepthIn),
         nInputBytes(input_bytes),
         fSpendable(fSpendableIn),
         fSolvable(fSolvableIn),
@@ -89,6 +87,7 @@ public:
     const uint256& GetTxHash() const;
     uint32_t GetVoutIndex() const;
     const CTxOut& GetTxOut() const;
+    int GetDepth(int tip_height) const;
 };
 
 #endif // BITCOIN_WALLET_TX_H

@@ -8,7 +8,7 @@
 
 std::string COutput::ToString() const
 {
-    return strprintf("COutput(%s, %d, %d) [%s]", GetTxHash().ToString(), GetVoutIndex(), nDepth, FormatMoney(GetValue()));
+    return strprintf("COutput(%s, %d, %d) [%s]", GetTxHash().ToString(), GetVoutIndex(), m_confirm.block_height, FormatMoney(GetValue()));
 }
 
 CAmount COutput::GetValue() const
@@ -41,3 +41,10 @@ const CTxOut& COutput::GetTxOut() const
     return txout;
 }
 
+int COutput::GetDepth(int tip_height) const
+{
+    if (m_confirm.status == Confirmation::Status::UNCONFIRMED || m_confirm.status == Confirmation::Status::ABANDONED) {
+        return 0;
+    }
+    return (tip_height - m_confirm.block_height + 1) * (m_confirm.status == Confirmation::Status::CONFLICTED ? -1 : 1);
+}

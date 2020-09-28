@@ -41,11 +41,13 @@ struct OutputGroup
     CFeeRate m_effective_feerate{0};
     CAmount long_term_fee{0};
     CFeeRate m_long_term_feerate{0};
+    int m_tip_height{0};
 
     OutputGroup() {}
-    OutputGroup(const CFeeRate& effective_feerate, const CFeeRate& long_term_feerate) :
+    OutputGroup(const CFeeRate& effective_feerate, const CFeeRate& long_term_feerate, int tip_height) :
         m_effective_feerate(effective_feerate),
-        m_long_term_feerate(long_term_feerate)
+        m_long_term_feerate(long_term_feerate),
+        m_tip_height(tip_height)
     {}
 
     void Insert(const COutput& output, size_t ancestors, size_t descendants, bool positive_only);

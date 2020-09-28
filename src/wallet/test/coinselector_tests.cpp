@@ -72,7 +72,11 @@ static void add_coin(CWallet& wallet, const CAmount& nValue, int nAge = 6*24, bo
         wtx->m_amounts[CWalletTx::DEBIT].Set(ISMINE_SPENDABLE, 1);
         wtx->m_is_cache_empty = false;
     }
-    COutput output(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), nAge, true /* spendable */, true /* solvable */, true /* safe */, fIsFromMe, wtx->GetSpendSize(nInput, true), wtx->GetTxTime(), wtx->m_confirm);
+    // Set the age in m_confirm
+    wtx->m_confirm.block_height = testWallet.GetLastBlockHeight() - nAge + 1;
+    wtx->m_confirm.status = Confirmation::Status::CONFIRMED;
+
+    COutput output(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), true /* spendable */, true /* solvable */, true /* safe */, fIsFromMe, wtx->GetSpendSize(nInput, true), wtx->GetTxTime(), wtx->m_confirm);
     vCoins.push_back(output);
 }
 static void add_coin(const CAmount& nValue, int nAge = 6*24, bool fIsFromMe = false, int nInput=0, bool spendable = false)
@@ -121,6 +125,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
 
     LOCK(testWallet.cs_wallet);
     testWallet.SetupLegacyScriptPubKeyMan();
+    testWallet.SetLastBlockProcessed(1000, {});
 
     // Setup
     std::vector<OutputGroup> utxo_pool;
@@ -276,6 +281,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         bool firstRun;
         wallet->LoadWallet(firstRun);
         wallet->SetupLegacyScriptPubKeyMan();
+        wallet->SetLastBlockProcessed(1000, {});
         LOCK(wallet->cs_wallet);
         add_coin(*wallet, 5 * CENT, 6 * 24, false, 0, true);
         add_coin(*wallet, 3 * CENT, 6 * 24, false, 0, true);
@@ -298,6 +304,7 @@ BOOST_AUTO_TEST_CASE(knapsack_solver_test)
 
     LOCK(testWallet.cs_wallet);
     testWallet.SetupLegacyScriptPubKeyMan();
+    testWallet.SetLastBlockProcessed(1000, {});
 
     // test multiple times to allow for differences in the shuffle order
     for (int i = 0; i < RUN_TESTS; i++)
@@ -578,6 +585,7 @@ BOOST_AUTO_TEST_CASE(ApproximateBestSubset)
 
     LOCK(testWallet.cs_wallet);
     testWallet.SetupLegacyScriptPubKeyMan();
+    testWallet.SetLastBlockProcessed(1000, {});
 
     empty_wallet();
 
@@ -597,6 +605,7 @@ BOOST_AUTO_TEST_CASE(ApproximateBestSubset)
 BOOST_AUTO_TEST_CASE(SelectCoins_test)
 {
     testWallet.SetupLegacyScriptPubKeyMan();
+    testWallet.SetLastBlockProcessed(1000, {});
 
     // Random generator stuff
     std::default_random_engine generator;

@@ -33,6 +33,7 @@ static void CoinSelection(benchmark::Bench& bench)
     auto chain = interfaces::MakeChain(node);
     CWallet wallet(chain.get(), "", CreateDummyWalletDatabase());
     wallet.SetupLegacyScriptPubKeyMan();
+    wallet.SetLastBlockProcessed(1000, {});
     std::vector<std::unique_ptr<CWalletTx>> wtxs;
     LOCK(wallet.cs_wallet);
 
@@ -45,7 +46,9 @@ static void CoinSelection(benchmark::Bench& bench)
     // Create coins
     std::vector<COutput> coins;
     for (const auto& wtx : wtxs) {
-        coins.emplace_back(wtx->tx->vout[0], COutPoint(wtx->GetHash(), 0), 6 * 24 /* nDepthIn */, true /* spendable */, true /* solvable */, true /* safe */, wtx->IsFromMe(ISMINE_ALL), wtx->GetSpendSize(0), wtx->GetTxTime(), wtx->m_confirm);
+        wtx->m_confirm.block_height = wallet.GetLastBlockHeight() - (6 * 24) + 1;
+        wtx->m_confirm.status = Confirmation::Status::CONFIRMED;
+        coins.emplace_back(wtx->tx->vout[0], COutPoint(wtx->GetHash(), 0), true /* spendable */, true /* solvable */, true /* safe */, wtx->IsFromMe(ISMINE_ALL), wtx->GetSpendSize(0), wtx->GetTxTime(), wtx->m_confirm);
     }
 
     const CoinEligibilityFilter filter_standard(1, 6, 0);
@@ -75,7 +78,7 @@ static void add_coin(const CAmount& nValue, int nInput, std::vector<OutputGroup>
     tx.vout[nInput].nValue = nValue;
     std::unique_ptr<CWalletTx> wtx = MakeUnique<CWalletTx>(&testWallet, MakeTransactionRef(std::move(tx)));
     set.emplace_back();
-    set.back().Insert(COutput(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), 0, true, true, true, true, wtx->GetSpendSize(nInput), wtx->GetTxTime(), wtx->m_confirm), 0, 0, false);
+    set.back().Insert(COutput(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), true, true, true, true, wtx->GetSpendSize(nInput), wtx->GetTxTime(), wtx->m_confirm), 0, 0, false);
     wtxn.emplace_back(std::move(wtx));
 }
 // Copied from src/wallet/test/coinselector_tests.cpp
