@@ -52,7 +52,7 @@ public:
     /** Whether we have the private keys to spend this output */
     bool fSpendable;
 
-    /** Whether we know how to spend this output, ignoring the lack of keys */
+    /** Whether we know how to spend this output, ignoring the lack of keys. Only used for output to user */
     bool fSolvable;
 
     /** Whether this output is in a transaction we created */

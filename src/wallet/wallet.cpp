@@ -2315,11 +2315,14 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
     std::map<CTxDestination, std::vector<COutput>> result;
     std::vector<COutput> availableCoins;
 
-    AvailableCoins(availableCoins);
+    CCoinControl coin_control;
+    coin_control.fAllowWatchOnly = IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+
+    AvailableCoins(availableCoins, true, &coin_control);
 
     for (const COutput& coin : availableCoins) {
         CTxDestination address;
-        if ((coin.fSpendable || (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.fSolvable))) {
+        if (coin.fSpendable) {
             // Lookup the transaction
             auto it = mapWallet.find(coin.GetTxHash());
             assert(it != mapWallet.end());
