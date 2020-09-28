@@ -8,7 +8,7 @@
 #include <policy/feerate.h>
 #include <util/system.h>
 #include <util/moneystr.h>
-#include <wallet/wallet.h>
+#include <wallet/tx.h>
 
 // Descending order comparator
 struct {

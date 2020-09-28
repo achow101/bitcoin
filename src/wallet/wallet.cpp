@@ -329,41 +329,6 @@ std::shared_ptr<CWallet> CreateWallet(interfaces::Chain& chain, const std::strin
  * @{
  */
 
-std::string COutput::ToString() const
-{
-    return strprintf("COutput(%s, %d, %d) [%s]", GetTxHash().ToString(), GetVoutIndex(), nDepth, FormatMoney(GetValue()));
-}
-
-CAmount COutput::GetValue() const
-{
-    return txout.nValue;
-}
-
-int64_t COutput::GetTxTime() const
-{
-    return m_time;
-}
-
-const CScript& COutput::GetScriptPubKey() const
-{
-    return txout.scriptPubKey;
-}
-
-const uint256& COutput::GetTxHash() const
-{
-    return outpoint.hash;
-}
-
-uint32_t COutput::GetVoutIndex() const
-{
-    return outpoint.n;
-}
-
-const CTxOut& COutput::GetTxOut() const
-{
-    return txout;
-}
-
 const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
 {
     AssertLockHeld(cs_wallet);
