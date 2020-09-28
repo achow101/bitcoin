@@ -8,6 +8,34 @@
 #include <primitives/transaction.h>
 #include <script/script.h>
 
+/* Confirmation includes tx status and a triplet of {block height/block hash/tx index in block}
+ * at which tx has been confirmed. All three are set to 0 if tx is unconfirmed or abandoned.
+ * Meaning of these fields changes with CONFLICTED state where they instead point to block hash
+ * and block height of the deepest conflicting tx.
+ */
+struct Confirmation {
+    /* New transactions start as UNCONFIRMED. At BlockConnected,
+     * they will transition to CONFIRMED. In case of reorg, at BlockDisconnected,
+     * they roll back to UNCONFIRMED. If we detect a conflicting transaction at
+     * block connection, we update conflicted tx and its dependencies as CONFLICTED.
+     * If tx isn't confirmed and outside of mempool, the user may switch it to ABANDONED
+     * by using the abandontransaction call. This last status may be override by a CONFLICTED
+     * or CONFIRMED transition.
+     */
+    enum Status {
+        UNCONFIRMED,
+        CONFIRMED,
+        CONFLICTED,
+        ABANDONED
+    };
+
+    Status status;
+    int block_height;
+    uint256 hashBlock;
+    int nIndex;
+    Confirmation(Status s = UNCONFIRMED, int b = 0, uint256 h = uint256(), int i = 0) : status(s), block_height(b), hashBlock(h), nIndex(i) {}
+};
+
 class COutput
 {
 public:
