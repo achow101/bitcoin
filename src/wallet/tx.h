@@ -65,7 +65,10 @@ public:
     /** The transaction time */
     int64_t m_time;
 
-    COutput(const CTxOut& txout, const COutPoint& outpoint, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time) :
+    /** Confirmation status about this output */
+    Confirmation m_confirm;
+
+    COutput(const CTxOut& txout, const COutPoint& outpoint, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time, Confirmation confirm) :
         txout(txout),
         outpoint(outpoint),
         nDepth(nDepthIn),
@@ -74,7 +77,8 @@ public:
         fSolvable(fSolvableIn),
         fSafe(fSafeIn),
         m_from_me(from_me),
-        m_time(time)
+        m_time(time),
+        m_confirm(confirm)
     {}
 
     std::string ToString() const;
