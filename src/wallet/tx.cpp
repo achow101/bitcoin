@@ -48,3 +48,13 @@ int COutput::GetDepth(int tip_height) const
     }
     return (tip_height - m_confirm.block_height + 1) * (m_confirm.status == Confirmation::Status::CONFLICTED ? -1 : 1);
 }
+
+bool COutput::IsSafe() const
+{
+    if (m_confirm.status == Confirmation::Status::CONFIRMED) return true;
+
+    if (!m_in_mempool || m_confirm.status == Confirmation::Status::CONFLICTED) return false;
+    // Either UNCONFIRMED or ABANDONED now
+    if (!replaces.empty() || !replaced_by.empty()) return false;
+    return m_unconf_trusted;
+}

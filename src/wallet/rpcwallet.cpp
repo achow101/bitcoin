@@ -3030,7 +3030,7 @@ static RPCHelpMan listunspent()
             }
         }
         if (avoid_reuse) entry.pushKV("reused", reused);
-        entry.pushKV("safe", out.fSafe);
+        entry.pushKV("safe", out.IsSafe());
         results.push_back(entry);
     }
 

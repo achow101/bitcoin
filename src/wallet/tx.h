@@ -38,6 +38,10 @@ struct Confirmation {
 
 class COutput
 {
+private:
+    /** When the transaction containing this output is unconfirmed, whether it is in the mempool */
+    bool m_in_mempool{false};
+
 public:
     CTxOut txout;
     COutPoint outpoint;
@@ -51,13 +55,6 @@ public:
     /** Whether we know how to spend this output, ignoring the lack of keys */
     bool fSolvable;
 
-    /**
-     * Whether this output is considered safe to spend. Unconfirmed transactions
-     * from outside keys and unconfirmed replacement transactions are considered
-     * unsafe and will not be used to fund new spending transactions.
-     */
-    bool fSafe;
-
     /** Whether this output is in a transaction we created */
     bool m_from_me;
 
@@ -67,16 +64,25 @@ public:
     /** Confirmation status about this output */
     Confirmation m_confirm;
 
-    COutput(const CTxOut& txout, const COutPoint& outpoint, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool from_me, int input_bytes, int64_t time, Confirmation confirm) :
+    /** When the transaction containing this output is unconfirmed, whether we trust it, i.e. this is our unconfirmed change if we can spend that */
+    bool m_unconf_trusted;
+
+    /** The transaction containing this output replaces these txids */
+    std::set<uint256> replaces;
+    /** The transaction containing this output is replaced by these txids */
+    std::set<uint256> replaced_by;
+
+    COutput(const CTxOut& txout, const COutPoint& outpoint, bool fSpendableIn, bool fSolvableIn, bool from_me, int input_bytes, int64_t time, Confirmation confirm, bool unconf_trusted, bool in_mempool) :
+        m_in_mempool(in_mempool),
         txout(txout),
         outpoint(outpoint),
         nInputBytes(input_bytes),
         fSpendable(fSpendableIn),
         fSolvable(fSolvableIn),
-        fSafe(fSafeIn),
         m_from_me(from_me),
         m_time(time),
-        m_confirm(confirm)
+        m_confirm(confirm),
+        m_unconf_trusted(unconf_trusted)
     {}
 
     std::string ToString() const;
@@ -88,6 +94,7 @@ public:
     uint32_t GetVoutIndex() const;
     const CTxOut& GetTxOut() const;
     int GetDepth(int tip_height) const;
+    bool IsSafe() const;
 };
 
 #endif // BITCOIN_WALLET_TX_H
