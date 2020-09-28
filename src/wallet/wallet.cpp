@@ -2169,14 +2169,12 @@ CAmount CWallet::GetAvailableBalance(const CCoinControl* coinControl) const
     std::vector<COutput> vCoins;
     AvailableCoins(vCoins, true, coinControl);
     for (const COutput& out : vCoins) {
-        if (out.fSpendable) {
-            balance += out.GetValue();
-        }
+        balance += out.GetValue();
     }
     return balance;
 }
 
-void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const CCoinControl* coinControl, const CAmount& nMinimumAmount, const CAmount& nMaximumAmount, const CAmount& nMinimumSumAmount, const uint64_t nMaximumCount) const
+void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const CCoinControl* coinControl, const CAmount& nMinimumAmount, const CAmount& nMaximumAmount, const CAmount& nMinimumSumAmount, const uint64_t nMaximumCount, bool include_unspendable) const
 {
     AssertLockHeld(cs_wallet);
 
@@ -2285,24 +2283,24 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
 
             int input_bytes = -1;
-            if (spendable) {
+            if (spendable || include_unspendable) {
                 input_bytes = wtx.GetSpendSize(i, (coinControl && coinControl->fAllowWatchOnly));
-            }
 
-            vCoins.push_back(COutput(wtx.tx->vout[i], COutPoint(wtx.GetHash(), i), spendable, solvable, wtx.IsFromMe(ISMINE_ALL), input_bytes, wtx.GetTxTime(), wtx.m_confirm, safeTx, wtx.InMempool()));
+                vCoins.push_back(COutput(wtx.tx->vout[i], COutPoint(wtx.GetHash(), i), spendable, solvable, wtx.IsFromMe(ISMINE_ALL), input_bytes, wtx.GetTxTime(), wtx.m_confirm, safeTx, wtx.InMempool()));
 
-            // Checks the sum amount of all UTXO's.
-            if (nMinimumSumAmount != MAX_MONEY) {
-                nTotal += wtx.tx->vout[i].nValue;
+                // Checks the sum amount of all UTXO's.
+                if (nMinimumSumAmount != MAX_MONEY) {
+                    nTotal += wtx.tx->vout[i].nValue;
 
-                if (nTotal >= nMinimumSumAmount) {
+                    if (nTotal >= nMinimumSumAmount) {
+                        return;
+                    }
+                }
+
+                // Checks the maximum number of UTXO's.
+                if (nMaximumCount > 0 && vCoins.size() >= nMaximumCount) {
                     return;
                 }
-            }
-
-            // Checks the maximum number of UTXO's.
-            if (nMaximumCount > 0 && vCoins.size() >= nMaximumCount) {
-                return;
             }
         }
     }
@@ -2322,13 +2320,11 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
 
     for (const COutput& coin : availableCoins) {
         CTxDestination address;
-        if (coin.fSpendable) {
-            // Lookup the transaction
-            auto it = mapWallet.find(coin.GetTxHash());
-            assert(it != mapWallet.end());
-            if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, coin.GetVoutIndex()).scriptPubKey, address)) {
-                result[address].emplace_back(std::move(coin));
-            }
+        // Lookup the transaction
+        auto it = mapWallet.find(coin.GetTxHash());
+        assert(it != mapWallet.end());
+        if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, coin.GetVoutIndex()).scriptPubKey, address)) {
+            result[address].emplace_back(std::move(coin));
         }
     }
 
@@ -2425,8 +2421,6 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
     {
         for (const COutput& out : vCoins)
         {
-            if (!out.fSpendable)
-                 continue;
             nValueRet += out.GetValue();
             preset.Insert(out, 0, 0, false);
         }
@@ -4213,35 +4207,33 @@ std::vector<OutputGroup> CWallet::GroupOutputs(const std::vector<COutput>& outpu
     std::set<CTxDestination> full_groups;
 
     for (const auto& output : outputs) {
-        if (output.fSpendable) {
-            CTxDestination dst;
+        CTxDestination dst;
 
-            size_t ancestors, descendants;
-            chain().getTransactionAncestry(output.GetTxHash(), ancestors, descendants);
-            if (!single_coin && ExtractDestination(output.GetScriptPubKey(), dst)) {
-                auto it = gmap.find(dst);
-                if (it != gmap.end()) {
-                    // Limit output groups to no more than OUTPUT_GROUP_MAX_ENTRIES
-                    // number of entries, to protect against inadvertently creating
-                    // a too-large transaction when using -avoidpartialspends to
-                    // prevent breaking consensus or surprising users with a very
-                    // high amount of fees.
-                    if (it->second.m_outpoints.size() >= OUTPUT_GROUP_MAX_ENTRIES) {
-                        groups.push_back(it->second);
-                        it->second = OutputGroup{effective_feerate, long_term_feerate, GetLastBlockHeight()};
-                        full_groups.insert(dst);
-                    }
-                    it->second.Insert(output, ancestors, descendants, positive_only);
-                } else {
-                    auto ins = gmap.emplace(dst, OutputGroup{effective_feerate, long_term_feerate, GetLastBlockHeight()});
-                    ins.first->second.Insert(output, ancestors, descendants, positive_only);
+        size_t ancestors, descendants;
+        chain().getTransactionAncestry(output.GetTxHash(), ancestors, descendants);
+        if (!single_coin && ExtractDestination(output.GetScriptPubKey(), dst)) {
+            auto it = gmap.find(dst);
+            if (it != gmap.end()) {
+                // Limit output groups to no more than OUTPUT_GROUP_MAX_ENTRIES
+                // number of entries, to protect against inadvertently creating
+                // a too-large transaction when using -avoidpartialspends to
+                // prevent breaking consensus or surprising users with a very
+                // high amount of fees.
+                if (it->second.m_outpoints.size() >= OUTPUT_GROUP_MAX_ENTRIES) {
+                    groups.push_back(it->second);
+                    it->second = OutputGroup{effective_feerate, long_term_feerate, GetLastBlockHeight()};
+                    full_groups.insert(dst);
                 }
+                it->second.Insert(output, ancestors, descendants, positive_only);
             } else {
-                // This is for if each output gets it's own OutputGroup
-                OutputGroup coin(effective_feerate, long_term_feerate, GetLastBlockHeight());
-                coin.Insert(output, ancestors, descendants, positive_only);
-                if (coin.m_outpoints.size() > 0 && coin.EligibleForSpending(filter)) groups.push_back(coin);
+                auto ins = gmap.emplace(dst, OutputGroup{effective_feerate, long_term_feerate, GetLastBlockHeight()});
+                ins.first->second.Insert(output, ancestors, descendants, positive_only);
             }
+        } else {
+            // This is for if each output gets it's own OutputGroup
+            OutputGroup coin(effective_feerate, long_term_feerate, GetLastBlockHeight());
+            coin.Insert(output, ancestors, descendants, positive_only);
+            if (coin.m_outpoints.size() > 0 && coin.EligibleForSpending(filter)) groups.push_back(coin);
         }
     }
     if (!single_coin) {

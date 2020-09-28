@@ -49,7 +49,7 @@ public:
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
     int nInputBytes;
 
-    /** Whether we have the private keys to spend this output */
+    /** Whether we have the private keys to spend this output. Only used for output to user */
     bool fSpendable;
 
     /** Whether we know how to spend this output, ignoring the lack of keys. Only used for output to user */
