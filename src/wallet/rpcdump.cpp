@@ -368,7 +368,7 @@ RPCHelpMan importprunedfunds()
 
     unsigned int txnIndex = vIndex[it - vMatch.begin()];
 
-    CWalletTx::Confirmation confirm(CWalletTx::Status::CONFIRMED, height, merkleBlock.header.GetHash(), txnIndex);
+    Confirmation confirm(Confirmation::Status::CONFIRMED, height, merkleBlock.header.GetHash(), txnIndex);
 
     CTransactionRef tx_ref = MakeTransactionRef(tx);
     if (pwallet->IsMine(*tx_ref)) {

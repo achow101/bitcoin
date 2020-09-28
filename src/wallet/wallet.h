@@ -263,6 +263,34 @@ public:
 //Get the marginal bytes of spending the specified output
 int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* pwallet, bool use_max_sig = false);
 
+/* Confirmation includes tx status and a triplet of {block height/block hash/tx index in block}
+ * at which tx has been confirmed. All three are set to 0 if tx is unconfirmed or abandoned.
+ * Meaning of these fields changes with CONFLICTED state where they instead point to block hash
+ * and block height of the deepest conflicting tx.
+ */
+struct Confirmation {
+    /* New transactions start as UNCONFIRMED. At BlockConnected,
+     * they will transition to CONFIRMED. In case of reorg, at BlockDisconnected,
+     * they roll back to UNCONFIRMED. If we detect a conflicting transaction at
+     * block connection, we update conflicted tx and its dependencies as CONFLICTED.
+     * If tx isn't confirmed and outside of mempool, the user may switch it to ABANDONED
+     * by using the abandontransaction call. This last status may be override by a CONFLICTED
+     * or CONFIRMED transition.
+     */
+    enum Status {
+        UNCONFIRMED,
+        CONFIRMED,
+        CONFLICTED,
+        ABANDONED
+    };
+
+    Status status;
+    int block_height;
+    uint256 hashBlock;
+    int nIndex;
+    Confirmation(Status s = UNCONFIRMED, int b = 0, uint256 h = uint256(), int i = 0) : status(s), block_height(b), hashBlock(h), nIndex(i) {}
+};
+
 /**
  * A transaction with a bunch of additional info that only the owner cares about.
  * It includes any unrecorded transactions needed to link it back to the block chain.
@@ -364,34 +392,6 @@ public:
     }
 
     CTransactionRef tx;
-
-    /* New transactions start as UNCONFIRMED. At BlockConnected,
-     * they will transition to CONFIRMED. In case of reorg, at BlockDisconnected,
-     * they roll back to UNCONFIRMED. If we detect a conflicting transaction at
-     * block connection, we update conflicted tx and its dependencies as CONFLICTED.
-     * If tx isn't confirmed and outside of mempool, the user may switch it to ABANDONED
-     * by using the abandontransaction call. This last status may be override by a CONFLICTED
-     * or CONFIRMED transition.
-     */
-    enum Status {
-        UNCONFIRMED,
-        CONFIRMED,
-        CONFLICTED,
-        ABANDONED
-    };
-
-    /* Confirmation includes tx status and a triplet of {block height/block hash/tx index in block}
-     * at which tx has been confirmed. All three are set to 0 if tx is unconfirmed or abandoned.
-     * Meaning of these fields changes with CONFLICTED state where they instead point to block hash
-     * and block height of the deepest conflicting tx.
-     */
-    struct Confirmation {
-        Status status;
-        int block_height;
-        uint256 hashBlock;
-        int nIndex;
-        Confirmation(Status s = UNCONFIRMED, int b = 0, uint256 h = uint256(), int i = 0) : status(s), block_height(b), hashBlock(h), nIndex(i) {}
-    };
 
     Confirmation m_confirm;
 
@@ -532,20 +532,20 @@ public:
      * >0 : is a coinbase transaction which matures in this many blocks
      */
     int GetBlocksToMaturity() const;
-    bool isAbandoned() const { return m_confirm.status == CWalletTx::ABANDONED; }
+    bool isAbandoned() const { return m_confirm.status == Confirmation::Status::ABANDONED; }
     void setAbandoned()
     {
-        m_confirm.status = CWalletTx::ABANDONED;
+        m_confirm.status = Confirmation::Status::ABANDONED;
         m_confirm.hashBlock = uint256();
         m_confirm.block_height = 0;
         m_confirm.nIndex = 0;
     }
-    bool isConflicted() const { return m_confirm.status == CWalletTx::CONFLICTED; }
-    void setConflicted() { m_confirm.status = CWalletTx::CONFLICTED; }
-    bool isUnconfirmed() const { return m_confirm.status == CWalletTx::UNCONFIRMED; }
-    void setUnconfirmed() { m_confirm.status = CWalletTx::UNCONFIRMED; }
-    bool isConfirmed() const { return m_confirm.status == CWalletTx::CONFIRMED; }
-    void setConfirmed() { m_confirm.status = CWalletTx::CONFIRMED; }
+    bool isConflicted() const { return m_confirm.status == Confirmation::Status::CONFLICTED; }
+    void setConflicted() { m_confirm.status = Confirmation::Status::CONFLICTED; }
+    bool isUnconfirmed() const { return m_confirm.status == Confirmation::Status::UNCONFIRMED; }
+    void setUnconfirmed() { m_confirm.status = Confirmation::Status::UNCONFIRMED; }
+    bool isConfirmed() const { return m_confirm.status == Confirmation::Status::CONFIRMED; }
+    void setConfirmed() { m_confirm.status = Confirmation::Status::CONFIRMED; }
     const uint256& GetHash() const { return tx->GetHash(); }
     bool IsCoinBase() const { return tx->IsCoinBase(); }
     bool IsImmatureCoinBase() const;
@@ -631,7 +631,7 @@ private:
      * Abandoned state should probably be more carefully tracked via different
      * posInBlock signals or by checking mempool presence when necessary.
      */
-    bool AddToWalletIfInvolvingMe(const CTransactionRef& tx, CWalletTx::Confirmation confirm, bool fUpdate) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool AddToWalletIfInvolvingMe(const CTransactionRef& tx, Confirmation confirm, bool fUpdate) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /* Mark a transaction (and its in-wallet descendants) as conflicting with a particular block. */
     void MarkConflicted(const uint256& hashBlock, int conflicting_height, const uint256& hashTx);
@@ -643,7 +643,7 @@ private:
 
     /* Used by TransactionAddedToMemorypool/BlockConnected/Disconnected/ScanForWalletTransactions.
      * Should be called with non-zero block_hash and posInBlock if this is for a transaction that is included in a block. */
-    void SyncTransaction(const CTransactionRef& tx, CWalletTx::Confirmation confirm, bool update_tx = true) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SyncTransaction(const CTransactionRef& tx, Confirmation confirm, bool update_tx = true) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     std::atomic<uint64_t> m_wallet_flags{0};
 
@@ -862,7 +862,7 @@ public:
     //! @return true if wtx is changed and needs to be saved to disk, otherwise false
     using UpdateWalletTxFn = std::function<bool(CWalletTx& wtx, bool new_tx)>;
 
-    CWalletTx* AddToWallet(CTransactionRef tx, const CWalletTx::Confirmation& confirm, const UpdateWalletTxFn& update_wtx=nullptr, bool fFlushOnClose=true);
+    CWalletTx* AddToWallet(CTransactionRef tx, const Confirmation& confirm, const UpdateWalletTxFn& update_wtx=nullptr, bool fFlushOnClose=true);
     bool LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void transactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
     void blockConnected(const CBlock& block, int height) override;
