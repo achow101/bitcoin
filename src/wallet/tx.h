@@ -89,6 +89,8 @@ public:
     int GetDepth(int tip_height) const;
     bool IsSafe() const;
     bool IsImmatureCoinbase(int tip_height) const;
+
+    inline bool operator<(const COutput rhs) const { return outpoint < rhs.outpoint; }
 };
 
 #endif // BITCOIN_WALLET_TX_H
