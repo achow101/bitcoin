@@ -2345,7 +2345,7 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
                 CTxDestination address;
                 if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, output.n).scriptPubKey, address)) {
                     result[address].emplace_back(
-                        it->second.tx->vout[output.n], output, it->second.IsFromMe(ISMINE_ALL), it->second.GetTxTime(), it->second.m_confirm, false, it->second.InMempool());
+                        it->second.tx->vout[output.n], output, it->second.IsFromMe(ISMINE_ALL), it->second.GetTxTime(), it->second.m_confirm, it->second.InMempool());
                 }
             }
         }

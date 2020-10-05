@@ -64,22 +64,16 @@ public:
     /** Confirmation status about this output */
     Confirmation m_confirm;
 
-    /** When the transaction containing this output is unconfirmed, whether we trust it, i.e. this is our unconfirmed change if we can spend that */
-    bool m_unconf_trusted;
+    /** The transaction contianing this output has an unconfirmed conflict */
+    bool m_has_unconfirmed_conflict;
 
-    /** The transaction containing this output replaces these txids */
-    std::set<uint256> replaces;
-    /** The transaction containing this output is replaced by these txids */
-    std::set<uint256> replaced_by;
-
-    COutput(const CTxOut& txout, const COutPoint& outpoint, bool from_me, int64_t time, Confirmation confirm, bool unconf_trusted, bool in_mempool) :
+    COutput(const CTxOut& txout, const COutPoint& outpoint, bool from_me, int64_t time, Confirmation confirm, bool in_mempool) :
         m_in_mempool(in_mempool),
         txout(txout),
         outpoint(outpoint),
         m_from_me(from_me),
         m_time(time),
         m_confirm(confirm),
-        m_unconf_trusted(unconf_trusted)
     {}
 
     std::string ToString() const;

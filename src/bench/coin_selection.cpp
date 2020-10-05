@@ -48,7 +48,7 @@ static void CoinSelection(benchmark::Bench& bench)
     for (const auto& wtx : wtxs) {
         wtx->m_confirm.block_height = wallet.GetLastBlockHeight() - (6 * 24) + 1;
         wtx->m_confirm.status = Confirmation::Status::CONFIRMED;
-        coins.emplace_back(wtx->tx->vout[0], COutPoint(wtx->GetHash(), 0), wtx->IsFromMe(ISMINE_ALL), wtx->GetTxTime(), wtx->m_confirm, true, true);
+        coins.emplace_back(wtx->tx->vout[0], COutPoint(wtx->GetHash(), 0), wtx->IsFromMe(ISMINE_ALL), wtx->GetTxTime(), wtx->m_confirm, true);
         coins.back().nInputBytes = wtx->GetSpendSize(0);
     }
 
@@ -79,7 +79,7 @@ static void add_coin(const CAmount& nValue, int nInput, std::vector<OutputGroup>
     tx.vout[nInput].nValue = nValue;
     std::unique_ptr<CWalletTx> wtx = MakeUnique<CWalletTx>(&testWallet, MakeTransactionRef(std::move(tx)));
     set.emplace_back();
-    COutput output(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), true, wtx->GetTxTime(), wtx->m_confirm, true, true);
+    COutput output(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), true, wtx->GetTxTime(), wtx->m_confirm, true);
     output.nInputBytes = wtx->GetSpendSize(nInput);
     set.back().Insert(output, 0, 0, false);
     wtxn.emplace_back(std::move(wtx));

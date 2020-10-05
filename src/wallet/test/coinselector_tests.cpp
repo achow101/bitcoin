@@ -76,7 +76,7 @@ static void add_coin(CWallet& wallet, const CAmount& nValue, int nAge = 6*24, bo
     wtx->m_confirm.block_height = testWallet.GetLastBlockHeight() - nAge + 1;
     wtx->m_confirm.status = Confirmation::Status::CONFIRMED;
 
-    COutput output(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), fIsFromMe, wtx->GetTxTime(), wtx->m_confirm, true, true);
+    COutput output(wtx->tx->vout[nInput], COutPoint(wtx->GetHash(), nInput), fIsFromMe, wtx->GetTxTime(), wtx->m_confirm, true);
     output.nInputBytes = wtx->GetSpendSize(nInput, true);
     vCoins.push_back(output);
 }

@@ -55,6 +55,6 @@ bool COutput::IsSafe() const
 
     if (!m_in_mempool || m_confirm.status == Confirmation::Status::CONFLICTED) return false;
     // Either UNCONFIRMED or ABANDONED now
-    if (!replaces.empty() || !replaced_by.empty()) return false;
-    return m_unconf_trusted;
+    if (m_has_unconfirmed_conflict) return false;
+    return m_from_me;
 }
