@@ -86,6 +86,7 @@ public:
     const CTxOut& GetTxOut() const;
     int GetDepth(int tip_height) const;
     bool IsSafe() const;
+    bool IsImmatureCoinbase(int tip_height) const;
 };
 
 #endif // BITCOIN_WALLET_TX_H

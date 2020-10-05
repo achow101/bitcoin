@@ -58,3 +58,10 @@ bool COutput::IsSafe() const
     if (m_has_unconfirmed_conflict) return false;
     return m_from_me;
 }
+
+bool COutput::IsImmatureCoinbase(int tip_height) const
+{
+    if (!outpoint.IsNull()) return false;
+    int depth = GetDepth(tip_height);
+    return (COINBASE_MATURITY + 1) - depth > 0;
+}
