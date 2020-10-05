@@ -38,10 +38,6 @@ struct Confirmation {
 
 class COutput
 {
-private:
-    /** When the transaction containing this output is unconfirmed, whether it is in the mempool */
-    bool m_in_mempool{false};
-
 public:
     CTxOut txout;
     COutPoint outpoint;
@@ -67,13 +63,19 @@ public:
     /** The transaction contianing this output has an unconfirmed conflict */
     bool m_has_unconfirmed_conflict;
 
+    /** When the transaction containing this output is unconfirmed, whether it is in the mempool */
+    bool m_in_mempool{false};
+
+    /** This output is in a coinbase transaction */
+    bool m_is_coinbase{false};
+
     COutput(const CTxOut& txout, const COutPoint& outpoint, bool from_me, int64_t time, Confirmation confirm, bool in_mempool) :
-        m_in_mempool(in_mempool),
         txout(txout),
         outpoint(outpoint),
         m_from_me(from_me),
         m_time(time),
         m_confirm(confirm),
+        m_in_mempool(in_mempool)
     {}
 
     std::string ToString() const;

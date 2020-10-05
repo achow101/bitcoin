@@ -4577,3 +4577,10 @@ ScriptPubKeyMan* CWallet::AddWalletDescriptor(WalletDescriptor& desc, const Flat
 
     return ret;
 }
+
+bool CWallet::IsOutputSelectable(const COutput& output, bool allow_unsafe) const
+{
+    if (output.IsImmatureCoinbase(GetLastBlockHeight())) return false;
+    if (allow_unsafe) return true;
+    return output.IsSafe();
+}
