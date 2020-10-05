@@ -1219,6 +1219,9 @@ public:
     //! Add a descriptor to the wallet, return a ScriptPubKeyMan & associated output type
     ScriptPubKeyMan* AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label);
 
+    //! Collect all of the UTXOs in this wallet
+    void GetUTXOs(std::set<COutput>& utxos) const;
+
     //! Determine whether a COutput should be included in our UTXO set for coin selection
     bool IsOutputSelectable(const COutput& output, bool allow_unsafe = false) const;
 };

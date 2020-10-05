@@ -2176,6 +2176,34 @@ CAmount CWallet::GetAvailableBalance(const CCoinControl* coinControl) const
     return balance;
 }
 
+void CWallet::GetUTXOs(std::set<COutput>& utxos) const
+{
+    for (const auto& entry : mapWallet) {
+        const uint256& wtxid = entry.first;
+        const CWalletTx& wtx = entry.second;
+
+        if (wtx.isConflicted()) continue;
+
+        if (!chain().checkFinalTx(*wtx.tx)) {
+            continue;
+        }
+
+        bool has_unconfirmed_conflict = wtx.mapValue.count("replaces_txid") || wtx.mapValue.count("replaced_by_txid");
+
+        bool from_me = wtx.IsFromMe(ISMINE_ALL);
+        for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
+            const CTxOut& txout = wtx.tx->vout[i];
+            if (IsMine(txout) == ISMINE_NO) continue;
+            if (IsSpent(wtxid, i)) continue;
+
+            COutput output(txout, COutPoint(wtxid, i), from_me, wtx.GetTxTime(), wtx.m_confirm, wtx.InMempool());
+            output.m_has_unconfirmed_conflict = has_unconfirmed_conflict;
+            output.m_is_coinbase = wtx.IsCoinBase();
+            utxos.insert(output);
+        }
+    }
+}
+
 void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const CCoinControl* coinControl, const CAmount& nMinimumAmount, const CAmount& nMaximumAmount, const CAmount& nMinimumSumAmount, const uint64_t nMaximumCount, bool include_unspendable) const
 {
     AssertLockHeld(cs_wallet);
