@@ -2282,12 +2282,14 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
             bool solvable = provider ? IsSolvable(*provider, wtx.tx->vout[i].scriptPubKey) : false;
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
 
-            int input_bytes = -1;
             if (spendable || include_unspendable) {
-                input_bytes = wtx.GetSpendSize(i, (coinControl && coinControl->fAllowWatchOnly));
 
-                vCoins.push_back(COutput(wtx.tx->vout[i], COutPoint(wtx.GetHash(), i), spendable, solvable, wtx.IsFromMe(ISMINE_ALL), input_bytes, wtx.GetTxTime(), wtx.m_confirm, safeTx, wtx.InMempool()));
+                COutput co(wtx.tx->vout[i], COutPoint(wtx.GetHash(), i), wtx.IsFromMe(ISMINE_ALL), wtx.GetTxTime(), wtx.m_confirm, safeTx, wtx.InMempool());
+                co.nInputBytes = wtx.GetSpendSize(i, (coinControl && coinControl->fAllowWatchOnly));
+                co.fSpendable = spendable;
+                co.fSolvable = solvable;
 
+                vCoins.push_back(co);
                 // Checks the sum amount of all UTXO's.
                 if (nMinimumSumAmount != MAX_MONEY) {
                     nTotal += wtx.tx->vout[i].nValue;
@@ -2343,7 +2345,7 @@ std::map<CTxDestination, std::vector<COutput>> CWallet::ListCoins() const
                 CTxDestination address;
                 if (ExtractDestination(FindNonChangeParentOutput(*it->second.tx, output.n).scriptPubKey, address)) {
                     result[address].emplace_back(
-                        it->second.tx->vout[output.n], output, true /* spendable */, true /* solvable */, it->second.IsFromMe(ISMINE_ALL), it->second.GetSpendSize(output.n), it->second.GetTxTime(), it->second.m_confirm, false, it->second.InMempool());
+                        it->second.tx->vout[output.n], output, it->second.IsFromMe(ISMINE_ALL), it->second.GetTxTime(), it->second.m_confirm, false, it->second.InMempool());
                 }
             }
         }

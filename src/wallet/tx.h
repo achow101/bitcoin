@@ -47,13 +47,13 @@ public:
     COutPoint outpoint;
 
     /** Pre-computed estimated size of this output as a fully-signed input in a transaction. Can be -1 if it could not be calculated */
-    int nInputBytes;
+    int nInputBytes{-1};
 
     /** Whether we have the private keys to spend this output. Only used for output to user */
-    bool fSpendable;
+    bool fSpendable{true};
 
     /** Whether we know how to spend this output, ignoring the lack of keys. Only used for output to user */
-    bool fSolvable;
+    bool fSolvable{true};
 
     /** Whether this output is in a transaction we created */
     bool m_from_me;
@@ -72,13 +72,10 @@ public:
     /** The transaction containing this output is replaced by these txids */
     std::set<uint256> replaced_by;
 
-    COutput(const CTxOut& txout, const COutPoint& outpoint, bool fSpendableIn, bool fSolvableIn, bool from_me, int input_bytes, int64_t time, Confirmation confirm, bool unconf_trusted, bool in_mempool) :
+    COutput(const CTxOut& txout, const COutPoint& outpoint, bool from_me, int64_t time, Confirmation confirm, bool unconf_trusted, bool in_mempool) :
         m_in_mempool(in_mempool),
         txout(txout),
         outpoint(outpoint),
-        nInputBytes(input_bytes),
-        fSpendable(fSpendableIn),
-        fSolvable(fSolvableIn),
         m_from_me(from_me),
         m_time(time),
         m_confirm(confirm),
