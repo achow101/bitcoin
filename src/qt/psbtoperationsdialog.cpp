@@ -176,12 +176,12 @@ std::string PSBTOperationsDialog::renderTransaction(const PartiallySignedTransac
 {
     QString tx_description = "";
     CAmount totalAmount = 0;
-    for (const CTxOut& out : psbtx.tx->vout) {
+    for (const PSBTOutput& out : psbtx.outputs) {
         CTxDestination address;
-        ExtractDestination(out.scriptPubKey, address);
-        totalAmount += out.nValue;
+        ExtractDestination(*out.script, address);
+        totalAmount += *out.amount;
         tx_description.append(tr(" * Sends %1 to %2")
-            .arg(BitcoinUnits::formatWithUnit(BitcoinUnit::BTC, out.nValue))
+            .arg(BitcoinUnits::formatWithUnit(BitcoinUnit::BTC, *out.amount))
             .arg(QString::fromStdString(EncodeDestination(address))));
         tx_description.append("<br>");
     }
