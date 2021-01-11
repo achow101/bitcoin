@@ -248,6 +248,7 @@ struct PSBTInput
      * @return Whether the UTXO could be retrieved
      */
     bool GetUTXO(CTxOut& utxo) const;
+    COutPoint GetOutPoint() const;
     PSBTInput(uint32_t version) : m_psbt_version(version) {}
 
     template <typename Stream>
