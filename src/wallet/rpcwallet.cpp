@@ -22,7 +22,6 @@
 #include <util/fees.h>
 #include <util/message.h> // For MessageSign()
 #include <util/moneystr.h>
-#include <util/ref.h>
 #include <util/string.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -124,12 +123,13 @@ void EnsureWalletIsUnlocked(const CWallet& wallet)
     }
 }
 
-WalletContext& EnsureWalletContext(const util::Ref& context)
+WalletContext& EnsureWalletContext(const std::any& context)
 {
-    if (!context.Has<WalletContext>()) {
+    auto wallet_context = util::AnyPtr<WalletContext>(context);
+    if (!wallet_context) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "Wallet context not found");
     }
-    return context.Get<WalletContext>();
+    return *wallet_context;
 }
 
 // also_create should only be set to true only when the RPC is expected to add things to a blank wallet and make it no longer blank
@@ -1281,7 +1281,7 @@ static void MaybePushAddress(UniValue & entry, const CTxDestination &dest)
 /**
  * List transactions based on the given criteria.
  *
- * @param  pwallet        The wallet.
+ * @param  wallet         The wallet.
  * @param  wtx            The wallet transaction.
  * @param  nMinDepth      The minimum confirmation depth.
  * @param  fLong          Whether to include the JSON version of the transaction.
@@ -1741,7 +1741,7 @@ static RPCHelpMan gettransaction()
 
     if (verbose) {
         UniValue decoded(UniValue::VOBJ);
-        TxToUniv(*wtx.tx, uint256(), decoded, false);
+        TxToUniv(*wtx.tx, uint256(), pwallet->chain().rpcEnableDeprecated("addresses"), decoded, false);
         entry.pushKV("decoded", decoded);
     }
 
@@ -2711,6 +2711,8 @@ static RPCHelpMan createwallet()
         RPCExamples{
             HelpExampleCli("createwallet", "\"testwallet\"")
             + HelpExampleRpc("createwallet", "\"testwallet\"")
+            + HelpExampleCliNamed("createwallet", {{"wallet_name", "descriptors"}, {"avoid_reuse", true}, {"descriptors", true}, {"load_on_startup", true}})
+            + HelpExampleRpcNamed("createwallet", {{"wallet_name", "descriptors"}, {"avoid_reuse", true}, {"descriptors", true}, {"load_on_startup", true}})
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
@@ -2748,7 +2750,7 @@ static RPCHelpMan createwallet()
 #ifdef ENABLE_EXTERNAL_SIGNER
         flags |= WALLET_FLAG_EXTERNAL_SIGNER;
 #else
-        throw JSONRPCError(RPC_WALLET_ERROR, "Configure with --enable-external-signer to use this");
+        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without external signing support (required for external signing)");
 #endif
     }
 
@@ -3379,7 +3381,7 @@ RPCHelpMan signrawtransactionwithwallet()
 
 static RPCHelpMan bumpfee_helper(std::string method_name)
 {
-    bool want_psbt = method_name == "psbtbumpfee";
+    const bool want_psbt = method_name == "psbtbumpfee";
     const std::string incremental_fee{CFeeRate(DEFAULT_INCREMENTAL_RELAY_FEE).ToString(FeeEstimateMode::SAT_VB)};
 
     return RPCHelpMan{method_name,
@@ -3413,14 +3415,14 @@ static RPCHelpMan bumpfee_helper(std::string method_name)
                              "still be replaceable in practice, for example if it has unconfirmed ancestors which\n"
                              "are replaceable).\n"},
                     {"estimate_mode", RPCArg::Type::STR, /* default */ "unset", std::string() + "The fee estimate mode, must be one of (case insensitive):\n"
-    "         \"" + FeeModes("\"\n\"") + "\""},
+                             "\"" + FeeModes("\"\n\"") + "\""},
                 },
                 "options"},
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "", Cat(Cat<std::vector<RPCResult>>(
             {
-                {RPCResult::Type::STR, "psbt", "The base64-encoded unsigned PSBT of the new transaction." + std::string(want_psbt ? "" : " Only returned when wallet private keys are disabled. (DEPRECATED)")},
+                {RPCResult::Type::STR, "psbt", "The base64-encoded unsigned PSBT of the new transaction."},
             },
             want_psbt ? std::vector<RPCResult>{} : std::vector<RPCResult>{{RPCResult::Type::STR_HEX, "txid", "The id of the new transaction. Only returned when wallet private keys are enabled."}}
             ),
@@ -3437,7 +3439,7 @@ static RPCHelpMan bumpfee_helper(std::string method_name)
     "\nBump the fee, get the new transaction\'s" + std::string(want_psbt ? "psbt" : "txid") + "\n" +
             HelpExampleCli(method_name, "<txid>")
         },
-        [want_psbt](const RPCHelpMan& self, const JSONRPCRequest& request) mutable -> UniValue
+        [want_psbt](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
     std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
     if (!pwallet) return NullUniValue;
@@ -4524,6 +4526,48 @@ static RPCHelpMan upgradewallet()
     };
 }
 
+#ifdef ENABLE_EXTERNAL_SIGNER
+static RPCHelpMan walletdisplayaddress()
+{
+    return RPCHelpMan{"walletdisplayaddress",
+        "Display address on an external signer for verification.",
+        {
+            {"address",     RPCArg::Type::STR, RPCArg::Optional::NO, /* default_val */ "", "bitcoin address to display"},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ,"","",
+            {
+                {RPCResult::Type::STR, "address", "The address as confirmed by the signer"},
+            }
+        },
+        RPCExamples{""},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+            if (!wallet) return NullUniValue;
+            CWallet* const pwallet = wallet.get();
+
+            LOCK(pwallet->cs_wallet);
+
+            CTxDestination dest = DecodeDestination(request.params[0].get_str());
+
+            // Make sure the destination is valid
+            if (!IsValidDestination(dest)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+            }
+
+            if (!pwallet->DisplayAddress(dest)) {
+                throw JSONRPCError(RPC_MISC_ERROR, "Failed to display address");
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("address", request.params[0].get_str());
+            return result;
+        }
+    };
+}
+#endif // ENABLE_EXTERNAL_SIGNER
+
 RPCHelpMan abortrescan();
 RPCHelpMan dumpprivkey();
 RPCHelpMan importprivkey();
@@ -4600,6 +4644,9 @@ static const CRPCCommand commands[] =
     { "wallet",             &unloadwallet,                   },
     { "wallet",             &upgradewallet,                  },
     { "wallet",             &walletcreatefundedpsbt,         },
+#ifdef ENABLE_EXTERNAL_SIGNER
+    { "wallet",             &walletdisplayaddress,           },
+#endif // ENABLE_EXTERNAL_SIGNER
     { "wallet",             &walletlock,                     },
     { "wallet",             &walletpassphrase,               },
     { "wallet",             &walletpassphrasechange,         },

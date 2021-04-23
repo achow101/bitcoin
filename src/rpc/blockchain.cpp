@@ -14,6 +14,7 @@
 #include <core_io.h>
 #include <hash.h>
 #include <index/blockfilterindex.h>
+#include <node/blockstorage.h>
 #include <node/coinstats.h>
 #include <node/context.h>
 #include <node/utxo_snapshot.h>
@@ -30,7 +31,6 @@
 #include <txdb.h>
 #include <txmempool.h>
 #include <undo.h>
-#include <util/ref.h>
 #include <util/strencodings.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -56,15 +56,16 @@ static Mutex cs_blockchange;
 static std::condition_variable cond_blockchange;
 static CUpdatedBlock latestblock GUARDED_BY(cs_blockchange);
 
-NodeContext& EnsureNodeContext(const util::Ref& context)
+NodeContext& EnsureNodeContext(const std::any& context)
 {
-    if (!context.Has<NodeContext>()) {
+    auto node_context = util::AnyPtr<NodeContext>(context);
+    if (!node_context) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context not found");
     }
-    return context.Get<NodeContext>();
+    return *node_context;
 }
 
-CTxMemPool& EnsureMemPool(const util::Ref& context)
+CTxMemPool& EnsureMemPool(const std::any& context)
 {
     const NodeContext& node = EnsureNodeContext(context);
     if (!node.mempool) {
@@ -73,7 +74,7 @@ CTxMemPool& EnsureMemPool(const util::Ref& context)
     return *node.mempool;
 }
 
-ChainstateManager& EnsureChainman(const util::Ref& context)
+ChainstateManager& EnsureChainman(const std::any& context)
 {
     const NodeContext& node = EnsureNodeContext(context);
     if (!node.chainman) {
@@ -82,7 +83,7 @@ ChainstateManager& EnsureChainman(const util::Ref& context)
     return *node.chainman;
 }
 
-CBlockPolicyEstimator& EnsureFeeEstimator(const util::Ref& context)
+CBlockPolicyEstimator& EnsureFeeEstimator(const std::any& context)
 {
     NodeContext& node = EnsureNodeContext(context);
     if (!node.fee_estimator) {
@@ -1050,15 +1051,15 @@ static RPCHelpMan gettxoutsetinfo()
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::NUM, "height", "The current block height (index)"},
-                        {RPCResult::Type::STR_HEX, "bestblock", "The hash of the block at the tip of the chain"},
+                        {RPCResult::Type::NUM, "height", "The block height (index) of the returned statistics"},
+                        {RPCResult::Type::STR_HEX, "bestblock", "The hash of the block at which these statistics are calculated"},
                         {RPCResult::Type::NUM, "transactions", "The number of transactions with unspent outputs"},
                         {RPCResult::Type::NUM, "txouts", "The number of unspent transaction outputs"},
                         {RPCResult::Type::NUM, "bogosize", "A meaningless metric for UTXO set size"},
                         {RPCResult::Type::STR_HEX, "hash_serialized_2", /* optional */ true, "The serialized hash (only present if 'hash_serialized_2' hash_type is chosen)"},
                         {RPCResult::Type::STR_HEX, "muhash", /* optional */ true, "The serialized hash (only present if 'muhash' hash_type is chosen)"},
                         {RPCResult::Type::NUM, "disk_size", "The estimated size of the chainstate on disk"},
-                        {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount"},
+                        {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of coins in the UTXO set"},
                     }},
                 RPCExamples{
                     HelpExampleCli("gettxoutsetinfo", "")
@@ -1113,11 +1114,13 @@ static RPCHelpMan gettxout()
                 {RPCResult::Type::NUM, "confirmations", "The number of confirmations"},
                 {RPCResult::Type::STR_AMOUNT, "value", "The transaction value in " + CURRENCY_UNIT},
                 {RPCResult::Type::OBJ, "scriptPubKey", "", {
-                    {RPCResult::Type::STR_HEX, "asm", ""},
+                    {RPCResult::Type::STR, "asm", ""},
                     {RPCResult::Type::STR_HEX, "hex", ""},
-                    {RPCResult::Type::NUM, "reqSigs", "Number of required signatures"},
-                    {RPCResult::Type::STR_HEX, "type", "The type, eg pubkeyhash"},
-                    {RPCResult::Type::ARR, "addresses", "array of bitcoin addresses", {{RPCResult::Type::STR, "address", "bitcoin address"}}},
+                    {RPCResult::Type::NUM, "reqSigs", /* optional */ true, "(DEPRECATED, returned only if config option -deprecatedrpc=addresses is passed) Number of required signatures"},
+                    {RPCResult::Type::STR, "type", "The type, eg pubkeyhash"},
+                    {RPCResult::Type::STR, "address", /* optional */ true, "bitcoin address (only if a well-defined address exists)"},
+                    {RPCResult::Type::ARR, "addresses", /* optional */ true, "(DEPRECATED, returned only if config option -deprecatedrpc=addresses is passed) Array of bitcoin addresses",
+                        {{RPCResult::Type::STR, "address", "bitcoin address"}}},
                 }},
                 {RPCResult::Type::BOOL, "coinbase", "Coinbase or not"},
             }},
@@ -1225,10 +1228,8 @@ static void BuriedForkDescPushBack(UniValue& softforks, const std::string &name,
 static void BIP9SoftForkDescPushBack(UniValue& softforks, const std::string &name, const Consensus::Params& consensusParams, Consensus::DeploymentPos id) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     // For BIP9 deployments.
-    // Deployments (e.g. testdummy) with timeout value before Jan 1, 2009 are hidden.
-    // A timeout value of 0 guarantees a softfork will never be activated.
-    // This is used when merging logic to implement a proposed softfork without a specified deployment schedule.
-    if (consensusParams.vDeployments[id].nTimeout <= 1230768000) return;
+    // Deployments that are never active are hidden.
+    if (consensusParams.vDeployments[id].nStartTime == Consensus::BIP9Deployment::NEVER_ACTIVE) return;
 
     UniValue bip9(UniValue::VOBJ);
     const ThresholdState thresholdState = VersionBitsState(::ChainActive().Tip(), consensusParams, id, versionbitscache);
@@ -1258,6 +1259,7 @@ static void BIP9SoftForkDescPushBack(UniValue& softforks, const std::string &nam
         statsUV.pushKV("possible", statsStruct.possible);
         bip9.pushKV("statistics", statsUV);
     }
+    bip9.pushKV("min_activation_height", consensusParams.vDeployments[id].min_activation_height);
 
     UniValue rv(UniValue::VOBJ);
     rv.pushKV("type", "bip9");
@@ -1304,6 +1306,7 @@ RPCHelpMan getblockchaininfo()
                                     {RPCResult::Type::NUM_TIME, "start_time", "the minimum median time past of a block at which the bit gains its meaning"},
                                     {RPCResult::Type::NUM_TIME, "timeout", "the median time past of a block at which the deployment is considered failed if not yet locked in"},
                                     {RPCResult::Type::NUM, "since", "height of the first block to which the status applies"},
+                                    {RPCResult::Type::NUM, "min_activation_height", "minimum height of blocks for which the rules may be enforced"},
                                     {RPCResult::Type::OBJ, "statistics", "numeric statistics about BIP9 signalling for a softfork (only for \"started\" status)",
                                     {
                                         {RPCResult::Type::NUM, "period", "the length in blocks of the BIP9 signalling period"},
@@ -1667,9 +1670,9 @@ static RPCHelpMan getchaintxstats()
                         {RPCResult::Type::STR_HEX, "window_final_block_hash", "The hash of the final block in the window"},
                         {RPCResult::Type::NUM, "window_final_block_height", "The height of the final block in the window."},
                         {RPCResult::Type::NUM, "window_block_count", "Size of the window in number of blocks"},
-                        {RPCResult::Type::NUM, "window_tx_count", "The number of transactions in the window. Only returned if \"window_block_count\" is > 0"},
-                        {RPCResult::Type::NUM, "window_interval", "The elapsed time in the window in seconds. Only returned if \"window_block_count\" is > 0"},
-                        {RPCResult::Type::NUM, "txrate", "The average rate of transactions per second in the window. Only returned if \"window_interval\" is > 0"},
+                        {RPCResult::Type::NUM, "window_tx_count", /* optional */ true, "The number of transactions in the window. Only returned if \"window_block_count\" is > 0"},
+                        {RPCResult::Type::NUM, "window_interval", /* optional */ true, "The elapsed time in the window in seconds. Only returned if \"window_block_count\" is > 0"},
+                        {RPCResult::Type::NUM, "txrate", /* optional */ true, "The average rate of transactions per second in the window. Only returned if \"window_interval\" is > 0"},
                     }},
                 RPCExamples{
                     HelpExampleCli("getchaintxstats", "")
@@ -1773,6 +1776,16 @@ void CalculatePercentilesByWeight(CAmount result[NUM_GETBLOCKSTATS_PERCENTILES],
     for (int64_t i = next_percentile_index; i < NUM_GETBLOCKSTATS_PERCENTILES; i++) {
         result[i] = scores.back().first;
     }
+}
+
+void ScriptPubKeyToUniv(const CScript& scriptPubKey, UniValue& out, bool fIncludeHex)
+{
+    ScriptPubKeyToUniv(scriptPubKey, out, fIncludeHex, IsDeprecatedRPCEnabled("addresses"));
+}
+
+void TxToUniv(const CTransaction& tx, const uint256& hashBlock, UniValue& entry, bool include_hex, int serialize_flags, const CTxUndo* txundo)
+{
+    TxToUniv(tx, hashBlock, IsDeprecatedRPCEnabled("addresses"), entry, include_hex, serialize_flags, txundo);
 }
 
 template<typename T>
