@@ -105,6 +105,23 @@ void UnserializeFromVector(Stream& s, X&... args)
     }
 }
 
+template<typename Stream>
+KeyOriginInfo DeserializeKeyOrigin(Stream& s, uint64_t length)
+{
+    if (length % 4 || length == 0) {
+        throw std::ios_base::failure("Invalid length for HD key path");
+    }
+
+    KeyOriginInfo keypath;
+    s >> keypath.fingerprint;
+    for (unsigned int i = 4; i < length; i += sizeof(uint32_t)) {
+        uint32_t index;
+        s >> index;
+        keypath.path.push_back(index);
+    }
+    return keypath;
+}
+
 // Deserialize HD keypaths into a map
 template<typename Stream>
 void DeserializeHDKeypaths(Stream& s, const std::vector<unsigned char>& key, std::map<CPubKey, KeyOriginInfo>& hd_keypaths)
@@ -122,22 +139,18 @@ void DeserializeHDKeypaths(Stream& s, const std::vector<unsigned char>& key, std
         throw std::ios_base::failure("Duplicate Key, pubkey derivation path already provided");
     }
 
-    // Read in key path
+    // Read in key path and add to map
     uint64_t value_len = ReadCompactSize(s);
-    if (value_len % 4 || value_len == 0) {
-        throw std::ios_base::failure("Invalid length for HD key path");
-    }
+    hd_keypaths.emplace(pubkey, DeserializeKeyOrigin(s, value_len));
+}
 
-    KeyOriginInfo keypath;
-    s >> keypath.fingerprint;
-    for (unsigned int i = 4; i < value_len; i += sizeof(uint32_t)) {
-        uint32_t index;
-        s >> index;
-        keypath.path.push_back(index);
+template<typename Stream>
+void SerializeKeyOrigin(Stream& s, KeyOriginInfo origin)
+{
+    s << origin.fingerprint;
+    for (const auto& path : origin.path) {
+        s << path;
     }
-
-    // Add to map
-    hd_keypaths.emplace(pubkey, std::move(keypath));
 }
 
 // Serialize HD keypaths to a stream from a map
@@ -150,10 +163,7 @@ void SerializeHDKeypaths(Stream& s, const std::map<CPubKey, KeyOriginInfo>& hd_k
         }
         SerializeToVector(s, type, MakeSpan(keypath_pair.first));
         WriteCompactSize(s, (keypath_pair.second.path.size() + 1) * sizeof(uint32_t));
-        s << keypath_pair.second.fingerprint;
-        for (const auto& path : keypath_pair.second.path) {
-            s << path;
-        }
+        SerializeKeyOrigin(s, keypath_pair.second);
     }
 }
 
