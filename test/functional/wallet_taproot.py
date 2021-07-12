@@ -307,6 +307,7 @@ class WalletTaprootTest(BitcoinTestFramework):
             test_balance = int(self.psbt_online.getbalance() * 100000000)
             ret_amnt = random.randrange(100000, test_balance)
             psbt = self.psbt_online.walletcreatefundedpsbt([], [{self.boring.getnewaddress(): Decimal(ret_amnt) / 100000000}], None, {"subtractFeeFromOutputs":[0]})['psbt']
+            print(psbt)
             res = self.psbt_offline.walletprocesspsbt(psbt)
             assert(res['complete'])
             rawtx = self.nodes[0].finalizepsbt(res['psbt'])['hex']

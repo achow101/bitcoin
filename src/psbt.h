@@ -31,11 +31,20 @@ static constexpr uint8_t PSBT_IN_WITNESSSCRIPT = 0x05;
 static constexpr uint8_t PSBT_IN_BIP32_DERIVATION = 0x06;
 static constexpr uint8_t PSBT_IN_SCRIPTSIG = 0x07;
 static constexpr uint8_t PSBT_IN_SCRIPTWITNESS = 0x08;
+static constexpr uint8_t PSBT_IN_TAP_KEY_SIG = 0x13;
+static constexpr uint8_t PSBT_IN_TAP_SCRIPT_SIG = 0x14;
+static constexpr uint8_t PSBT_IN_TAP_LEAF_SCRIPT = 0x15;
+static constexpr uint8_t PSBT_IN_TAP_BIP32_DERIVATION = 0x16;
+static constexpr uint8_t PSBT_IN_TAP_INTERNAL_KEY = 0x17;
+static constexpr uint8_t PSBT_IN_TAP_MERKLE_ROOT = 0x18;
 
 // Output types
 static constexpr uint8_t PSBT_OUT_REDEEMSCRIPT = 0x00;
 static constexpr uint8_t PSBT_OUT_WITNESSSCRIPT = 0x01;
 static constexpr uint8_t PSBT_OUT_BIP32_DERIVATION = 0x02;
+static constexpr uint8_t PSBT_OUT_TAP_INTERNAL_KEY = 0x05;
+static constexpr uint8_t PSBT_OUT_TAP_TREE = 0x06;
+static constexpr uint8_t PSBT_OUT_TAP_BIP32_DERIVATION = 0x07;
 
 // The separator is 0x00. Reading this in means that the unserializer can interpret it
 // as a 0 length key which indicates that this is the separator. The separator has no value.
@@ -56,6 +65,12 @@ struct PSBTInput
     CScriptWitness final_script_witness;
     std::map<CPubKey, KeyOriginInfo> hd_keypaths;
     std::map<CKeyID, SigPair> partial_sigs;
+    std::vector<unsigned char> m_tap_key_sig;
+    std::map<std::pair<XOnlyPubKey, uint256>, std::vector<unsigned char>> m_tap_script_sigs;
+    std::map<std::pair<CScript, int>, std::set<std::vector<unsigned char>, ShortestVectorFirstComparator>> m_tap_scripts;
+    std::map<XOnlyPubKey, std::pair<std::set<uint256>, KeyOriginInfo>> m_tap_keypaths;
+    XOnlyPubKey m_tap_internal_key;
+    uint256 m_tap_merkle_root;
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
     int sighash_type = 0;
 
@@ -105,6 +120,53 @@ struct PSBTInput
 
             // Write any hd keypaths
             SerializeHDKeypaths(s, hd_keypaths, PSBT_IN_BIP32_DERIVATION);
+
+            // Write taproot key sig
+            if (!m_tap_key_sig.empty()) {
+                SerializeToVector(s, PSBT_IN_TAP_KEY_SIG);
+                s << m_tap_key_sig;
+            }
+
+            // Write taproot script sigs
+            for (const auto& [pubkey_leaf, sig] : m_tap_script_sigs) {
+                const auto& [xonly, leaf_hash] = pubkey_leaf;
+                SerializeToVector(s, PSBT_IN_TAP_SCRIPT_SIG, xonly, leaf_hash);
+                s << sig;
+            }
+
+            // Write taproot leaf scripts
+            for (const auto& [leaf, control_blocks] : m_tap_scripts) {
+                const auto& [script, leaf_ver] = leaf;
+                for (const auto& control_block : control_blocks) {
+                    SerializeToVector(s, PSBT_IN_TAP_LEAF_SCRIPT, MakeSpan(control_block));
+                    std::vector<unsigned char> value_v(script.begin(), script.end());
+                    value_v.push_back((uint8_t)leaf_ver);
+                    s << value_v;
+                }
+            }
+
+            // Write taproot bip32 keypaths
+            for (const auto& [xonly, leaf_origin] : m_tap_keypaths) {
+                const auto& [leaf_hashes, origin] = leaf_origin;
+                SerializeToVector(s, PSBT_IN_TAP_BIP32_DERIVATION, xonly);
+                std::vector<unsigned char> value;
+                CVectorWriter s_value(s.GetType(), s.GetVersion(), value, 0);
+                s_value << leaf_hashes;
+                SerializeKeyOrigin(s_value, origin);
+                s << value;
+            }
+
+            // Write taproot internal key
+            if (!m_tap_internal_key.IsNull()) {
+                SerializeToVector(s, PSBT_IN_TAP_INTERNAL_KEY);
+                s << ToByteVector(m_tap_internal_key);
+            }
+
+            // Write taproot merkle root
+            if (!m_tap_merkle_root.IsNull()) {
+                SerializeToVector(s, PSBT_IN_TAP_MERKLE_ROOT);
+                SerializeToVector(s, m_tap_merkle_root);
+            }
         }
 
         // Write script sig
@@ -248,6 +310,86 @@ struct PSBTInput
                     UnserializeFromVector(s, final_script_witness.stack);
                     break;
                 }
+                case PSBT_IN_TAP_KEY_SIG:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, input Taproot key signature already provided");
+                    } else if (key.size() != 1) {
+                        throw std::ios_base::failure("Input Taproot key signature key is more than one byte type");
+                    }
+                    s >> m_tap_key_sig;
+                    break;
+                }
+                case PSBT_IN_TAP_SCRIPT_SIG:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, input Taproot script signature already provided");
+                    } else if (key.size() != 65) {
+                        throw std::ios_base::failure("Input Taproot script signature key is not 65 bytes");
+                    }
+                    XOnlyPubKey xonly(uint256({key.begin() + 1, key.begin() + 33}));
+                    uint256 hash({key.begin() + 34, key.begin() + 65});
+                    std::vector<unsigned char> sig;
+                    s >> sig;
+                    m_tap_script_sigs.emplace(std::make_pair(xonly, hash), sig);
+                    break;
+                }
+                case PSBT_IN_TAP_LEAF_SCRIPT:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, input Taproot leaf script already provided");
+                    } else if (key.size() < 34) {
+                        throw std::ios_base::failure("Taproot leaf script key is not at least 34 bytes");
+                    } else if ((key.size() - 2) % 32 != 0) {
+                        throw std::ios_base::failure("Input Taproot leaf script key's control block size is not valid");
+                    }
+                    std::vector<unsigned char> script_v;
+                    s >> script_v;
+                    assert(!script_v.empty());
+                    uint8_t leaf_ver = script_v.back();
+                    script_v.pop_back();
+                    const auto leaf_script = std::make_pair(CScript(script_v.begin(), script_v.end()), (int)leaf_ver);
+                    m_tap_scripts[leaf_script].insert(std::vector<unsigned char>(key.begin() + 1, key.end()));
+                    break;
+                }
+                case PSBT_IN_TAP_BIP32_DERIVATION:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, input Taproot BIP32 keypath already provided");
+                    } else if (key.size() != 33) {
+                        throw std::ios_base::failure("Input Taproot BIP32 keypath key is not at 33 bytes");
+                    }
+                    XOnlyPubKey xonly(uint256({key.begin() +1, key.begin() + 33}));
+                    std::set<uint256> leaf_hashes;
+                    uint64_t value_len = ReadCompactSize(s);
+                    size_t before_hashes = s.size();
+                    s >> leaf_hashes;
+                    size_t after_hashes = s.size();
+                    size_t hashes_len = before_hashes - after_hashes;
+                    size_t origin_len = value_len - hashes_len;
+                    m_tap_keypaths.emplace(xonly, std::make_pair(leaf_hashes, DeserializeKeyOrigin(s, origin_len)));
+                    break;
+                }
+                case PSBT_IN_TAP_INTERNAL_KEY:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, input Taproot internal key already provided");
+                    } else if (key.size() != 1) {
+                        throw std::ios_base::failure("Input Taproot internal key key is more than one byte type");
+                    }
+                    UnserializeFromVector(s, m_tap_internal_key);
+                    break;
+                }
+                case PSBT_IN_TAP_MERKLE_ROOT:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, input Taproot merkle root already provided");
+                    } else if (key.size() != 1) {
+                        throw std::ios_base::failure("Input Taproot merkle root key is more than one byte type");
+                    }
+                    UnserializeFromVector(s, m_tap_merkle_root);
+                    break;
+                }
                 // Unknown stuff
                 default:
                     if (unknown.count(key) > 0) {
@@ -278,6 +420,9 @@ struct PSBTOutput
     CScript redeem_script;
     CScript witness_script;
     std::map<CPubKey, KeyOriginInfo> hd_keypaths;
+    XOnlyPubKey m_tap_internal_key;
+    TaprootBuilder m_tap_tree;
+    std::map<XOnlyPubKey, std::pair<std::set<uint256>, KeyOriginInfo>> m_tap_keypaths;
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
 
     bool IsNull() const;
@@ -302,6 +447,40 @@ struct PSBTOutput
 
         // Write any hd keypaths
         SerializeHDKeypaths(s, hd_keypaths, PSBT_OUT_BIP32_DERIVATION);
+
+        // Write taproot internal key
+        if (!m_tap_internal_key.IsNull()) {
+            SerializeToVector(s, PSBT_OUT_TAP_INTERNAL_KEY);
+            s << ToByteVector(m_tap_internal_key);
+        }
+
+        // Write taproot tree
+        if (!m_tap_tree.IsEmpty()) {
+            SerializeToVector(s, PSBT_OUT_TAP_TREE);
+            std::vector<unsigned char> value;
+            CVectorWriter s_value(s.GetType(), s.GetVersion(), value, 0);
+            const auto& tuples = m_tap_tree.GetTreeTuples();
+            for (const auto& tuple : tuples) {
+                uint8_t depth = std::get<0>(tuple);
+                uint8_t leaf_ver = std::get<1>(tuple);
+                CScript script = std::get<2>(tuple);
+                s_value << depth;
+                s_value << leaf_ver;
+                s_value << script;
+            }
+            s << value;
+        }
+
+        // Write taproot bip32 keypaths
+        for (const auto& [xonly, leaf] : m_tap_keypaths) {
+            const auto& [leaf_hashes, origin] = leaf;
+            SerializeToVector(s, PSBT_OUT_TAP_BIP32_DERIVATION, xonly);
+            std::vector<unsigned char> value;
+            CVectorWriter s_value(s.GetType(), s.GetVersion(), value, 0);
+            s_value << leaf_hashes;
+            SerializeKeyOrigin(s_value, origin);
+            s << value;
+        }
 
         // Write unknown things
         for (auto& entry : unknown) {
@@ -360,6 +539,55 @@ struct PSBTOutput
                 case PSBT_OUT_BIP32_DERIVATION:
                 {
                     DeserializeHDKeypaths(s, key, hd_keypaths);
+                    break;
+                }
+                case PSBT_OUT_TAP_INTERNAL_KEY:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, output Taproot internal key already provided");
+                    } else if (key.size() != 1) {
+                        throw std::ios_base::failure("Output Taproot internal key key is more than one byte type");
+                    }
+                    UnserializeFromVector(s, m_tap_internal_key);
+                    break;
+                }
+                case PSBT_OUT_TAP_TREE:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, output Taproot tree already provided");
+                    } else if (key.size() != 1) {
+                        throw std::ios_base::failure("Output Taproot tree key is more than one byte type");
+                    }
+                    std::vector<unsigned char> tree_v;
+                    s >> tree_v;
+                    VectorReader s_tree(s.GetType(), s.GetVersion(), tree_v, 0);
+                    while (!s_tree.empty()) {
+                        uint8_t depth;
+                        uint8_t leaf_ver;
+                        CScript script;
+                        s_tree >> depth;
+                        s_tree >> leaf_ver;
+                        s_tree >> script;
+                        m_tap_tree.Add((int)depth, script, (int)leaf_ver, true /* track */);
+                    }
+                    break;
+                }
+                case PSBT_OUT_TAP_BIP32_DERIVATION:
+                {
+                    if (!key_lookup.emplace(key).second) {
+                        throw std::ios_base::failure("Duplicate Key, output Taproot BIP32 keypath already provided");
+                    } else if (key.size() != 33) {
+                        throw std::ios_base::failure("Output Taproot BIP32 keypath key is not at 33 bytes");
+                    }
+                    XOnlyPubKey xonly(uint256({key.begin() + 1, key.begin() + 33}));
+                    std::set<uint256> leaf_hashes;
+                    uint64_t value_len = ReadCompactSize(s);
+                    size_t before_hashes = s.size();
+                    s >> leaf_hashes;
+                    size_t after_hashes = s.size();
+                    size_t hashes_len = before_hashes - after_hashes;
+                    size_t origin_len = value_len - hashes_len;
+                    m_tap_keypaths.emplace(xonly, std::make_pair(leaf_hashes, DeserializeKeyOrigin(s, origin_len)));
                     break;
                 }
                 // Unknown stuff
