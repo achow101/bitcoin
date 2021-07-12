@@ -317,6 +317,8 @@ public:
 
     /** Return true if so far all input was valid. */
     bool IsValid() const { return m_valid; }
+    /** Return true if there are no leaves */
+    bool IsEmpty() const { return m_branch.size() == 0; }
     /** Return whether there were either no leaves, or the leaves form a Huffman tree. */
     bool IsComplete() const { return m_valid && (m_branch.size() == 0 || (m_branch.size() == 1 && m_branch[0].has_value())); }
     /** Compute scriptPubKey (after Finalize()). */
