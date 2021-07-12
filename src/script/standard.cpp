@@ -661,3 +661,18 @@ std::optional<std::vector<std::tuple<int, CScript, int>>> InferTaprootTree(const
 
     return ret;
 }
+
+std::vector<std::tuple<uint8_t, uint8_t, CScript>> TaprootBuilder::GetTreeTuples() const
+{
+    assert(IsComplete());
+    std::vector<std::tuple<uint8_t, uint8_t, CScript>> tuples;
+    if (m_branch.size()) {
+        const auto& leaves = m_branch[0]->leaves;
+        for (const auto& leaf : leaves) {
+            uint8_t depth = (uint8_t)leaf.merkle_branch.size();
+            uint8_t leaf_ver = (uint8_t)leaf.leaf_version;
+            tuples.push_back(std::make_tuple(depth, leaf_ver, leaf.script));
+        }
+    }
+    return tuples;
+}
