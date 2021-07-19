@@ -202,6 +202,16 @@ void PSBTOutput::FillSignatureData(SignatureData& sigdata) const
     for (const auto& key_pair : hd_keypaths) {
         sigdata.misc_pubkeys.emplace(key_pair.first.GetID(), key_pair);
     }
+    if (!m_tap_internal_key.IsNull()) {
+        sigdata.tr_spenddata.internal_key = m_tap_internal_key;
+    }
+    if (!m_tap_tree.IsEmpty()) {
+        TaprootSpendData spenddata = m_tap_tree.GetSpendData();
+        sigdata.tr_spenddata.Merge(spenddata);
+    }
+    for (const auto& [pubkey, leaf_origin] : m_tap_keypaths) {
+        sigdata.taproot_misc_pubkeys.emplace(pubkey, leaf_origin);
+    }
 }
 
 void PSBTOutput::FromSignatureData(const SignatureData& sigdata)
@@ -214,6 +224,15 @@ void PSBTOutput::FromSignatureData(const SignatureData& sigdata)
     }
     for (const auto& entry : sigdata.misc_pubkeys) {
         hd_keypaths.emplace(entry.second);
+    }
+    if (!sigdata.tr_spenddata.internal_key.IsNull()) {
+        m_tap_internal_key = sigdata.tr_spenddata.internal_key;
+    }
+    if (!sigdata.tr_builder.IsEmpty()) {
+        m_tap_tree = sigdata.tr_builder;
+    }
+    for (const auto& [pubkey, leaf_origin] : sigdata.taproot_misc_pubkeys) {
+        m_tap_keypaths.emplace(pubkey, leaf_origin);
     }
 }
 
