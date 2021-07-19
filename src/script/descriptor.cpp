@@ -850,7 +850,7 @@ protected:
         if (!xpk.IsFullyValid()) return {};
         builder.Finalize(xpk);
         WitnessV1Taproot output = builder.GetOutput();
-        out.tr_spenddata[output].Merge(builder.GetSpendData());
+        out.tr_trees[output] = builder;
         return Vector(GetScriptForDestination(output));
     }
     bool ToStringSubScriptHelper(const SigningProvider* arg, std::string& ret, const StringType type, const DescriptorCache* cache = nullptr) const override
