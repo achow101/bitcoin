@@ -955,7 +955,13 @@ void CWallet::GetOurTXOs(const CWalletTx& wtx)
             continue;
         }
         COutPoint outpoint(hash, i);
-        m_txos.emplace(outpoint, txout);
+        auto [it, insert] = m_txos.emplace(outpoint, txout);
+        if (insert) {
+            WalletBatch batch(GetDatabase());
+            if (!batch.WriteTxOut(outpoint, txout)) {
+                throw std::runtime_error(std::string(__func__) + ": writing txout failed");
+            }
+        }
     }
 }
 
