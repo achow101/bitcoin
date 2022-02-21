@@ -78,6 +78,7 @@ extern const std::string POOL;
 extern const std::string PURPOSE;
 extern const std::string SETTINGS;
 extern const std::string TX;
+extern const std::string TXOUT;
 extern const std::string VERSION;
 extern const std::string WALLETDESCRIPTOR;
 extern const std::string WALLETDESCRIPTORCKEY;
@@ -286,6 +287,8 @@ public:
 
     //! write the hdchain model (external chain child index counter)
     bool WriteHDChain(const CHDChain& chain);
+
+    bool WriteTxOut(const COutPoint& outpoint, const CTxOut& txout);
 
     bool WriteWalletFlags(const uint64_t flags);
     //! Begin a new transaction

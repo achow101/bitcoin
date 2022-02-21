@@ -51,6 +51,7 @@ const std::string POOL{"pool"};
 const std::string PURPOSE{"purpose"};
 const std::string SETTINGS{"settings"};
 const std::string TX{"tx"};
+const std::string TXOUT{"txout"};
 const std::string VERSION{"version"};
 const std::string WALLETDESCRIPTOR{"walletdescriptor"};
 const std::string WALLETDESCRIPTORCACHE{"walletdescriptorcache"};
@@ -294,6 +295,11 @@ bool WalletBatch::WriteLockedUTXO(const COutPoint& output)
 bool WalletBatch::EraseLockedUTXO(const COutPoint& output)
 {
     return EraseIC(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)));
+}
+
+bool WalletBatch::WriteTxOut(const COutPoint& outpoint, const CTxOut& txout)
+{
+    return WriteIC(std::make_pair(DBKeys::TXOUT, outpoint), txout);
 }
 
 bool LoadKey(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr)
