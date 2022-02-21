@@ -15,6 +15,7 @@ namespace wallet {
  * use_max_sig indicates whether to use the maximum sized, 72 byte signature when calculating the
  * size of the input spend. This should only be set when watch-only outputs are allowed */
 int GetTxSpendSize(const CWallet& wallet, const CWalletTx& wtx, unsigned int out, bool use_max_sig = false);
+int GetTxSpendSize(const CWallet& wallet, const CTxOut& txout, bool use_max_sig = false);
 
 //Get the marginal bytes of spending the specified output
 int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* pwallet, bool use_max_sig = false);
