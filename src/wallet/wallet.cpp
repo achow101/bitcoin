@@ -940,6 +940,28 @@ bool CWallet::IsSpentKey(const uint256& hash, unsigned int n) const
     return false;
 }
 
+void CWallet::GetOurTXOs(const CWalletTx& wtx)
+{
+    AssertLockHeld(cs_wallet);
+    const uint256 hash = wtx.GetHash();
+    for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
+        const CTxOut& txout = wtx.tx->vout[i];
+        if (IsMine(txout) == ISMINE_NO) {
+            continue;
+        }
+        COutPoint outpoint(hash, i);
+        m_txos.emplace(outpoint, txout);
+    }
+}
+
+void CWallet::GetAllOurTXOs()
+{
+    AssertLockHeld(cs_wallet);
+    for (const auto& [txid, wtx] : mapWallet) {
+        GetOurTXOs(wtx);
+    }
+}
+
 CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const UpdateWalletTxFn& update_wtx, bool fFlushOnClose, bool rescanning_old_block)
 {
     LOCK(cs_wallet);
@@ -1035,6 +1057,8 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     }
 #endif
 
+    GetOurTXOs(wtx);
+
     return &wtx;
 }
 
@@ -1079,6 +1103,7 @@ bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx
             }
         }
     }
+    GetOurTXOs(wtx);
     return true;
 }
 
