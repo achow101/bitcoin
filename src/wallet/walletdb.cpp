@@ -732,6 +732,12 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             ssKey >> hash;
             ssKey >> n;
             pwallet->LockCoin(COutPoint(hash, n));
+        } else if (strType == DBKeys::TXOUT) {
+            COutPoint outpoint;
+            CTxOut txout;
+            ssKey >> outpoint;
+            ssValue >> txout;
+            pwallet->m_txos.emplace(outpoint, txout);
         } else if (strType != DBKeys::BESTBLOCK && strType != DBKeys::BESTBLOCK_NOMERKLE &&
                    strType != DBKeys::MINVERSION && strType != DBKeys::ACENTRY &&
                    strType != DBKeys::VERSION && strType != DBKeys::SETTINGS &&
