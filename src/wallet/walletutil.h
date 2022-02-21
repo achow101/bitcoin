@@ -47,6 +47,9 @@ enum WalletFlags : uint64_t {
     // Indicates that the descriptor cache has been upgraded to cache last hardened xpubs
     WALLET_FLAG_LAST_HARDENED_XPUB_CACHED = (1ULL << 2),
 
+    // Indicates that the wallet is storing our txouts
+    WALLET_FLAG_TXOUTS = (1ULL << 3),
+
     // will enforce the rule that the wallet can't contain any private keys (only watch-only/pubkeys)
     WALLET_FLAG_DISABLE_PRIVATE_KEYS = (1ULL << 32),
 

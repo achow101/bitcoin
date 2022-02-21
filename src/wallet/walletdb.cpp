@@ -958,8 +958,16 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         }
     }
 
-    // Figure out our TXOs
-    pwallet->GetAllOurTXOs();
+    // Upgrade to storing the txouts.
+    // This operation is not atomic, but if it fails, only new entries are added so it is backwards compatible
+    try {
+        if (!pwallet->IsWalletFlagSet(WALLET_FLAG_TXOUTS)) {
+            pwallet->GetAllOurTXOs();
+            pwallet->SetWalletFlag(WALLET_FLAG_TXOUTS);
+        }
+    } catch (...) {
+        result = DBErrors::CORRUPT;
+    }
 
     return result;
 }
