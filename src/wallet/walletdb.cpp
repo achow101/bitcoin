@@ -1234,6 +1234,32 @@ DBErrors WalletBatch::LoadTxRecords(CWallet* pwallet, std::vector<uint256> upgra
     }
     cursor.reset();
 
+    // Load txout record
+    cursor = GetTypeCursor(DBKeys::TXOUT);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for txout records\n");
+        return DBErrors::CORRUPT;
+    }
+
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next txout record for wallet database\n");
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == DBKeys::TXOUT);
+        COutPoint outpoint;
+        CTxOut txout;
+        ssKey >> outpoint;
+        ssValue >> txout;
+        pwallet->m_txos.emplace(outpoint, txout);
+    }
+    cursor.reset();
     // Load locked utxo record
     cursor = GetTypeCursor(DBKeys::LOCKED_UTXO);
     if (!cursor) {
