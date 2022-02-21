@@ -946,6 +946,9 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         }
     }
 
+    // Figure out our TXOs
+    pwallet->GetAllOurTXOs();
+
     return result;
 }
 

@@ -345,6 +345,9 @@ private:
      */
     static bool AttachChain(const std::shared_ptr<CWallet>& wallet, interfaces::Chain& chain, const bool rescan_required, bilingual_str& error, std::vector<bilingual_str>& warnings);
 
+    // Find all of the TXOs in a CWalletTx that may be considered during coin selection
+    void GetOurTXOs(const CWalletTx& wtx);
+
 public:
     /**
      * Main wallet lock.
@@ -387,6 +390,10 @@ public:
 
     /** Interface to assert chain access */
     bool HaveChain() const { return m_chain ? true : false; }
+
+    // All of the transaction outputs that belong to this wallet
+    // (i.e. TXOs that might be considered during coin selection)
+    std::map<COutPoint, CTxOut> m_txos GUARDED_BY(cs_wallet);
 
     /** Map from txid to CWalletTx for all transactions this wallet is
      * interested in, including received and sent transactions. */
@@ -891,6 +898,9 @@ public:
 
     //! Add a descriptor to the wallet, return a ScriptPubKeyMan & associated output type
     ScriptPubKeyMan* AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    // Find all o0f the TXOs for all of the CWalletTxs currently in the wallet
+    void GetAllOurTXOs();
 };
 
 /**
