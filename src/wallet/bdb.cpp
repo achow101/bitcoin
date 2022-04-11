@@ -655,7 +655,8 @@ void BerkeleyDatabase::ReloadDbEnv()
     env->ReloadDbEnv();
 }
 
-BerkeleyCursor::BerkeleyCursor(BerkeleyDatabase& database)
+BerkeleyCursor::BerkeleyCursor(BerkeleyDatabase& database, Span<std::byte> prefix)
+    : m_key_prefix(prefix.begin(), prefix.end()), m_first(true)
 {
     assert(database.m_db.get());
     int ret = database.m_db->cursor(nullptr, &m_cursor, 0);
@@ -667,9 +668,15 @@ bool BerkeleyCursor::Next(CDataStream& ssKey, CDataStream& ssValue, bool& comple
     complete = false;
     if (m_cursor == nullptr) return false;
     // Read at cursor
-    SafeDbt datKey;
+    SafeDbt datKey(m_key_prefix.data(), m_key_prefix.size());
     SafeDbt datValue;
-    int ret = m_cursor->get(datKey, datValue, DB_NEXT);
+    int ret = -1;
+    if (m_first && !m_key_prefix.empty()) {
+        ret = m_cursor->get(datKey, datValue, DB_SET_RANGE);
+    } else {
+        ret = m_cursor->get(datKey, datValue, DB_NEXT);
+    }
+    m_first = false;
     if (ret == DB_NOTFOUND) {
         complete = true;
     }
@@ -685,6 +692,11 @@ bool BerkeleyCursor::Next(CDataStream& ssKey, CDataStream& ssValue, bool& comple
     ssValue.SetType(SER_DISK);
     ssValue.clear();
     ssValue.write({BytePtr(datValue.get_data()), datValue.get_size()});
+
+    if (!m_key_prefix.empty() && std::mismatch(ssKey.begin(), ssKey.end(), m_key_prefix.begin(), m_key_prefix.end()).second != m_key_prefix.end()) {
+        complete = true;
+    }
+
     return true;
 }
 
@@ -699,6 +711,12 @@ std::unique_ptr<DatabaseCursor> BerkeleyBatch::GetCursor()
 {
     if (!pdb) return nullptr;
     return std::make_unique<BerkeleyCursor>(m_database);
+}
+
+std::unique_ptr<DatabaseCursor> BerkeleyBatch::GetPrefixCursor(CDataStream& prefix)
+{
+    if (!pdb) return nullptr;
+    return std::make_unique<BerkeleyCursor>(m_database, prefix);
 }
 
 bool BerkeleyBatch::TxnBegin()

@@ -187,11 +187,16 @@ public:
 
 class BerkeleyCursor : public DatabaseCursor
 {
-private:
+protected:
     Dbc* m_cursor;
+    std::vector<std::byte> m_key_prefix;
+    bool m_first;
 
 public:
-    explicit BerkeleyCursor(BerkeleyDatabase& database);
+    // Constructor for cursor for all records
+    explicit BerkeleyCursor(BerkeleyDatabase& database) : BerkeleyCursor(database, {}) {}
+    // Constructor for cursor for records matching the prefix
+    explicit BerkeleyCursor(BerkeleyDatabase& database, Span<std::byte> prefix);
     ~BerkeleyCursor() override;
 
     bool Next(CDataStream& key, CDataStream& value, bool& complete) override;
@@ -226,6 +231,7 @@ public:
     void Close() override;
 
     std::unique_ptr<DatabaseCursor> GetCursor() override;
+    std::unique_ptr<DatabaseCursor> GetPrefixCursor(CDataStream& prefix) override;
     bool TxnBegin() override;
     bool TxnCommit() override;
     bool TxnAbort() override;

@@ -102,6 +102,7 @@ public:
     }
 
     virtual std::unique_ptr<DatabaseCursor> GetCursor() = 0;
+    virtual std::unique_ptr<DatabaseCursor> GetPrefixCursor(CDataStream& prefix) = 0;
     virtual bool TxnBegin() = 0;
     virtual bool TxnCommit() = 0;
     virtual bool TxnAbort() = 0;
@@ -182,6 +183,7 @@ public:
     void Close() override {}
 
     std::unique_ptr<DatabaseCursor> GetCursor() override { return std::make_unique<DummyCursor>(); }
+    std::unique_ptr<DatabaseCursor> GetPrefixCursor(CDataStream& prefix) override { return GetCursor(); }
     bool TxnBegin() override { return true; }
     bool TxnCommit() override { return true; }
     bool TxnAbort() override { return true; }
