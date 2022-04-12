@@ -209,8 +209,11 @@ private:
         return true;
     }
 
+    std::unique_ptr<DatabaseCursor> GetTypeCursor(const std::string& type);
+
     DBErrors LoadMinVersion(CWallet* pwallet);
     DBErrors LoadWalletFlags(CWallet* pwallet);
+    DBErrors LoadLegacyWalletRecords(CWallet* pwallet, int last_client);
 
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
