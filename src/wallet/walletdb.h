@@ -210,6 +210,7 @@ private:
     }
 
     DBErrors LoadMinVersion(CWallet* pwallet);
+    DBErrors LoadWalletFlags(CWallet* pwallet);
 
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
