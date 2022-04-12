@@ -209,6 +209,8 @@ private:
         return true;
     }
 
+    DBErrors LoadMinVersion(CWallet* pwallet);
+
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
         m_batch(database.MakeBatch(_fFlushOnClose)),
