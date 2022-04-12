@@ -215,6 +215,7 @@ private:
     DBErrors LoadWalletFlags(CWallet* pwallet);
     DBErrors LoadLegacyWalletRecords(CWallet* pwallet, int last_client);
     DBErrors LoadDescriptorWalletRecords(CWallet* pwallet);
+    DBErrors LoadAddressBookRecords(CWallet* pwallet);
 
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
