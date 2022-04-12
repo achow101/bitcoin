@@ -42,16 +42,16 @@ struct WalletContext;
 static const bool DEFAULT_FLUSHWALLET = true;
 
 /** Error statuses for the wallet database */
-enum class DBErrors
+enum class DBErrors : int
 {
-    LOAD_OK,
-    CORRUPT,
-    NONCRITICAL_ERROR,
-    TOO_NEW,
-    EXTERNAL_SIGNER_SUPPORT_REQUIRED,
-    LOAD_FAIL,
-    NEED_REWRITE,
-    NEED_RESCAN
+    LOAD_OK = 0,
+    NEED_RESCAN = 1,
+    NEED_REWRITE = 2,
+    EXTERNAL_SIGNER_SUPPORT_REQUIRED = 3,
+    NONCRITICAL_ERROR = 4,
+    TOO_NEW = 5,
+    LOAD_FAIL = 6,
+    CORRUPT = 7,
 };
 
 namespace DBKeys {
@@ -214,6 +214,7 @@ private:
     DBErrors LoadMinVersion(CWallet* pwallet);
     DBErrors LoadWalletFlags(CWallet* pwallet);
     DBErrors LoadLegacyWalletRecords(CWallet* pwallet, int last_client);
+    DBErrors LoadDescriptorWalletRecords(CWallet* pwallet);
 
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
