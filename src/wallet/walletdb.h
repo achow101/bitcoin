@@ -308,6 +308,7 @@ std::unique_ptr<WalletDatabase> CreateMockWalletDatabase();
 
 bool LoadKey(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr);
 bool LoadCryptedKey(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr);
+bool LoadEncryptionKey(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr);
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_WALLETDB_H
