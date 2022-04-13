@@ -216,6 +216,7 @@ private:
     DBErrors LoadLegacyWalletRecords(CWallet* pwallet, int last_client);
     DBErrors LoadDescriptorWalletRecords(CWallet* pwallet);
     DBErrors LoadAddressBookRecords(CWallet* pwallet);
+    DBErrors LoadTxRecords(CWallet* pwallet, std::vector<uint256> upgraded_txs, bool& any_unordered);
 
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :

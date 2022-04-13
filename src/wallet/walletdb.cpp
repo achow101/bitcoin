@@ -474,51 +474,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         if (strType == DBKeys::NAME) {
         } else if (strType == DBKeys::PURPOSE) {
         } else if (strType == DBKeys::TX) {
-            uint256 hash;
-            ssKey >> hash;
-            // LoadToWallet call below creates a new CWalletTx that fill_wtx
-            // callback fills with transaction metadata.
-            auto fill_wtx = [&](CWalletTx& wtx, bool new_tx) {
-                if(!new_tx) {
-                    // There's some corruption here since the tx we just tried to load was already in the wallet.
-                    // We don't consider this type of corruption critical, and can fix it by removing tx data and
-                    // rescanning.
-                    wss.tx_corrupt = true;
-                    return false;
-                }
-                ssValue >> wtx;
-                if (wtx.GetHash() != hash)
-                    return false;
-
-                // Undo serialize changes in 31600
-                if (31404 <= wtx.fTimeReceivedIsTxTime && wtx.fTimeReceivedIsTxTime <= 31703)
-                {
-                    if (!ssValue.empty())
-                    {
-                        uint8_t fTmp;
-                        uint8_t fUnused;
-                        std::string unused_string;
-                        ssValue >> fTmp >> fUnused >> unused_string;
-                        strErr = strprintf("LoadWallet() upgrading tx ver=%d %d %s",
-                                           wtx.fTimeReceivedIsTxTime, fTmp, hash.ToString());
-                        wtx.fTimeReceivedIsTxTime = fTmp;
-                    }
-                    else
-                    {
-                        strErr = strprintf("LoadWallet() repairing tx ver=%d %s", wtx.fTimeReceivedIsTxTime, hash.ToString());
-                        wtx.fTimeReceivedIsTxTime = 0;
-                    }
-                    wss.vWalletUpgrade.push_back(hash);
-                }
-
-                if (wtx.nOrderPos == -1)
-                    wss.fAnyUnordered = true;
-
-                return true;
-            };
-            if (!pwallet->LoadToWallet(hash, fill_wtx)) {
-                return false;
-            }
         } else if (strType == DBKeys::WATCHS) {
             wss.nWatchKeys++;
         } else if (strType == DBKeys::KEY) {
@@ -544,7 +499,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         } else if (strType == DBKeys::POOL) {
         } else if (strType == DBKeys::CSCRIPT) {
         } else if (strType == DBKeys::ORDERPOSNEXT) {
-            ssValue >> pwallet->nOrderPosNext;
         } else if (strType == DBKeys::DESTDATA) {
         } else if (strType == DBKeys::HDCHAIN) {
         } else if (strType == DBKeys::OLD_KEY) {
@@ -569,11 +523,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         } else if (strType == DBKeys::WALLETDESCRIPTORKEY) {
         } else if (strType == DBKeys::WALLETDESCRIPTORCKEY) {
         } else if (strType == DBKeys::LOCKED_UTXO) {
-            uint256 hash;
-            uint32_t n;
-            ssKey >> hash;
-            ssKey >> n;
-            pwallet->LockCoin(COutPoint(hash, n));
         } else if (strType != DBKeys::BESTBLOCK && strType != DBKeys::BESTBLOCK_NOMERKLE &&
                    strType != DBKeys::MINVERSION && strType != DBKeys::ACENTRY &&
                    strType != DBKeys::VERSION && strType != DBKeys::SETTINGS &&
@@ -1217,6 +1166,7 @@ DBErrors WalletBatch::LoadAddressBookRecords(CWallet* pwallet)
         ssValue >> label;
         pwallet->m_address_book[DecodeDestination(strAddress)].SetLabel(label);
     }
+    cursor.reset();
 
     // Load purpose record
     cursor = GetTypeCursor(DBKeys::PURPOSE);
@@ -1241,6 +1191,7 @@ DBErrors WalletBatch::LoadAddressBookRecords(CWallet* pwallet)
         ssKey >> strAddress;
         ssValue >> pwallet->m_address_book[DecodeDestination(strAddress)].purpose;
     }
+    cursor.reset();
 
     // Load destination data record
     cursor = GetTypeCursor(DBKeys::DESTDATA);
@@ -1267,6 +1218,120 @@ DBErrors WalletBatch::LoadAddressBookRecords(CWallet* pwallet)
         ssValue >> strValue;
         pwallet->LoadDestData(DecodeDestination(strAddress), strKey, strValue);
     }
+    cursor.reset();
+
+    return result;
+}
+
+DBErrors WalletBatch::LoadTxRecords(CWallet* pwallet, std::vector<uint256> upgraded_txs, bool& any_unordered)
+{
+    DBErrors result = DBErrors::LOAD_OK;
+    CDataStream ssKey(SER_DISK, CLIENT_VERSION);
+    CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+
+    // Load tx record
+    std::unique_ptr<DatabaseCursor> cursor = GetTypeCursor(DBKeys::TX);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for address book names\n");
+        return DBErrors::CORRUPT;
+    }
+
+    bool corrupted_tx = false;
+    any_unordered = false;
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next address book name record for wallet database\n");
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == DBKeys::TX);
+        uint256 hash;
+        ssKey >> hash;
+        // LoadToWallet call below creates a new CWalletTx that fill_wtx
+        // callback fills with transaction metadata.
+        auto fill_wtx = [&](CWalletTx& wtx, bool new_tx) {
+            if(!new_tx) {
+                // There's some corruption here since the tx we just tried to load was already in the wallet.
+                // We don't consider this type of corruption critical, and can fix it by removing tx data and
+                // rescanning.
+                pwallet->WalletLogPrintf("Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.\n");
+                result = DBErrors::CORRUPT;
+                return false;
+            }
+            ssValue >> wtx;
+            if (wtx.GetHash() != hash)
+                return false;
+
+            // Undo serialize changes in 31600
+            if (31404 <= wtx.fTimeReceivedIsTxTime && wtx.fTimeReceivedIsTxTime <= 31703)
+            {
+                if (!ssValue.empty())
+                {
+                    uint8_t fTmp;
+                    uint8_t fUnused;
+                    std::string unused_string;
+                    ssValue >> fTmp >> fUnused >> unused_string;
+                    pwallet->WalletLogPrintf("LoadWallet() upgrading tx ver=%d %d %s",
+                                       wtx.fTimeReceivedIsTxTime, fTmp, hash.ToString());
+                    wtx.fTimeReceivedIsTxTime = fTmp;
+                }
+                else
+                {
+                    pwallet->WalletLogPrintf("LoadWallet() repairing tx ver=%d %s", wtx.fTimeReceivedIsTxTime, hash.ToString());
+                    wtx.fTimeReceivedIsTxTime = 0;
+                }
+                upgraded_txs.push_back(hash);
+            }
+
+            if (wtx.nOrderPos == -1)
+                any_unordered = true;
+
+            return true;
+        };
+        if (!pwallet->LoadToWallet(hash, fill_wtx)) {
+            if (corrupted_tx) {
+                result = DBErrors::CORRUPT;
+            } else {
+                result = DBErrors::NEED_RESCAN;
+            }
+        }
+    }
+    cursor.reset();
+
+    // Load locked utxo record
+    cursor = GetTypeCursor(DBKeys::LOCKED_UTXO);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for address book names\n");
+        return DBErrors::CORRUPT;
+    }
+
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next address book name record for wallet database\n");
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == DBKeys::LOCKED_UTXO);
+        uint256 hash;
+        uint32_t n;
+        ssKey >> hash;
+        ssKey >> n;
+        pwallet->LockCoin(COutPoint(hash, n));
+    }
+    cursor.reset();
+
+    // Load orderposnext record
+    m_batch->Read(DBKeys::ORDERPOSNEXT, pwallet->nOrderPosNext);
 
     return result;
 }
@@ -1278,6 +1343,8 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     bool rescan_required = false;
     DBErrors result = DBErrors::LOAD_OK;
     int last_client = CLIENT_VERSION;
+    bool any_unordered = false;
+    std::vector<uint256> upgraded_txs;
 
     LOCK(pwallet->cs_wallet);
     try {
@@ -1309,6 +1376,9 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
         // Load address book
         result = std::max(LoadAddressBookRecords(pwallet), result);
+
+        // Load tx records
+        result = std::max(LoadTxRecords(pwallet, upgraded_txs, any_unordered), result);
 
         // Get cursor
         std::unique_ptr<DatabaseCursor> cursor = m_batch->GetCursor();
@@ -1388,13 +1458,13 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     pwallet->WalletLogPrintf("Keys: %u plaintext, %u encrypted, %u w/ metadata, %u total. Unknown wallet records: %u\n",
            wss.nKeys, wss.nCKeys, wss.nKeyMeta, wss.nKeys + wss.nCKeys, wss.m_unknown_records);
 
-    for (const uint256& hash : wss.vWalletUpgrade)
+    for (const uint256& hash : upgraded_txs)
         WriteTx(pwallet->mapWallet.at(hash));
 
     if (last_client < CLIENT_VERSION) // Update
         m_batch->Write(DBKeys::VERSION, CLIENT_VERSION);
 
-    if (wss.fAnyUnordered)
+    if (any_unordered)
         result = pwallet->ReorderTransactions();
 
     // Upgrade all of the wallet keymetadata to have the hd master key id
