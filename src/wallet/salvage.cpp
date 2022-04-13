@@ -5,6 +5,7 @@
 
 #include <fs.h>
 #include <streams.h>
+#include <util/check.h>
 #include <util/translation.h>
 #include <wallet/bdb.h>
 #include <wallet/salvage.h>
@@ -142,15 +143,27 @@ bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bil
         CDataStream ssKey(row.first, SER_DISK, CLIENT_VERSION);
         CDataStream ssValue(row.second, SER_DISK, CLIENT_VERSION);
         std::string strType, strErr;
-        bool fReadOK;
-        {
-            // Required in LoadKeyMetadata():
-            LOCK(dummyWallet.cs_wallet);
-            fReadOK = ReadKeyValue(&dummyWallet, ssKey, ssValue, strType, strErr, KeyFilter);
-        }
+
+        // We only care about KEY, MASTER_KEY, CRYPTED_KEY, and HDCHAIN types
+        ssKey >> strType;
         if (!KeyFilter(strType)) {
             continue;
         }
+        bool fReadOK = false;
+        if (strType == DBKeys::KEY) {
+            fReadOK = LoadKey(&dummyWallet, ssKey, ssValue, strErr);
+        } else if (strType == DBKeys::CRYPTED_KEY) {
+            fReadOK = LoadCryptedKey(&dummyWallet, ssKey, ssValue, strErr);
+        } else if (strType == DBKeys::MASTER_KEY) {
+            fReadOK = LoadEncryptionKey(&dummyWallet, ssKey, ssValue, strErr);
+        } else if (strType == DBKeys::HDCHAIN) {
+            fReadOK = LoadHDChain(&dummyWallet, ssKey, ssValue, strErr);
+        } else {
+            // This is a bug
+            CHECK_NONFATAL(false);
+            continue;
+        }
+
         if (!fReadOK)
         {
             warnings.push_back(strprintf(Untranslated("WARNING: WalletBatch::Recover skipping %s: %s"), strType, strErr));

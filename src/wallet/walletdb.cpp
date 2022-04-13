@@ -455,6 +455,9 @@ bool LoadHDChain(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std
     return true;
 }
 
+//! Callback for filtering key types to deserialize in ReadKeyValue
+using KeyFilterFn = std::function<bool(const std::string&)>;
+
 static bool
 ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
              CWalletScanState &wss, std::string& strType, std::string& strErr, const KeyFilterFn& filter_fn = nullptr) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
@@ -789,13 +792,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         return false;
     }
     return true;
-}
-
-bool ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strType, std::string& strErr, const KeyFilterFn& filter_fn)
-{
-    CWalletScanState dummy_wss;
-    LOCK(pwallet->cs_wallet);
-    return ReadKeyValue(pwallet, ssKey, ssValue, dummy_wss, strType, strErr, filter_fn);
 }
 
 bool WalletBatch::IsKeyType(const std::string& strType)
