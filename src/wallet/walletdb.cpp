@@ -479,7 +479,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         } else if (strType == DBKeys::KEY) {
             wss.nKeys++;
         } else if (strType == DBKeys::MASTER_KEY) {
-            if (!LoadEncryptionKey(pwallet, ssKey, ssValue, strErr)) return false;
         } else if (strType == DBKeys::CRYPTED_KEY) {
             wss.fIsEncrypted = true;
             wss.nCKeys++;
@@ -1394,6 +1393,41 @@ DBErrors WalletBatch::LoadActiveSPKMs(CWallet* pwallet)
     return result;
 }
 
+DBErrors WalletBatch::LoadDecryptionKeys(CWallet* pwallet)
+{
+    DBErrors result = DBErrors::LOAD_OK;
+    CDataStream ssKey(SER_DISK, CLIENT_VERSION);
+    CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+
+    // Load decryption key (mkey) records
+    std::unique_ptr<DatabaseCursor> cursor = GetTypeCursor(DBKeys::MASTER_KEY);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for decryption keys\n");
+        return DBErrors::CORRUPT;
+    }
+
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next decryption key record for wallet database\n");
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == DBKeys::MASTER_KEY);
+        std::string err;
+        if (!LoadEncryptionKey(pwallet, ssKey, ssValue, err)) {
+            pwallet->WalletLogPrintf("%s\n", err);
+            return DBErrors::CORRUPT;
+        }
+    }
+    cursor.reset();
+    return result;
+}
+
 DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 {
     CWalletScanState wss;
@@ -1440,6 +1474,9 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
         // Load SPKMs
         result = std::max(LoadActiveSPKMs(pwallet), result);
+
+        // Load decryption keys
+        result = std::max(LoadDecryptionKeys(pwallet), result);
 
         // Get cursor
         std::unique_ptr<DatabaseCursor> cursor = m_batch->GetCursor();

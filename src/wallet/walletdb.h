@@ -218,6 +218,7 @@ private:
     DBErrors LoadAddressBookRecords(CWallet* pwallet);
     DBErrors LoadTxRecords(CWallet* pwallet, std::vector<uint256> upgraded_txs, bool& any_unordered);
     DBErrors LoadActiveSPKMs(CWallet* pwallet);
+    DBErrors LoadDecryptionKeys(CWallet* pwallet);
 
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
