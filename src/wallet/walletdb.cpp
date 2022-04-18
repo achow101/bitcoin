@@ -488,22 +488,12 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         } else if (strType == DBKeys::WATCHMETA) {
             wss.nKeyMeta++;
         } else if (strType == DBKeys::DEFAULTKEY) {
-            // We don't want or need the default key, but if there is one set,
-            // we want to make sure that it is valid so that we can detect corruption
-            CPubKey vchPubKey;
-            ssValue >> vchPubKey;
-            if (!vchPubKey.IsValid()) {
-                strErr = "Error reading wallet database: Default Key corrupt";
-                return false;
-            }
         } else if (strType == DBKeys::POOL) {
         } else if (strType == DBKeys::CSCRIPT) {
         } else if (strType == DBKeys::ORDERPOSNEXT) {
         } else if (strType == DBKeys::DESTDATA) {
         } else if (strType == DBKeys::HDCHAIN) {
         } else if (strType == DBKeys::OLD_KEY) {
-            strErr = "Found unsupported 'wkey' record, try loading with version 0.18";
-            return false;
         } else if (strType == DBKeys::ACTIVEEXTERNALSPK || strType == DBKeys::ACTIVEINTERNALSPK) {
         } else if (strType == DBKeys::WALLETDESCRIPTOR) {
         } else if (strType == DBKeys::WALLETDESCRIPTORCACHE) {
@@ -866,6 +856,41 @@ DBErrors WalletBatch::LoadLegacyWalletRecords(CWallet* pwallet, int last_client)
         ssValue >> keypool;
 
         pwallet->GetOrCreateLegacyScriptPubKeyMan()->LoadKeyPool(nIndex, keypool);
+    }
+    cursor.reset();
+
+    // Deal with old "wkey" and "defaultkey" records.
+    // These are not actually loaded, but we need to check for them
+
+    // We don't want or need the default key, but if there is one set,
+    // we want to make sure that it is valid so that we can detect corruption
+    CPubKey default_pubkey;
+    if (m_batch->Read(DBKeys::DEFAULTKEY, default_pubkey) && !default_pubkey.IsValid()) {
+        pwallet->WalletLogPrintf("Error reading wallet database: Default Key corrupt");
+        return DBErrors::CORRUPT;
+    }
+
+    // "wkey" records are unsupported, if we see any, throw an error
+    cursor = GetTypeCursor(DBKeys::OLD_KEY);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for wkey (old_key) entries\n");
+        return DBErrors::CORRUPT;
+    }
+
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next keypool record for wallet database\n");
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == DBKeys::OLD_KEY);
+        pwallet->WalletLogPrintf("Found unsupported 'wkey' record, try loading with version 0.18");
+        return DBErrors::LOAD_FAIL;
     }
     cursor.reset();
 
