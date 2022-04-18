@@ -296,28 +296,6 @@ bool WalletBatch::EraseLockedUTXO(const COutPoint& output)
     return EraseIC(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)));
 }
 
-class CWalletScanState {
-public:
-    unsigned int nKeys{0};
-    unsigned int nCKeys{0};
-    unsigned int nWatchKeys{0};
-    unsigned int nKeyMeta{0};
-    unsigned int m_unknown_records{0};
-    bool fIsEncrypted{false};
-    bool fAnyUnordered{false};
-    std::vector<uint256> vWalletUpgrade;
-    std::map<OutputType, uint256> m_active_external_spks;
-    std::map<OutputType, uint256> m_active_internal_spks;
-    std::map<uint256, DescriptorCache> m_descriptor_caches;
-    std::map<std::pair<uint256, CKeyID>, CKey> m_descriptor_keys;
-    std::map<std::pair<uint256, CKeyID>, std::pair<CPubKey, std::vector<unsigned char>>> m_descriptor_crypt_keys;
-    std::map<uint160, CHDChain> m_hd_chains;
-    bool tx_corrupt{false};
-
-    CWalletScanState() {
-    }
-};
-
 bool LoadKey(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr)
 {
     try {
@@ -452,71 +430,6 @@ bool LoadHDChain(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std
     CHDChain chain;
     ssValue >> chain;
     pwallet->GetOrCreateLegacyScriptPubKeyMan()->LoadHDChain(chain);
-    return true;
-}
-
-//! Callback for filtering key types to deserialize in ReadKeyValue
-using KeyFilterFn = std::function<bool(const std::string&)>;
-
-static bool
-ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
-             CWalletScanState &wss, std::string& strType, std::string& strErr, const KeyFilterFn& filter_fn = nullptr) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
-{
-    try {
-        // Unserialize
-        // Taking advantage of the fact that pair serialization
-        // is just the two items serialized one after the other
-        ssKey >> strType;
-        // If we have a filter, check if this matches the filter
-        if (filter_fn && !filter_fn(strType)) {
-            return true;
-        }
-        if (strType == DBKeys::NAME) {
-        } else if (strType == DBKeys::PURPOSE) {
-        } else if (strType == DBKeys::TX) {
-        } else if (strType == DBKeys::WATCHS) {
-            wss.nWatchKeys++;
-        } else if (strType == DBKeys::KEY) {
-            wss.nKeys++;
-        } else if (strType == DBKeys::MASTER_KEY) {
-        } else if (strType == DBKeys::CRYPTED_KEY) {
-            wss.fIsEncrypted = true;
-            wss.nCKeys++;
-        } else if (strType == DBKeys::KEYMETA) {
-            wss.nKeyMeta++;
-        } else if (strType == DBKeys::WATCHMETA) {
-            wss.nKeyMeta++;
-        } else if (strType == DBKeys::DEFAULTKEY) {
-        } else if (strType == DBKeys::POOL) {
-        } else if (strType == DBKeys::CSCRIPT) {
-        } else if (strType == DBKeys::ORDERPOSNEXT) {
-        } else if (strType == DBKeys::DESTDATA) {
-        } else if (strType == DBKeys::HDCHAIN) {
-        } else if (strType == DBKeys::OLD_KEY) {
-        } else if (strType == DBKeys::ACTIVEEXTERNALSPK || strType == DBKeys::ACTIVEINTERNALSPK) {
-        } else if (strType == DBKeys::WALLETDESCRIPTOR) {
-        } else if (strType == DBKeys::WALLETDESCRIPTORCACHE) {
-        } else if (strType == DBKeys::WALLETDESCRIPTORLHCACHE) {
-        } else if (strType == DBKeys::WALLETDESCRIPTORKEY) {
-        } else if (strType == DBKeys::WALLETDESCRIPTORCKEY) {
-        } else if (strType == DBKeys::LOCKED_UTXO) {
-        } else if (strType != DBKeys::BESTBLOCK && strType != DBKeys::BESTBLOCK_NOMERKLE &&
-                   strType != DBKeys::MINVERSION && strType != DBKeys::ACENTRY &&
-                   strType != DBKeys::VERSION && strType != DBKeys::SETTINGS &&
-                   strType != DBKeys::FLAGS) {
-            wss.m_unknown_records++;
-        }
-    } catch (const std::exception& e) {
-        if (strErr.empty()) {
-            strErr = e.what();
-        }
-        return false;
-    } catch (...) {
-        if (strErr.empty()) {
-            strErr = "Caught unknown exception in ReadKeyValue";
-        }
-        return false;
-    }
     return true;
 }
 
@@ -1430,9 +1343,6 @@ DBErrors WalletBatch::LoadDecryptionKeys(CWallet* pwallet)
 
 DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 {
-    CWalletScanState wss;
-    bool fNoncriticalErrors = false;
-    bool rescan_required = false;
     DBErrors result = DBErrors::LOAD_OK;
     int last_client = CLIENT_VERSION;
     bool any_unordered = false;
@@ -1477,76 +1387,14 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
         // Load decryption keys
         result = std::max(LoadDecryptionKeys(pwallet), result);
-
-        // Get cursor
-        std::unique_ptr<DatabaseCursor> cursor = m_batch->GetCursor();
-        if (!cursor)
-        {
-            pwallet->WalletLogPrintf("Error getting wallet database cursor\n");
-            return DBErrors::CORRUPT;
-        }
-
-        while (true)
-        {
-            // Read next record
-            CDataStream ssKey(SER_DISK, CLIENT_VERSION);
-            CDataStream ssValue(SER_DISK, CLIENT_VERSION);
-            bool complete;
-            bool ret = cursor->Next(ssKey, ssValue, complete);
-            if (complete) {
-                break;
-            }
-            else if (!ret)
-            {
-                cursor.reset();
-                pwallet->WalletLogPrintf("Error reading next record from wallet database\n");
-                return DBErrors::CORRUPT;
-            }
-
-            // Try to be tolerant of single corrupt records:
-            std::string strType, strErr;
-            if (!ReadKeyValue(pwallet, ssKey, ssValue, wss, strType, strErr))
-            {
-                // losing keys is considered a catastrophic error, anything else
-                // we assume the user can live with:
-                if (IsKeyType(strType) || strType == DBKeys::DEFAULTKEY) {
-                    result = DBErrors::CORRUPT;
-                } else if (strType == DBKeys::FLAGS) {
-                    // reading the wallet flags can only fail if unknown flags are present
-                    result = DBErrors::TOO_NEW;
-                } else if (wss.tx_corrupt) {
-                    pwallet->WalletLogPrintf("Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.\n");
-                    // Set tx_corrupt back to false so that the error is only printed once (per corrupt tx)
-                    wss.tx_corrupt = false;
-                    result = DBErrors::CORRUPT;
-                } else {
-                    // Leave other errors alone, if we try to fix them we might make things worse.
-                    fNoncriticalErrors = true; // ... but do warn the user there is something wrong.
-                    if (strType == DBKeys::TX)
-                        // Rescan if there is a bad transaction record:
-                        rescan_required = true;
-                }
-            }
-            if (!strErr.empty())
-                pwallet->WalletLogPrintf("%s\n", strErr);
-        }
     } catch (...) {
         result = DBErrors::CORRUPT;
-    }
-
-    if (rescan_required && result == DBErrors::LOAD_OK) {
-        result = DBErrors::NEED_RESCAN;
-    } else if (fNoncriticalErrors && result == DBErrors::LOAD_OK) {
-        result = DBErrors::NONCRITICAL_ERROR;
     }
 
     // Any wallet corruption at all: skip any rewriting or
     // upgrading, we don't want to make it worse.
     if (result != DBErrors::LOAD_OK)
         return result;
-
-    pwallet->WalletLogPrintf("Keys: %u plaintext, %u encrypted, %u w/ metadata, %u total. Unknown wallet records: %u\n",
-           wss.nKeys, wss.nCKeys, wss.nKeyMeta, wss.nKeys + wss.nCKeys, wss.m_unknown_records);
 
     for (const uint256& hash : upgraded_txs)
         WriteTx(pwallet->mapWallet.at(hash));
