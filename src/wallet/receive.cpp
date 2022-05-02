@@ -43,6 +43,14 @@ bool AllInputsMine(const CWallet& wallet, const CTransaction& tx, const isminefi
     return true;
 }
 
+CAmount CachedOutputGetCredit(const CWallet& wallet, const WalletTXO& txout, const isminefilter& filter, bool recalculate)
+{
+    if (recalculate || !txout.m_amounts.m_cached[filter]) {
+        txout.m_amounts.Set(filter, OutputGetCredit(wallet, txout.m_txout, filter));
+    }
+    return txout.m_amounts.m_value[filter];
+}
+
 CAmount OutputGetCredit(const CWallet& wallet, const CTxOut& txout, const isminefilter& filter)
 {
     if (!MoneyRange(txout.nValue))
@@ -351,12 +359,12 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
                 continue;
             }
 
-            const CAmount tx_credit_mine{OutputGetCredit(wallet, txout.m_txout, ISMINE_SPENDABLE | reuse_filter)};
-            const CAmount tx_credit_watchonly{OutputGetCredit(wallet, txout.m_txout, ISMINE_WATCH_ONLY | reuse_filter)};
+            const CAmount tx_credit_mine{CachedOutputGetCredit(wallet, txout, ISMINE_SPENDABLE | reuse_filter)};
+            const CAmount tx_credit_watchonly{CachedOutputGetCredit(wallet, txout, ISMINE_WATCH_ONLY | reuse_filter)};
 
             if (immature_coinbase.value()) {
-                ret.m_mine_immature += OutputGetCredit(wallet, txout.m_txout, ISMINE_SPENDABLE);
-                ret.m_watchonly_immature += OutputGetCredit(wallet, txout.m_txout, ISMINE_WATCH_ONLY);
+                ret.m_mine_immature += CachedOutputGetCredit(wallet, txout, ISMINE_SPENDABLE);
+                ret.m_watchonly_immature += CachedOutputGetCredit(wallet, txout, ISMINE_WATCH_ONLY);
             } else if (is_trusted.value() && depth >= min_depth) {
                 ret.m_mine_trusted += tx_credit_mine;
                 ret.m_watchonly_trusted += tx_credit_watchonly;
