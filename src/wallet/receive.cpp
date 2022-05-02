@@ -317,26 +317,53 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
 {
     Balance ret;
     isminefilter reuse_filter = avoid_reuse ? ISMINE_NO : ISMINE_USED;
+    bool allow_used_addresses = (reuse_filter & ISMINE_USED) || !wallet.IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE);
     {
         LOCK(wallet.cs_wallet);
+        // Because m_txos is a normal map, we will end up iterating it in outpoint order.
+        // This means that all of the relevant TXOs for a transaction will be processed together.
+        // We can make an optimization because of this behavior where we cache the current CWalletTx.
+        const CWalletTx* current_wtx = nullptr;
+        std::optional<bool> immature_coinbase;
+        std::optional<int> depth;
+        std::optional<bool> in_mempool;
+        std::optional<bool> is_trusted;
         std::set<uint256> trusted_parents;
-        for (const auto& entry : wallet.mapWallet)
-        {
-            const CWalletTx& wtx = entry.second;
-            const bool is_trusted{CachedTxIsTrusted(wallet, wtx, trusted_parents)};
-            const int tx_depth{wallet.GetTxDepthInMainChain(wtx)};
-            const CAmount tx_credit_mine{CachedTxGetAvailableCredit(wallet, wtx, /*fUseCache=*/true, ISMINE_SPENDABLE | reuse_filter)};
-            const CAmount tx_credit_watchonly{CachedTxGetAvailableCredit(wallet, wtx, /*fUseCache=*/true, ISMINE_WATCH_ONLY | reuse_filter)};
-            if (is_trusted && tx_depth >= min_depth) {
+        for (const auto& [outpoint, txout] : wallet.m_txos) {
+            if (wallet.IsSpent(outpoint.hash, outpoint.n)) {
+                continue;
+            }
+            if (!current_wtx || current_wtx->GetHash() != outpoint.hash) {
+                // Moved on to the next tx, so fetch it
+                current_wtx = wallet.GetWalletTx(outpoint.hash);
+                depth = wallet.GetTxDepthInMainChain(*current_wtx);
+                immature_coinbase = wallet.IsTxImmatureCoinBase(*current_wtx) && depth > 0;
+                in_mempool = current_wtx->InMempool();
+                is_trusted = CachedTxIsTrusted(wallet, *current_wtx, trusted_parents);
+            }
+            assert(current_wtx && current_wtx->GetHash() == outpoint.hash);
+            assert(immature_coinbase.has_value());
+            assert(depth.has_value());
+            assert(in_mempool.has_value());
+            assert(is_trusted.has_value());
+
+            if (!allow_used_addresses && wallet.IsSpentKey(txout)) {
+                continue;
+            }
+
+            const CAmount tx_credit_mine{OutputGetCredit(wallet, txout, ISMINE_SPENDABLE | reuse_filter)};
+            const CAmount tx_credit_watchonly{OutputGetCredit(wallet, txout, ISMINE_WATCH_ONLY | reuse_filter)};
+
+            if (immature_coinbase.value()) {
+                ret.m_mine_immature += OutputGetCredit(wallet, txout, ISMINE_SPENDABLE);
+                ret.m_watchonly_immature += OutputGetCredit(wallet, txout, ISMINE_WATCH_ONLY);
+            } else if (is_trusted.value() && depth >= min_depth) {
                 ret.m_mine_trusted += tx_credit_mine;
                 ret.m_watchonly_trusted += tx_credit_watchonly;
-            }
-            if (!is_trusted && tx_depth == 0 && wtx.InMempool()) {
+            } else if (!is_trusted.value() && depth == 0 && in_mempool.value()) {
                 ret.m_mine_untrusted_pending += tx_credit_mine;
                 ret.m_watchonly_untrusted_pending += tx_credit_watchonly;
             }
-            ret.m_mine_immature += CachedTxGetImmatureCredit(wallet, wtx);
-            ret.m_watchonly_immature += CachedTxGetImmatureWatchOnlyCredit(wallet, wtx);
         }
     }
     return ret;
