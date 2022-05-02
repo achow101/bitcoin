@@ -305,6 +305,21 @@ public:
     CWalletTx(CWalletTx const &) = delete;
     void operator=(CWalletTx const &x) = delete;
 };
+
+class WalletTXO
+{
+public:
+    const CTxOut m_txout;
+
+    mutable CachableAmount m_amounts;
+
+    WalletTXO(const CTxOut& txout) : m_txout(txout) {}
+
+    void MarkDirty()
+    {
+        m_amounts.Reset();
+    }
+};
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_TRANSACTION_H

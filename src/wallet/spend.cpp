@@ -188,7 +188,7 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
             continue;
         }
 
-        if (txout.nValue < nMinimumAmount || txout.nValue > nMaximumAmount)
+        if (txout.m_txout.nValue < nMinimumAmount || txout.m_txout.nValue > nMaximumAmount)
             continue;
 
         if (coinControl && coinControl->HasSelected() && !coinControl->fAllowOtherInputs && !coinControl->IsSelected(outpoint))
@@ -200,7 +200,7 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
         if (wallet.IsSpent(outpoint.hash, outpoint.n))
             continue;
 
-        isminetype mine = wallet.IsMine(txout);
+        isminetype mine = wallet.IsMine(txout.m_txout);
 
         if (mine == ISMINE_NO) {
             continue;
@@ -210,17 +210,17 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
             continue;
         }
 
-        std::unique_ptr<SigningProvider> provider = wallet.GetSolvingProvider(txout.scriptPubKey);
+        std::unique_ptr<SigningProvider> provider = wallet.GetSolvingProvider(txout.m_txout.scriptPubKey);
 
-        bool solvable = provider ? IsSolvable(*provider, txout.scriptPubKey) : false;
+        bool solvable = provider ? IsSolvable(*provider, txout.m_txout.scriptPubKey) : false;
         bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
-        int input_bytes = GetTxSpendSize(wallet, txout, (coinControl && coinControl->fAllowWatchOnly));
+        int input_bytes = GetTxSpendSize(wallet, txout.m_txout, (coinControl && coinControl->fAllowWatchOnly));
 
-        vCoins.emplace_back(outpoint, txout, *depth, input_bytes, spendable, solvable, *safe, *time, *from_me);
+        vCoins.emplace_back(outpoint, txout.m_txout, *depth, input_bytes, spendable, solvable, *safe, *time, *from_me);
 
         // Checks the sum amount of all UTXO's.
         if (nMinimumSumAmount != MAX_MONEY) {
-            nTotal += txout.nValue;
+            nTotal += txout.m_txout.nValue;
 
             if (nTotal >= nMinimumSumAmount) {
                 return;

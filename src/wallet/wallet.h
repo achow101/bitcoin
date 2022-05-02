@@ -393,7 +393,7 @@ public:
 
     // All of the transaction outputs that belong to this wallet
     // (i.e. TXOs that might be considered during coin selection)
-    std::map<COutPoint, CTxOut> m_txos GUARDED_BY(cs_wallet);
+    std::map<COutPoint, WalletTXO> m_txos GUARDED_BY(cs_wallet);
 
     /** Map from txid to CWalletTx for all transactions this wallet is
      * interested in, including received and sent transactions. */

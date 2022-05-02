@@ -856,6 +856,9 @@ void CWallet::MarkDirty()
         LOCK(cs_wallet);
         for (std::pair<const uint256, CWalletTx>& item : mapWallet)
             item.second.MarkDirty();
+        for (auto& [outpoint, txout] : m_txos) {
+            txout.MarkDirty();
+        }
     }
 }
 

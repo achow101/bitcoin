@@ -347,16 +347,16 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
             assert(in_mempool.has_value());
             assert(is_trusted.has_value());
 
-            if (!allow_used_addresses && wallet.IsSpentKey(txout)) {
+            if (!allow_used_addresses && wallet.IsSpentKey(txout.m_txout)) {
                 continue;
             }
 
-            const CAmount tx_credit_mine{OutputGetCredit(wallet, txout, ISMINE_SPENDABLE | reuse_filter)};
-            const CAmount tx_credit_watchonly{OutputGetCredit(wallet, txout, ISMINE_WATCH_ONLY | reuse_filter)};
+            const CAmount tx_credit_mine{OutputGetCredit(wallet, txout.m_txout, ISMINE_SPENDABLE | reuse_filter)};
+            const CAmount tx_credit_watchonly{OutputGetCredit(wallet, txout.m_txout, ISMINE_WATCH_ONLY | reuse_filter)};
 
             if (immature_coinbase.value()) {
-                ret.m_mine_immature += OutputGetCredit(wallet, txout, ISMINE_SPENDABLE);
-                ret.m_watchonly_immature += OutputGetCredit(wallet, txout, ISMINE_WATCH_ONLY);
+                ret.m_mine_immature += OutputGetCredit(wallet, txout.m_txout, ISMINE_SPENDABLE);
+                ret.m_watchonly_immature += OutputGetCredit(wallet, txout.m_txout, ISMINE_WATCH_ONLY);
             } else if (is_trusted.value() && depth >= min_depth) {
                 ret.m_mine_trusted += tx_credit_mine;
                 ret.m_watchonly_trusted += tx_credit_watchonly;
