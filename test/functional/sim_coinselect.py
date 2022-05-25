@@ -7,6 +7,8 @@ from statistics import mean, stdev
 from decimal import Decimal, getcontext
 from bcc import BPF, USDT
 from collections import defaultdict
+from random import random
+from bisect import bisect
 
 import argparse
 import logging
@@ -112,11 +114,29 @@ class PaymentsFeeratesOptionsAction(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+class OutputTypeWeightsOptionsAction(argparse.Action):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if len(values) != 4:
+            parser.error("must provide weights for each address type (bech32m, bech32, p2sh-segwit, legacy)")
+        if sum(values) != 100:
+            parser.error("weights must sum to 100")
+        total = 0
+        cumulative = []
+        for v in values:
+            total += v
+            cumulative.append(total)
+        setattr(namespace, self.dest, cumulative)
+
+
 class CoinSelectionSimulation(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
         self.extra_args = [["-dustrelayfee=0", "-maxtxfee=1"]]
+        self.output_types = ["bech32m", "bech32", "p2sh-segwit", "legacy"]
 
     def add_options(self, parser):
         parser.add_argument("resultsdir")
@@ -125,6 +145,7 @@ class CoinSelectionSimulation(BitcoinTestFramework):
         parser.add_argument("--payments", default=None, required="--feerates" in sys.argv, action=PaymentsFeeratesOptionsAction)
         parser.add_argument("--feerates", default=None, required="--payments" in sys.argv, action=PaymentsFeeratesOptionsAction)
         parser.add_argument("--ops", type=int, default=None)
+        parser.add_argument("--weights", type=int, nargs='+', default=None, required="--weights" in sys.argv, action=OutputTypeWeightsOptionsAction, help="Weight values for each address type. Weights must add to 100 and be provided in the following order: bech32m bech32 p2sh-segwit legacy")
 
     def log_sim_results(self, res_file, csvw):
         getcontext().prec = 12
@@ -176,7 +197,7 @@ class CoinSelectionSimulation(BitcoinTestFramework):
     def run_test(self):
         # Get Git commit
         repo = git.Repo(".")
-        commit = repo.commit("HEAD~6")
+        commit = repo.commit("HEAD~7")
         commit_hash = commit.hexsha
         branch = repo.active_branch.name
         if self.options.label is None:
@@ -221,8 +242,10 @@ class CoinSelectionSimulation(BitcoinTestFramework):
 
         gen_addr = self.funder.getnewaddress()
         self.funder.generatetoaddress(600, gen_addr)  # > 14,000 BTC
-        withdraw_address = self.funder.getnewaddress()
+        withdraw_addresses = {output: self.funder.getnewaddress(address_type=output) for output in self.output_types}
 
+        # set this as the default. if weights are provided by the user, we will update this when creating the psbt
+        withdraw_address = withdraw_addresses["bech32"]
         if self.options.scenario:
             self.scenario_name = os.path.splitext(os.path.basename(self.options.scenario))[0]
 
@@ -300,6 +323,11 @@ class CoinSelectionSimulation(BitcoinTestFramework):
                 # Make deposit or withdrawal
                 value = Decimal(val_str.strip())
                 feerate = Decimal(fee_str.strip())
+                if self.options.weights:
+
+                    # choose a random address type based on the weights provided by the user
+                    i = bisect(self.options.weights, random() * 100)
+                    withdraw_address = withdraw_addresses[self.output_types[i]]
                 if value > 0:
                     try:
                         # deposit
@@ -320,8 +348,9 @@ class CoinSelectionSimulation(BitcoinTestFramework):
                         value = value * -1
                         payment_stats["amount"] = value
                         payment_stats["target_feerate"] = feerate
-                        change_address = self.tester.getrawchangeaddress()
-                        psbt = self.tester.walletcreatefundedpsbt(outputs=[{withdraw_address: value}], options={"feeRate": feerate, "changeAddress": change_address})["psbt"]
+                        # use the bech32 withdraw address by default
+                        # if weights are provided, then choose an address type based on the provided distribution
+                        psbt = self.tester.walletcreatefundedpsbt(outputs=[{withdraw_address: value}], options={"feeRate": feerate})["psbt"]
                         psbt = self.tester.walletprocesspsbt(psbt)["psbt"]
                         # Send the tx
                         psbt = self.tester.finalizepsbt(psbt, False)["psbt"]
@@ -368,8 +397,8 @@ class CoinSelectionSimulation(BitcoinTestFramework):
                         dec = self.tester.decodepsbt(psbt)
                         input_amounts = []
                         for inp in dec["inputs"]:
-                            input_amounts.append(str(inp["witness_utxo"]["amount"]))
                             inp_size = 4 + 36 + 4 # prev txid, output index, sequence are all fixed size
+                            ev = 0
                             if "final_scriptSig" in inp:
                                 scriptsig_len = len(inp["final_scriptSig"])
                                 inp_size += scriptsig_len + len(ser_compact_size(scriptsig_len))
@@ -379,7 +408,17 @@ class CoinSelectionSimulation(BitcoinTestFramework):
                                 witness_len = len(inp["final_scriptWitness"])
                                 inp_size += witness_len / 4
                             inp_fee = feerate * (Decimal(inp_size) / Decimal(1000.0))
-                            ev = inp["witness_utxo"]["amount"] - inp_fee
+                            if "witness_utxo" in inp:
+                                input_amounts.append(str(inp["witness_utxo"]["amount"]))
+                                ev = inp["witness_utxo"]["amount"] - inp_fee
+                            else:
+                                for v in dec["tx"]["vin"]:
+                                    txid, n = v["txid"], v["vout"]
+                                    if inp["non_witness_utxo"]["txid"] == txid:
+                                        for vout in inp["non_witness_utxo"]["vout"]:
+                                            if vout["n"] == n:
+                                                input_amounts.append(str(vout["value"]))
+                                                ev = vout["value"] - inp_fee
                             if ev <= 0:
                                 self.unec_utxos += 1
                                 payment_stats["negative_ev"] += 1
@@ -402,7 +441,6 @@ class CoinSelectionSimulation(BitcoinTestFramework):
                         if change_pos is not None and change_pos != -1:
                             assert len(dec["tx"]["vout"]) == 2
                             change_out = dec["tx"]["vout"][change_pos]
-                            assert change_out['scriptPubKey']['address'] == change_address
                             payment_stats["change_amount"] = change_out["value"]
                             self.change_vals.append(change_out['value'])
                             self.count_change += 1
