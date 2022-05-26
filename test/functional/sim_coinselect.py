@@ -145,7 +145,7 @@ class CoinSelectionSimulation(BitcoinTestFramework):
         parser.add_argument("--payments", default=None, required="--feerates" in sys.argv, action=PaymentsFeeratesOptionsAction)
         parser.add_argument("--feerates", default=None, required="--payments" in sys.argv, action=PaymentsFeeratesOptionsAction)
         parser.add_argument("--ops", type=int, default=None)
-        parser.add_argument("--weights", type=int, nargs='+', default=None, required="--weights" in sys.argv, action=OutputTypeWeightsOptionsAction, help="Weight values for each address type. Weights must add to 100 and be provided in the following order: bech32m bech32 p2sh-segwit legacy")
+        parser.add_argument("--weights", type=int, nargs='+', default=None, required="--weights" in sys.argv, action=OutputTypeWeightsOptionsAction, help="Causes recipient output types to be chosen randomly with provided weights per address type. Weights must add to 100 and be provided in the following order: bech32m bech32 p2sh-segwit legacy")
 
     def log_sim_results(self, res_file, csvw):
         getcontext().prec = 12
