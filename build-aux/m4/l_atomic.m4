@@ -17,9 +17,6 @@ m4_define([_CHECK_ATOMIC_testbody], [[
   using namespace std::chrono_literals;
 
   int main() {
-    std::atomic<bool> lock{true};
-    lock.exchange(false);
-
     std::atomic<std::chrono::seconds> t{0s};
     t.store(2s);
 
