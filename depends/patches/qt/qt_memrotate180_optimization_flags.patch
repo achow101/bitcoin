@@ -1,0 +1,19 @@
+--- a/qtbase/src/gui/painting/qmemrotate.cpp
++++ b/qtbase/src/gui/painting/qmemrotate.cpp
+@@ -41,6 +41,8 @@
+ 
+ QT_BEGIN_NAMESPACE
+ 
++#pragma GCC push_options
++#pragma GCC optimize ("-O1")
+ static const int tileSize = 32;
+ 
+ template <class T>
+@@ -402,6 +404,7 @@ void qt_memrotate270_64(const uchar *srcPixels, int w, int h, int sbpl, uchar *d
+ {
+     qt_memrotate270((const quint64 *)srcPixels, w, h, sbpl, (quint64 *)destPixels, dbpl);
+ }
++#pragma GCC pop_options \
+ 
+ MemRotateFunc qMemRotateFunctions[QPixelLayout::BPPCount][3] =
+ // 90, 180, 270
