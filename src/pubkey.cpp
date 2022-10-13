@@ -181,6 +181,9 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
     return 1;
 }
 
+static const std::vector<unsigned char> NUMS_H_DATA = {0x50, 0x92, 0x9b, 0x74, 0xc1, 0xa0, 0x49, 0x54, 0xb7, 0x8b, 0x4b, 0x60, 0x35, 0xe9, 0x7a, 0x5e, 0x07, 0x8a, 0x5a, 0x0f, 0x28, 0xec, 0x96, 0xd5, 0x47, 0xbf, 0xee, 0x9a, 0xce, 0x80, 0x3a, 0xc0};
+const XOnlyPubKey NUMS_H{NUMS_H_DATA};
+
 XOnlyPubKey::XOnlyPubKey(Span<const unsigned char> bytes)
 {
     assert(bytes.size() == 32);
@@ -256,6 +259,22 @@ std::optional<std::pair<XOnlyPubKey, bool>> XOnlyPubKey::CreateTapTweak(const ui
     return ret;
 }
 
+CPubKey CPubKey::TweakAdd(const unsigned char *tweak32) const
+{
+    secp256k1_pubkey original_pubkey;
+    int return_val = secp256k1_ec_pubkey_parse(secp256k1_context_static, &original_pubkey, data(), size());
+    assert(return_val);
+
+    return_val = secp256k1_ec_pubkey_tweak_add(secp256k1_context_static, &original_pubkey, tweak32);
+    assert(return_val);
+
+    unsigned char pubkey_bytes[COMPRESSED_SIZE];
+    size_t publen = COMPRESSED_SIZE;
+    return_val = secp256k1_ec_pubkey_serialize(secp256k1_context_static, pubkey_bytes, &publen, &original_pubkey, SECP256K1_EC_COMPRESSED);
+    assert(return_val);
+
+    return CPubKey(pubkey_bytes);
+}
 
 bool CPubKey::Verify(const uint256 &hash, const std::vector<unsigned char>& vchSig) const {
     if (!IsValid())
@@ -401,4 +420,33 @@ bool CExtPubKey::Derive(CExtPubKey &out, unsigned int _nChild) const {
         return false;
     }
     return (!secp256k1_ecdsa_signature_normalize(secp256k1_context_static, nullptr, &sig));
+}
+
+/* static */ CPubKey CPubKey::Combine(const std::vector<CPubKey>& pubkeys)
+{
+    std::vector<secp256k1_pubkey> parsed_pubkeys;
+    std::vector<secp256k1_pubkey *> pointers;
+    parsed_pubkeys.reserve(pubkeys.size());
+    pointers.reserve(pubkeys.size());
+    for (auto& pubkey : pubkeys) {
+        secp256k1_pubkey parsed_pubkey;
+        int return_val = secp256k1_ec_pubkey_parse(secp256k1_context_static, &parsed_pubkey, pubkey.data(), pubkey.size());
+        assert(return_val);
+
+        parsed_pubkeys.push_back(parsed_pubkey);
+        pointers.push_back(&parsed_pubkeys.back());
+    }
+
+    secp256k1_pubkey sum_pubkey;
+    int return_val = secp256k1_ec_pubkey_combine(secp256k1_context_static, &sum_pubkey, pointers.data(), pointers.size());
+    assert(return_val);
+
+    // Serialize and test the tweaked public key
+    size_t len;
+    unsigned char output_pubkey[33];
+    len = sizeof(output_pubkey);
+    return_val = secp256k1_ec_pubkey_serialize(secp256k1_context_static, output_pubkey, &len, &sum_pubkey, SECP256K1_EC_COMPRESSED);
+    assert(return_val);
+
+    return CPubKey(output_pubkey);
 }
