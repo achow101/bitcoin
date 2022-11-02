@@ -7,6 +7,7 @@
 #include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
+#include <interfaces/chain.h>
 #include <logging.h>
 #include <policy/feerate.h>
 #include <util/check.h>
@@ -512,6 +513,11 @@ CAmount SelectionResult::GetSelectedValue() const
 CAmount SelectionResult::GetSelectedEffectiveValue() const
 {
     return std::accumulate(m_selected_inputs.cbegin(), m_selected_inputs.cend(), CAmount{0}, [](CAmount sum, const auto& coin) { return sum + coin->GetEffectiveValue(); });
+}
+
+CAmount SelectionResult::GetSummedBumpFees() const
+{
+    return std::accumulate(m_selected_inputs.cbegin(), m_selected_inputs.cend(), CAmount{0}, [](CAmount sum, const auto& coin) { return sum + coin->ancestor_bump_fees; });
 }
 
 void SelectionResult::Clear()
