@@ -489,6 +489,14 @@ CAmount GenerateChangeTarget(const CAmount payment_value, const CAmount change_f
     }
 }
 
+void SelectionResult::SetBumpFeeDiscount(const CAmount discount)
+{
+    // Overlapping ancestry can only lower the fees, not increase them
+    assert (discount >= 0);
+    bump_fee_group_discount = discount;
+}
+
+
 void SelectionResult::ComputeAndSetWaste(const CAmount min_viable_change, const CAmount change_cost, const CAmount change_fee)
 {
     const CAmount change = GetChange(min_viable_change, change_fee);
@@ -512,7 +520,12 @@ CAmount SelectionResult::GetSelectedValue() const
 
 CAmount SelectionResult::GetSelectedEffectiveValue() const
 {
-    return std::accumulate(m_selected_inputs.cbegin(), m_selected_inputs.cend(), CAmount{0}, [](CAmount sum, const auto& coin) { return sum + coin->GetEffectiveValue(); });
+    return std::accumulate(m_selected_inputs.cbegin(), m_selected_inputs.cend(), CAmount{0}, [](CAmount sum, const auto& coin) { return sum + coin->GetEffectiveValue(); }) + bump_fee_group_discount;
+}
+
+CAmount SelectionResult::GetBumpFeeDiscount() const
+{
+    return bump_fee_group_discount;
 }
 
 CAmount SelectionResult::GetSummedBumpFees() const

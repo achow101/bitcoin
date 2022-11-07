@@ -86,27 +86,25 @@ static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTrans
         reused_inputs.push_back(txin.prevout);
     }
 
-    std::map<COutPoint, CAmount> bump_fees = wallet.chain().CalculateIndividualBumpFees(reused_inputs, newFeerate);
-    CAmount total_bump_fees = 0;
-    for (auto& [_, bump_fee] : bump_fees) {
-        total_bump_fees += bump_fee;
+    std::optional<CAmount> combined_bump_fee = wallet.chain().CalculateCombinedBumpFee(reused_inputs, newFeerate);
+    if (!combined_bump_fee.has_value()) {
+        errors.push_back(strprintf(Untranslated("Failed to calculate bump fees, because unconfirmed UTXOs depend on enormous cluster of unconfirmed transactions.")));
     }
-
-    CAmount new_total_fee = newFeerate.GetFee(maxTxSize) + total_bump_fees;
+    CAmount fees_including_bump_fees = newFeerate.GetFee(maxTxSize) + combined_bump_fee.value();
 
     CFeeRate incrementalRelayFee = std::max(wallet.chain().relayIncrementalFee(), CFeeRate(WALLET_INCREMENTAL_RELAY_FEE));
 
     // Min total fee is old fee + relay fee
     CAmount minTotalFee = old_fee + incrementalRelayFee.GetFee(maxTxSize);
 
-    if (new_total_fee < minTotalFee) {
+    if (fees_including_bump_fees < minTotalFee) {
         errors.push_back(strprintf(Untranslated("Insufficient total fee %s, must be at least %s (oldFee %s + incrementalFee %s)"),
-            FormatMoney(new_total_fee), FormatMoney(minTotalFee), FormatMoney(old_fee), FormatMoney(incrementalRelayFee.GetFee(maxTxSize))));
+            FormatMoney(fees_including_bump_fees), FormatMoney(minTotalFee), FormatMoney(old_fee), FormatMoney(incrementalRelayFee.GetFee(maxTxSize))));
         return feebumper::Result::INVALID_PARAMETER;
     }
 
     CAmount requiredFee = GetRequiredFee(wallet, maxTxSize);
-    if (new_total_fee < requiredFee) {
+    if (fees_including_bump_fees < requiredFee) {
         errors.push_back(strprintf(Untranslated("Insufficient total fee (cannot be less than required fee %s)"),
             FormatMoney(requiredFee)));
         return feebumper::Result::INVALID_PARAMETER;
@@ -114,9 +112,9 @@ static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTrans
 
     // Check that in all cases the new fee doesn't violate maxTxFee
     const CAmount max_tx_fee = wallet.m_default_max_tx_fee;
-    if (new_total_fee > max_tx_fee) {
+    if (fees_including_bump_fees > max_tx_fee) {
         errors.push_back(strprintf(Untranslated("Specified or calculated fee %s is too high (cannot be higher than -maxtxfee %s)"),
-            FormatMoney(new_total_fee), FormatMoney(max_tx_fee)));
+            FormatMoney(fees_including_bump_fees), FormatMoney(max_tx_fee)));
         return feebumper::Result::WALLET_ERROR;
     }
 
