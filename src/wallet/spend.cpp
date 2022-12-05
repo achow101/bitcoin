@@ -20,6 +20,7 @@
 #include <wallet/transaction.h>
 #include <wallet/wallet.h>
 
+#include <numeric>
 #include <cmath>
 
 using interfaces::FoundBlock;
@@ -756,6 +757,11 @@ static void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng
     }
 }
 
+static CAmount CalculateOutputValue(const CMutableTransaction& tx)
+{
+    return std::accumulate(tx.vout.cbegin(), tx.vout.cend(), CAmount{0}, [](CAmount sum, const auto& txout) { return sum + txout.nValue; });
+}
+
 static util::Result<CreatedTransactionResult> CreateTransactionInternal(
         CWallet& wallet,
         const std::vector<CRecipient>& vecSend,
@@ -952,19 +958,6 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
     CAmount fee_needed = coin_selection_params.m_effective_feerate.GetFee(nBytes);
     CAmount current_fee = result->GetSelectedValue() - recipients_sum - change_amount;
 
-    // The only time that fee_needed should be less than the amount available for fees is when
-    // we are subtracting the fee from the outputs. If this occurs at any other time, it is a bug.
-    if (!coin_selection_params.m_subtract_fee_outputs && fee_needed > current_fee) {
-        return util::Error{Untranslated(STR_INTERNAL_BUG("Fee needed > fee paid"))};
-    }
-
-    // If there is a change output and we overpay the fees then increase the change to match the fee needed
-    if (nChangePosInOut != -1 && fee_needed < current_fee) {
-        auto& change = txNew.vout.at(nChangePosInOut);
-        change.nValue += current_fee - fee_needed;
-        current_fee = fee_needed;
-    }
-
     // Reduce output values for subtractFeeFromAmount
     if (coin_selection_params.m_subtract_fee_outputs) {
         CAmount to_reduce = fee_needed - current_fee;
@@ -998,7 +991,26 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
             }
             ++i;
         }
-        current_fee = fee_needed;
+        current_fee = result->GetSelectedValue() - CalculateOutputValue(txNew);
+        if (fee_needed != current_fee) {
+            return util::Error{Untranslated(STR_INTERNAL_BUG("SFFO: Fee needed != fee paid"))};
+        }
+    }
+
+    // If there is a change output and we overpay the fees then increase the change to match the fee needed
+    if (nChangePosInOut != -1 && fee_needed < current_fee) {
+        auto& change = txNew.vout.at(nChangePosInOut);
+        change.nValue += current_fee - fee_needed;
+        current_fee = result->GetSelectedValue() - CalculateOutputValue(txNew);
+        if (fee_needed != current_fee) {
+            return util::Error{Untranslated(STR_INTERNAL_BUG("Change adjustment: Fee needed != fee paid"))};
+        }
+    }
+
+    // fee_needed should now always be less than or equal to the current fees that we pay.
+    // If it is not, it is a bug.
+    if (fee_needed > current_fee) {
+        return util::Error{Untranslated(STR_INTERNAL_BUG("Fee needed > fee paid"))};
     }
 
     // Give up if change keypool ran out and change is required
