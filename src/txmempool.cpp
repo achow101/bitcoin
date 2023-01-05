@@ -260,7 +260,8 @@ CTxMemPool::setEntries CTxMemPool::AssumeCalculateMemPoolAncestors(
     const Limits& limits,
     bool fSearchForParents /* = true */) const
 {
-    auto result{Assume(CalculateMemPoolAncestors(entry, limits, fSearchForParents))};
+    auto result{CalculateMemPoolAncestors(entry, limits, fSearchForParents)};
+    Assume(result);
     if (!result) {
         LogPrintLevel(BCLog::MEMPOOL, BCLog::Level::Error, "%s: CalculateMemPoolAncestors failed unexpectedly, continuing with empty ancestor set (%s)\n",
                       calling_fn_name, util::ErrorString(result).original);
