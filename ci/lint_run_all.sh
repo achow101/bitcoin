@@ -7,5 +7,4 @@
 export LC_ALL=C.UTF-8
 
 set -o errexit; source ./ci/test/00_setup_env.sh
-set -o errexit; source ./ci/lint/04_install.sh
 set -o errexit; source ./ci/lint/06_script.sh

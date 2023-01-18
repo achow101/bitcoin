@@ -68,7 +68,9 @@ task:
   name: 'lint [jammy]'
   << : *BASE_TEMPLATE
   container:
-    image: ubuntu:jammy
+    dockerfile: ci/lint/lint.Dockerfile
+    docker_arguments:
+      python_version: $(cat .python-version)
     cpu: 1
     memory: 1G
   # For faster CI feedback, immediately schedule the linters
