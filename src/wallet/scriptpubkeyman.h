@@ -540,8 +540,8 @@ public:
 class DescriptorScriptPubKeyMan : public ScriptPubKeyMan
 {
 private:
-    using ScriptPubKeyMap = std::map<CScript, int32_t>; // Map of scripts to descriptor range index
-    using PubKeyMap = std::map<CPubKey, int32_t>; // Map of pubkeys involved in scripts to descriptor range index
+    using ScriptPubKeyMap = std::unordered_map<CScript, int32_t, SaltedSipHasher>; // Map of scripts to descriptor range index
+    using PubKeyMap = std::unordered_map<CPubKey, int32_t, SaltedSipHasher>; // Map of pubkeys involved in scripts to descriptor range index
     using CryptedKeyMap = std::map<CKeyID, std::pair<CPubKey, std::vector<unsigned char>>>;
     using KeyMap = std::map<CKeyID, CKey>;
 
