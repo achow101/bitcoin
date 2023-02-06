@@ -13,11 +13,11 @@ namespace wallet {
 class ExternalSignerScriptPubKeyMan : public DescriptorScriptPubKeyMan
 {
   public:
-  ExternalSignerScriptPubKeyMan(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size)
-      :   DescriptorScriptPubKeyMan(storage, descriptor, keypool_size)
+  ExternalSignerScriptPubKeyMan(WalletStorage& storage, std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> topup_callback, WalletDescriptor& descriptor, int64_t keypool_size)
+      :   DescriptorScriptPubKeyMan(storage, topup_callback, descriptor, keypool_size)
       {}
-  ExternalSignerScriptPubKeyMan(WalletStorage& storage, int64_t keypool_size)
-      :   DescriptorScriptPubKeyMan(storage, keypool_size)
+  ExternalSignerScriptPubKeyMan(WalletStorage& storage, std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> topup_callback, int64_t keypool_size)
+      :   DescriptorScriptPubKeyMan(storage, topup_callback, keypool_size)
       {}
 
   /** Provide a descriptor at setup time

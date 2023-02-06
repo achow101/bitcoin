@@ -173,8 +173,11 @@ class ScriptPubKeyMan
 protected:
     WalletStorage& m_storage;
 
+    //! Callback function for after TopUp completes containing any scripts that were added to this SPKMan
+    std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> m_topup_callback;
+
 public:
-    explicit ScriptPubKeyMan(WalletStorage& storage) : m_storage(storage) {}
+    explicit ScriptPubKeyMan(WalletStorage& storage, std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> topup_callback) : m_storage(storage), m_topup_callback(topup_callback) {}
     virtual ~ScriptPubKeyMan() {};
     virtual util::Result<CTxDestination> GetNewDestination(const OutputType type) { return util::Error{Untranslated("Not supported")}; }
     virtual isminetype IsMine(const CScript& script) const { return ISMINE_NO; }
@@ -374,7 +377,7 @@ private:
 
     bool TopUpChain(CHDChain& chain, unsigned int size);
 public:
-    LegacyScriptPubKeyMan(WalletStorage& storage, int64_t keypool_size) : ScriptPubKeyMan(storage), m_keypool_size(keypool_size) {}
+    LegacyScriptPubKeyMan(WalletStorage& storage, std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> topup_callback, int64_t keypool_size) : ScriptPubKeyMan(storage, topup_callback), m_keypool_size(keypool_size) {}
 
     util::Result<CTxDestination> GetNewDestination(const OutputType type) override;
     isminetype IsMine(const CScript& script) const override;
@@ -592,13 +595,13 @@ protected:
   WalletDescriptor m_wallet_descriptor GUARDED_BY(cs_desc_man);
 
 public:
-    DescriptorScriptPubKeyMan(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size)
-        :   ScriptPubKeyMan(storage),
+    DescriptorScriptPubKeyMan(WalletStorage& storage, std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> topup_callback, WalletDescriptor& descriptor, int64_t keypool_size)
+        :   ScriptPubKeyMan(storage, topup_callback),
             m_keypool_size(keypool_size),
             m_wallet_descriptor(descriptor)
         {}
-    DescriptorScriptPubKeyMan(WalletStorage& storage, int64_t keypool_size)
-        :   ScriptPubKeyMan(storage),
+    DescriptorScriptPubKeyMan(WalletStorage& storage, std::function<void(const std::set<CScript>&, ScriptPubKeyMan*)> topup_callback, int64_t keypool_size)
+        :   ScriptPubKeyMan(storage, topup_callback),
             m_keypool_size(keypool_size)
         {}
 
