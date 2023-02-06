@@ -1573,11 +1573,18 @@ isminetype CWallet::IsMine(const CTxDestination& dest) const
 isminetype CWallet::IsMine(const CScript& script) const
 {
     AssertLockHeld(cs_wallet);
-    isminetype result = ISMINE_NO;
-    for (const auto& spk_man_pair : m_spk_managers) {
-        result = std::max(result, spk_man_pair.second->IsMine(script));
+
+    // Search the cache
+    const auto& it = m_cached_spks.find(script);
+    if (it != m_cached_spks.end()) {
+        // The cache is only used for descriptor wallets. If a script is in the cache, then it is automatically ISMINE_SPENDABLE.
+        return ISMINE_SPENDABLE;
     }
-    return result;
+
+    // Legacy wallet
+    if (IsLegacy()) return GetLegacyScriptPubKeyMan()->IsMine(script);
+
+    return ISMINE_NO;
 }
 
 bool CWallet::IsMine(const CTransaction& tx) const
@@ -3873,10 +3880,15 @@ bool CWallet::ApplyMigrationData(MigrationData& data, bilingual_str& error)
         if (ExtractDestination(script, dest)) not_migrated_dests.emplace(dest);
     }
 
+    m_cached_spks.clear();
+
     for (auto& desc_spkm : data.desc_spkms) {
         if (m_spk_managers.count(desc_spkm->GetID()) > 0) {
             error = _("Error: Duplicate descriptors created during migration. Your wallet may be corrupted.");
             return false;
+        }
+        for (const auto& script : desc_spkm->GetScriptPubKeys()) {
+            m_cached_spks[script].insert(desc_spkm.get());
         }
         uint256 id = desc_spkm->GetID();
         AddScriptPubKeyMan(id, std::move(desc_spkm));
