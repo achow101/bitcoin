@@ -419,6 +419,9 @@ private:
     // Must be the only method adding data to it.
     void AddScriptPubKeyMan(const uint256& id, std::unique_ptr<ScriptPubKeyMan> spkm_man);
 
+    //! Cache of descriptor ScriptPubKeys used for IsMine. Maps ScriptPubKey to set of spkms
+    std::unordered_map<CScript, std::unordered_set<ScriptPubKeyMan*>, SaltedSipHasher> m_cached_spks;
+
     /**
      * Catch wallet up to current chain, scanning new blocks, updating the best
      * block locator and m_last_block_processed, and registering for

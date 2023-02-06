@@ -3536,6 +3536,12 @@ void CWallet::LoadDescriptorScriptPubKeyMan(uint256 id, WalletDescriptor& desc)
         auto spk_manager = std::unique_ptr<ScriptPubKeyMan>(new DescriptorScriptPubKeyMan(*this, std::bind(&CWallet::CacheNewScriptPubKeys, this, std::placeholders::_1, std::placeholders::_2), desc, m_keypool_size));
         AddScriptPubKeyMan(id, std::move(spk_manager));
     }
+
+    // Cache scriptPubKeys
+    ScriptPubKeyMan* spkm = m_spk_managers.at(id).get();
+    for (const auto& script : spkm->GetScriptPubKeys()) {
+        m_cached_spks[script].insert(spkm);
+    }
 }
 
 void CWallet::SetupDescriptorScriptPubKeyMans(const CExtKey& master_key)
@@ -4272,5 +4278,8 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
 
 void CWallet::CacheNewScriptPubKeys(const std::set<CScript>& spks, ScriptPubKeyMan* spkm)
 {
+    for (const auto& script : spks) {
+        m_cached_spks[script].insert(spkm);
+    }
 }
 } // namespace wallet
