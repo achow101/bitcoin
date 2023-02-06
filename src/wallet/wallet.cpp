@@ -3458,11 +3458,19 @@ std::unique_ptr<SigningProvider> CWallet::GetSolvingProvider(const CScript& scri
 
 std::unique_ptr<SigningProvider> CWallet::GetSolvingProvider(const CScript& script, SignatureData& sigdata) const
 {
-    for (const auto& spk_man_pair : m_spk_managers) {
-        if (spk_man_pair.second->CanProvide(script, sigdata)) {
-            return spk_man_pair.second->GetSolvingProvider(script);
+    // Search the cache first
+    const auto& it = m_cached_spks.find(script);
+    if (it != m_cached_spks.end()) {
+        for (const auto& spkm : it->second) {
+            if (spkm->CanProvide(script, sigdata)) {
+                return spkm->GetSolvingProvider(script);
+            }
         }
     }
+
+    // Legacy wallet
+    if (IsLegacy() && GetLegacyScriptPubKeyMan()->CanProvide(script, sigdata)) return GetLegacyScriptPubKeyMan()->GetSolvingProvider(script);
+
     return nullptr;
 }
 
