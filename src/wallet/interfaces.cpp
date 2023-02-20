@@ -178,7 +178,7 @@ public:
         }
         return false;
     };
-    bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::string& purpose) override
+    bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::optional<AddressPurpose>& purpose) override
     {
         return m_wallet->SetAddressBook(dest, name, purpose);
     }
@@ -189,7 +189,7 @@ public:
     bool getAddress(const CTxDestination& dest,
         std::string* name,
         isminetype* is_mine,
-        std::string* purpose) override
+        AddressPurpose* purpose) override
     {
         LOCK(m_wallet->cs_wallet);
         const auto& entry = m_wallet->FindAddressBookEntry(dest, /*allow_change=*/false);
@@ -201,7 +201,7 @@ public:
             *is_mine = m_wallet->IsMine(dest);
         }
         if (purpose) {
-            *purpose = entry->purpose;
+            *purpose = entry->GetPurpose();
         }
         return true;
     }
@@ -209,7 +209,7 @@ public:
     {
         LOCK(m_wallet->cs_wallet);
         std::vector<WalletAddress> result;
-        m_wallet->ForEachAddrBookEntry([&](const CTxDestination& dest, const std::string& label, const std::string& purpose, bool is_change) EXCLUSIVE_LOCKS_REQUIRED(m_wallet->cs_wallet) {
+        m_wallet->ForEachAddrBookEntry([&](const CTxDestination& dest, const std::string& label, const interfaces::Wallet::AddressPurpose purpose, bool is_change) EXCLUSIVE_LOCKS_REQUIRED(m_wallet->cs_wallet) {
             if (is_change) return;
             result.emplace_back(dest, m_wallet->IsMine(dest), label, purpose);
         });
@@ -506,7 +506,7 @@ public:
     {
         return MakeSignalHandler(m_wallet->NotifyAddressBookChanged.connect(
             [fn](const CTxDestination& address, const std::string& label, bool is_mine,
-                 const std::string& purpose, ChangeType status) { fn(address, label, is_mine, purpose, status); }));
+                 const std::optional<interfaces::Wallet::AddressPurpose>& purpose, ChangeType status) { fn(address, label, is_mine, purpose, status); }));
     }
     std::unique_ptr<Handler> handleTransactionChanged(TransactionChangedFn fn) override
     {

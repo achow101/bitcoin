@@ -347,7 +347,9 @@ ReadKeyValue(CWallet* pwallet, DataStream& ssKey, CDataStream& ssValue,
         } else if (strType == DBKeys::PURPOSE) {
             std::string strAddress;
             ssKey >> strAddress;
-            ssValue >> pwallet->m_address_book[DecodeDestination(strAddress)].purpose;
+            std::string purpose_str;
+            ssValue >> purpose_str;
+            pwallet->m_address_book[DecodeDestination(strAddress)].SetPurposeFromString(purpose_str);
         } else if (strType == DBKeys::TX) {
             uint256 hash;
             ssKey >> hash;

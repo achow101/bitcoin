@@ -10,6 +10,7 @@
 #include <fs.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
+#include <interfaces/wallet.h>
 #include <logging.h>
 #include <outputtype.h>
 #include <policy/feerate.h>
@@ -212,10 +213,47 @@ private:
     bool m_input_used{false};
     //! Receive Request data sent by the GUI
     std::optional<std::pair<int64_t, std::string>> m_receive_request;
-public:
-    std::string purpose;
+    //! The purpose of this address
+    interfaces::Wallet::AddressPurpose m_purpose{interfaces::Wallet::AddressPurpose::UNKNOWN};
 
-    CAddressBookData() : purpose("unknown") {}
+public:
+    CAddressBookData() {}
+
+    static std::string PurposeToString(interfaces::Wallet::AddressPurpose p)
+    {
+        switch(p) {
+        case interfaces::Wallet::AddressPurpose::UNKNOWN:
+            return "unknown";
+        case interfaces::Wallet::AddressPurpose::RECEIVE:
+            return "receive";
+        case interfaces::Wallet::AddressPurpose::SEND:
+            return "send";
+        // no default case so the compiler will warn when a new enum as added
+        }
+        assert(false);
+    }
+    static interfaces::Wallet::AddressPurpose PurposeFromString(const std::string& s)
+    {
+        if (s == "unknown") {
+            return interfaces::Wallet::AddressPurpose::UNKNOWN;
+        } else if (s == "receive") {
+            return interfaces::Wallet::AddressPurpose::RECEIVE;
+        } else if (s == "send") {
+            return interfaces::Wallet::AddressPurpose::SEND;
+        } else {
+            // Any other string is a programming error
+            assert(false);
+        }
+    }
+    static bool IsValidPurposeString(const std::string& s)
+    {
+        return s == "receive" || s == "send";
+    }
+
+    interfaces::Wallet::AddressPurpose GetPurpose() const { return m_purpose; }
+    std::string GetPurposeString() const { return PurposeToString(m_purpose); }
+    void SetPurpose(interfaces::Wallet::AddressPurpose purpose) { m_purpose = purpose; }
+    void SetPurposeFromString(const std::string& s) { m_purpose = PurposeFromString(s); }
 
     bool IsChange() const { return m_change; }
     const std::string& GetLabel() const { return m_label; }
@@ -309,7 +347,7 @@ private:
     /** WalletFlags set on this wallet. */
     std::atomic<uint64_t> m_wallet_flags{0};
 
-    bool SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::string& strPurpose);
+    bool SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::optional<interfaces::Wallet::AddressPurpose>& strPurpose);
 
     //! Unsets a wallet flag and saves it to disk
     void UnsetWalletFlagWithDB(WalletBatch& batch, uint64_t flag);
@@ -675,13 +713,13 @@ public:
     /**
      * Retrieve all the known labels in the address book
      */
-    std::set<std::string> ListAddrBookLabels(const std::string& purpose) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::set<std::string> ListAddrBookLabels(const std::optional<interfaces::Wallet::AddressPurpose> purpose) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Walk-through the address book entries.
      * Stops when the provided 'ListAddrBookFunc' returns false.
      */
-    using ListAddrBookFunc = std::function<void(const CTxDestination& dest, const std::string& label, const std::string& purpose, bool is_change)>;
+    using ListAddrBookFunc = std::function<void(const CTxDestination& dest, const std::string& label, const interfaces::Wallet::AddressPurpose purpose, bool is_change)>;
     void ForEachAddrBookEntry(const ListAddrBookFunc& func) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
@@ -711,7 +749,7 @@ public:
     DBErrors LoadWallet();
     DBErrors ZapSelectTx(std::vector<uint256>& vHashIn, std::vector<uint256>& vHashOut) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    bool SetAddressBook(const CTxDestination& address, const std::string& strName, const std::string& purpose);
+    bool SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<interfaces::Wallet::AddressPurpose>& purpose);
 
     bool DelAddressBook(const CTxDestination& address);
 
@@ -751,7 +789,7 @@ public:
      */
     boost::signals2::signal<void(const CTxDestination& address,
                                  const std::string& label, bool isMine,
-                                 const std::string& purpose, ChangeType status)>
+                                 const std::optional<interfaces::Wallet::AddressPurpose>& purpose, ChangeType status)>
         NotifyAddressBookChanged;
 
     /**

@@ -141,9 +141,9 @@ RPCHelpMan setlabel()
     const std::string label{LabelFromValue(request.params[1])};
 
     if (pwallet->IsMine(dest)) {
-        pwallet->SetAddressBook(dest, label, "receive");
+        pwallet->SetAddressBook(dest, label, interfaces::Wallet::AddressPurpose::RECEIVE);
     } else {
-        pwallet->SetAddressBook(dest, label, "send");
+        pwallet->SetAddressBook(dest, label, interfaces::Wallet::AddressPurpose::SEND);
     }
 
     return UniValue::VNULL;
@@ -285,7 +285,7 @@ RPCHelpMan addmultisigaddress()
     // Construct using pay-to-script-hash:
     CScript inner;
     CTxDestination dest = AddAndGetMultisigDestination(required, pubkeys, output_type, spk_man, inner);
-    pwallet->SetAddressBook(dest, label, "send");
+    pwallet->SetAddressBook(dest, label, interfaces::Wallet::AddressPurpose::SEND);
 
     // Make the descriptor
     std::unique_ptr<Descriptor> descriptor = InferDescriptor(GetScriptForDestination(dest), spk_man);
@@ -663,7 +663,7 @@ RPCHelpMan getaddressesbylabel()
     // Find all addresses that have the given label
     UniValue ret(UniValue::VOBJ);
     std::set<std::string> addresses;
-    pwallet->ForEachAddrBookEntry([&](const CTxDestination& _dest, const std::string& _label, const std::string& _purpose, bool _is_change) {
+    pwallet->ForEachAddrBookEntry([&](const CTxDestination& _dest, const std::string& _label, const interfaces::Wallet::AddressPurpose _purpose, bool _is_change) {
         if (_is_change) return;
         if (_label == label) {
             std::string address = EncodeDestination(_dest);
@@ -677,7 +677,7 @@ RPCHelpMan getaddressesbylabel()
             // std::set in O(log(N))), UniValue::__pushKV is used instead,
             // which currently is O(1).
             UniValue value(UniValue::VOBJ);
-            value.pushKV("purpose", _purpose);
+            value.pushKV("purpose", CAddressBookData::PurposeToString(_purpose));
             ret.__pushKV(address, value);
         }
     });
@@ -721,9 +721,15 @@ RPCHelpMan listlabels()
 
     LOCK(pwallet->cs_wallet);
 
-    std::string purpose;
+    std::optional<interfaces::Wallet::AddressPurpose> purpose;
     if (!request.params[0].isNull()) {
-        purpose = request.params[0].get_str();
+        std::string purpose_str = request.params[0].get_str();
+        if (!purpose_str.empty()) {
+            if (!CAddressBookData::IsValidPurposeString(purpose_str)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid 'purpose' argument, must be one of 'send', or 'receive'.");
+            }
+            purpose = CAddressBookData::PurposeFromString(purpose_str);
+        }
     }
 
     // Add to a set to sort by label name, then insert into Univalue array
