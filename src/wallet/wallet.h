@@ -296,6 +296,10 @@ public:
             m_receive_request.emplace(rr);
         }
     }
+
+    // Merge in info from another CAddressBookData, preferring it's values over ours.
+    // Returns whether any data changed, and if so, this object needs to be rewritten to the database.
+    bool Merge(const CAddressBookData& other);
 };
 
 struct CRecipient
@@ -549,9 +553,6 @@ public:
     void UpgradeDescriptorCache() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     bool LoadMinVersion(int nVersion) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) { AssertLockHeld(cs_wallet); nWalletVersion = nVersion; return true; }
-
-    //! Adds a destination data tuple to the store, without saving it to disk
-    void LoadDestData(const CTxDestination& dest, const std::string& key, const std::string& value) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Holds a timestamp at which point the wallet is scheduled (externally) to be relocked. Caller must arrange for actual relocking to occur via Lock().
     int64_t nRelockTime GUARDED_BY(cs_wallet){0};

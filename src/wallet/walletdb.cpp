@@ -11,6 +11,7 @@
 #include <serialize.h>
 #include <sync.h>
 #include <util/bip32.h>
+#include <util/check.h>
 #include <util/system.h>
 #include <util/time.h>
 #include <util/translation.h>
@@ -317,6 +318,8 @@ public:
     bool tx_corrupt{false};
     bool descriptor_unknown{false};
     bool unexpected_legacy_entry{false};
+    //! Address book entries constructed from backwards compatibility data
+    std::map<CTxDestination, CAddressBookData> m_backcompat_address_book;
 
     CWalletScanState() = default;
 };
@@ -344,13 +347,13 @@ ReadKeyValue(CWallet* pwallet, DataStream& ssKey, CDataStream& ssValue,
             ssKey >> strAddress;
             std::string label;
             ssValue >> label;
-            pwallet->m_address_book[DecodeDestination(strAddress)].SetLabel(label);
+            wss.m_backcompat_address_book[DecodeDestination(strAddress)].SetLabel(label);
         } else if (strType == DBKeys::PURPOSE) {
             std::string strAddress;
             ssKey >> strAddress;
             std::string purpose_str;
             ssValue >> purpose_str;
-            pwallet->m_address_book[DecodeDestination(strAddress)].SetPurposeFromString(purpose_str);
+            wss.m_backcompat_address_book[DecodeDestination(strAddress)].SetPurposeFromString(purpose_str);
         } else if (strType == DBKeys::TX) {
             uint256 hash;
             ssKey >> hash;
@@ -612,7 +615,26 @@ ReadKeyValue(CWallet* pwallet, DataStream& ssKey, CDataStream& ssValue,
             ssKey >> strAddress;
             ssKey >> strKey;
             ssValue >> strValue;
-            pwallet->LoadDestData(DecodeDestination(strAddress), strKey, strValue);
+
+            const CTxDestination dest = DecodeDestination(strAddress);
+
+            // Special case for "used" since we no longer store it in destdata
+            if (strKey == "used") {
+                wss.m_backcompat_address_book[dest].SetInputUsed(strValue == "1");
+                return true;
+            }
+            // Special case for "rr" since we no loner store it in destdata
+            const std::string rr_prefix{"rr"};
+            if (!strKey.compare(0, rr_prefix.size(), rr_prefix)) {
+                std::string id_str = RemovePrefix(strKey, rr_prefix);
+                int64_t id;
+                Assume(ParseInt64(id_str, &id));
+                wss.m_backcompat_address_book[dest].SetReceiveRequest(id, strValue);
+                return true;
+            }
+
+            strErr = strprintf("Unknown destdata record found: %s", strKey);
+            return false;
         } else if (strType == DBKeys::HDCHAIN) {
             CHDChain chain;
             ssValue >> chain;
@@ -742,6 +764,12 @@ ReadKeyValue(CWallet* pwallet, DataStream& ssKey, CDataStream& ssValue,
             ssKey >> hash;
             ssKey >> n;
             pwallet->LockCoin(COutPoint(hash, n));
+        } else if (strType == DBKeys::ADDRESSBOOKENTRY) {
+            std::string address;
+            ssKey >> address;
+            CAddressBookData entry;
+            ssValue >> entry;
+            pwallet->m_address_book.emplace(DecodeDestination(address), entry);
         } else if (strType != DBKeys::BESTBLOCK && strType != DBKeys::BESTBLOCK_NOMERKLE &&
                    strType != DBKeys::MINVERSION && strType != DBKeys::ACENTRY &&
                    strType != DBKeys::VERSION && strType != DBKeys::SETTINGS &&
@@ -968,6 +996,15 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
             if (chain_pair.first != pwallet->GetLegacyScriptPubKeyMan()->GetHDChain().seed_id) {
                 pwallet->GetLegacyScriptPubKeyMan()->AddInactiveHDChain(chain_pair.second);
             }
+        }
+    }
+
+    // Use backwards compatibility address book as source of truth
+    // Entries there that are not in the actual address book should be added,
+    // conflicts use the old records as the correct ones.
+    for (const auto& [dest, entry] : wss.m_backcompat_address_book) {
+        if (pwallet->m_address_book[dest].Merge(entry)) {
+            WriteAddressBookEntry(EncodeDestination(dest), pwallet->m_address_book[dest]);
         }
     }
 

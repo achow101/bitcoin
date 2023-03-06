@@ -2834,30 +2834,6 @@ bool CWallet::SetAddressUsed(WalletBatch& batch, const CTxDestination& dest, boo
     }
 }
 
-void CWallet::LoadDestData(const CTxDestination &dest, const std::string &key, const std::string &value)
-{
-    // Special case for "used" since we no longer store it in destdata
-    if (key == "used") {
-        m_address_book[dest].SetInputUsed(value == "1");
-        return;
-    }
-
-    // Special case for "rr" since we no loner store it in destdata
-    const std::string rr_prefix{"rr"};
-    if (!key.compare(0, rr_prefix.size(), rr_prefix)) {
-        std::string id_str = RemovePrefix(key, rr_prefix);
-        int64_t id;
-        Assume(ParseInt64(id_str, &id));
-        m_address_book[dest].SetReceiveRequest(id, value);
-        return;
-    }
-
-    // We should not see destdata with any other keys.
-    // If we do, log a warning, and assert when debugging.
-    WalletLogPrintf("Unknown destdata record found: %s\n", key);
-    Assume(false);
-}
-
 bool CWallet::IsAddressUsed(const CTxDestination& dest) const
 {
     const CAddressBookData* entry = FindAddressBookEntry(dest, /*allow_change=*/true);
@@ -4294,5 +4270,31 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
         return util::Error{error};
     }
     return res;
+}
+
+bool CAddressBookData::Merge(const CAddressBookData& other)
+{
+    bool needs_rewrite = false;
+    if (other.m_change != m_change && !other.m_change) {
+        m_change = other.m_change;
+        needs_rewrite = true;
+    }
+    if (m_label != other.m_label) {
+        m_label = other.m_label;
+        needs_rewrite = true;
+    }
+    if (other.m_input_used != m_input_used && other.m_input_used) {
+        m_input_used = other.m_input_used;
+        needs_rewrite = true;
+    }
+    if (m_receive_request != other.m_receive_request && other.m_receive_request.has_value()) {
+        m_receive_request = other.m_receive_request;
+        needs_rewrite = true;
+    }
+    if (other.m_purpose != m_purpose) {
+        m_purpose = other.m_purpose;
+        needs_rewrite = true;
+    }
+    return needs_rewrite;
 }
 } // namespace wallet
