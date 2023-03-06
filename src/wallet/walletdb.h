@@ -216,6 +216,12 @@ private:
         return true;
     }
 
+    bool WriteName(const std::string& strAddress, const std::string& strName);
+    bool EraseName(const std::string& strAddress);
+
+    bool ErasePurpose(const std::string& strAddress);
+    bool WritePurpose(const std::string& strAddress, const std::string& purpose);
+
 public:
     explicit WalletBatch(WalletDatabase &database, bool _fFlushOnClose = true) :
         m_batch(database.MakeBatch(_fFlushOnClose)),
@@ -224,12 +230,6 @@ public:
     }
     WalletBatch(const WalletBatch&) = delete;
     WalletBatch& operator=(const WalletBatch&) = delete;
-
-    bool WriteName(const std::string& strAddress, const std::string& strName);
-    bool EraseName(const std::string& strAddress);
-
-    bool WritePurpose(const std::string& strAddress, const std::string& purpose);
-    bool ErasePurpose(const std::string& strAddress);
 
     bool WriteTx(const CWalletTx& wtx);
     bool EraseTx(uint256 hash);
@@ -284,6 +284,7 @@ public:
     bool WriteHDChain(const CHDChain& chain);
 
     bool WriteAddressBookEntry(const std::string& address, const CAddressBookData& entry);
+    bool EraseAddressBookEntry(const std::string& address);
 
     //! Delete records of the given types
     bool EraseRecords(const std::unordered_set<std::string>& types);

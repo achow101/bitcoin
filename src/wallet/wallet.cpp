@@ -2416,9 +2416,7 @@ bool CWallet::SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& add
     }
     NotifyAddressBookChanged(address, strName, is_mine,
                              new_purpose, (fUpdated ? CT_UPDATED : CT_NEW));
-    if (purpose.has_value() && !batch.WritePurpose(EncodeDestination(address), new_purpose))
-        return false;
-    return batch.WriteName(EncodeDestination(address), strName);
+    return batch.WriteAddressBookEntry(EncodeDestination(address), m_address_book.at(address));
 }
 
 bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<interfaces::Wallet::AddressPurpose>& purpose)
@@ -2441,20 +2439,13 @@ bool CWallet::DelAddressBook(const CTxDestination& dest)
             WalletLogPrintf("%s called with IsMine address, NOT SUPPORTED. Please report this bug! %s\n", __func__, PACKAGE_BUGREPORT);
             return false;
         }
-        // Delete destdata records. There should only be "used" and "rr" records, so we will only remove those.
-        // However, it is possible that there are other destdata records, but we won't know about them.
-        // Loading should also catch such records and log a warning.
-        batch.EraseDestData(addr, "used");
-        batch.EraseDestData(addr, "rr");
-
         m_address_book.erase(dest);
         is_mine = IsMine(dest) != ISMINE_NO;
     }
 
     NotifyAddressBookChanged(dest, "", is_mine, std::nullopt, CT_DELETED);
 
-    batch.ErasePurpose(addr);
-    return batch.EraseName(addr);
+    return batch.EraseAddressBookEntry(addr);
 }
 
 size_t CWallet::KeypoolCountExternalKeys() const
@@ -2832,11 +2823,14 @@ bool CWallet::SetAddressUsed(WalletBatch& batch, const CTxDestination& dest, boo
     m_address_book[dest].SetInputUsed(used);
 
     // Update the old database records
+    const std::string address{EncodeDestination(dest)};
     const std::string key{"used"};
     if (used) {
-        return batch.WriteDestData(EncodeDestination(dest), key, "1");
+        return batch.WriteDestData(address, key, "1")
+            && batch.WriteAddressBookEntry(address, m_address_book.at(dest));
     } else {
-        return batch.EraseDestData(EncodeDestination(dest), key);
+        return batch.EraseDestData(EncodeDestination(dest), key)
+            && batch.WriteAddressBookEntry(address, m_address_book.at(dest));
     }
 }
 
@@ -2894,7 +2888,9 @@ bool CWallet::RemoveAddressReceiveRequest(WalletBatch& batch, const CTxDestinati
     }
     Assume(req.value().first == id);
     entry.RemoveReceiveRequest();
-    return batch.EraseDestData(EncodeDestination(dest), "rr" + ToString(id));
+    const std::string address{EncodeDestination(dest)};
+    return batch.EraseDestData(address, "rr" + ToString(id))
+        && batch.WriteAddressBookEntry(address, m_address_book.at(dest));
 }
 
 bool CWallet::SetAddressReceiveRequest(WalletBatch& batch, const CTxDestination& dest, int64_t id, const std::string& value)
@@ -2904,7 +2900,9 @@ bool CWallet::SetAddressReceiveRequest(WalletBatch& batch, const CTxDestination&
         return false;
     }
     data.SetReceiveRequest(id, value);
-    return batch.WriteDestData(EncodeDestination(dest), "rr" + ToString(id), value);
+    const std::string address{EncodeDestination(dest)};
+    return batch.WriteDestData(address, "rr" + ToString(id), value)
+        && batch.WriteAddressBookEntry(address, data);
 }
 
 std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error_string)
@@ -4064,12 +4062,7 @@ bool CWallet::ApplyMigrationData(MigrationData& data, bilingual_str& error)
         LOCK(wallet.cs_wallet);
         WalletBatch batch{wallet.GetDatabase()};
         for (const auto& [destination, addr_book_data] : wallet.m_address_book) {
-            auto address{EncodeDestination(destination)};
-            auto purpose{addr_book_data.GetPurpose()};
-            auto label{addr_book_data.GetLabel()};
-            // don't bother writing default values (unknown purpose, empty label)
-            if (purpose != CAddressBookData::Purpose::UNKNOWN) batch.WritePurpose(address, addr_book_data.GetPurposeString());
-            if (!label.empty()) batch.WriteName(address, label);
+            batch.WriteAddressBookEntry(EncodeDestination(destination), addr_book_data);
         }
     };
     if (data.watchonly_wallet) persist_address_book(*data.watchonly_wallet);

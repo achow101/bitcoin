@@ -1108,7 +1108,18 @@ bool WalletBatch::WriteWalletFlags(const uint64_t flags)
 
 bool WalletBatch::WriteAddressBookEntry(const std::string& address, const CAddressBookData& entry)
 {
-    return WriteIC(std::make_pair(DBKeys::ADDRESSBOOKENTRY, address), entry, /*fOverwrite=*/true);
+    return WriteName(address, entry.GetLabel())
+        && WritePurpose(address, entry.GetPurposeString())
+        && WriteIC(std::make_pair(DBKeys::ADDRESSBOOKENTRY, address), entry, /*fOverwrite=*/true);
+}
+
+bool WalletBatch::EraseAddressBookEntry(const std::string& address)
+{
+    return EraseName(address)
+        && ErasePurpose(address)
+        && EraseDestData(address, "used")
+        && EraseDestData(address, "rr")
+        && EraseIC(std::make_pair(DBKeys::ADDRESSBOOKENTRY, address));
 }
 
 bool WalletBatch::EraseRecords(const std::unordered_set<std::string>& types)
