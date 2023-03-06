@@ -21,6 +21,7 @@ class uint256;
 struct CBlockLocator;
 
 namespace wallet {
+class CAddressBookData;
 class CKeyPool;
 class CMasterKey;
 class CWallet;
@@ -60,6 +61,7 @@ namespace DBKeys {
 extern const std::string ACENTRY;
 extern const std::string ACTIVEEXTERNALSPK;
 extern const std::string ACTIVEINTERNALSPK;
+extern const std::string ADDRESSBOOKENTRY;
 extern const std::string BESTBLOCK;
 extern const std::string BESTBLOCK_NOMERKLE;
 extern const std::string CRYPTED_KEY;
@@ -280,6 +282,8 @@ public:
 
     //! write the hdchain model (external chain child index counter)
     bool WriteHDChain(const CHDChain& chain);
+
+    bool WriteAddressBookEntry(const std::string& address, const CAddressBookData& entry);
 
     //! Delete records of the given types
     bool EraseRecords(const std::unordered_set<std::string>& types);

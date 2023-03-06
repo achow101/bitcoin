@@ -268,6 +268,34 @@ public:
     const std::optional<std::pair<int64_t, std::string>> GetReceiveRequest() const { return m_receive_request; }
     void SetReceiveRequest(int64_t id, const std::string& request) { m_receive_request.emplace(id, request); }
     void RemoveReceiveRequest() { m_receive_request.reset(); }
+
+    template<typename Stream>
+    void Serialize(Stream& s) const
+    {
+        s << m_label << static_cast<uint8_t>(m_purpose) << m_input_used << m_change;
+        if (m_receive_request.has_value()) {
+            s << true << m_receive_request.value();
+        } else {
+            s << false;
+        }
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s)
+    {
+        uint8_t purpose;
+        s >> m_label >> purpose >> m_input_used >> m_change;
+
+        m_purpose = static_cast<CAddressBookData::Purpose>(purpose);
+
+        bool have_rr;
+        s >> have_rr;
+        if (have_rr) {
+            std::pair<int64_t, std::string> rr;
+            s >> rr;
+            m_receive_request.emplace(rr);
+        }
+    }
 };
 
 struct CRecipient

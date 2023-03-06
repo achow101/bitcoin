@@ -31,6 +31,7 @@ namespace DBKeys {
 const std::string ACENTRY{"acentry"};
 const std::string ACTIVEEXTERNALSPK{"activeexternalspk"};
 const std::string ACTIVEINTERNALSPK{"activeinternalspk"};
+const std::string ADDRESSBOOKENTRY{"addressbookentry"};
 const std::string BESTBLOCK_NOMERKLE{"bestblock_nomerkle"};
 const std::string BESTBLOCK{"bestblock"};
 const std::string CRYPTED_KEY{"ckey"};
@@ -1103,6 +1104,11 @@ bool WalletBatch::WriteHDChain(const CHDChain& chain)
 bool WalletBatch::WriteWalletFlags(const uint64_t flags)
 {
     return WriteIC(DBKeys::FLAGS, flags);
+}
+
+bool WalletBatch::WriteAddressBookEntry(const std::string& address, const CAddressBookData& entry)
+{
+    return WriteIC(std::make_pair(DBKeys::ADDRESSBOOKENTRY, address), entry, /*fOverwrite=*/true);
 }
 
 bool WalletBatch::EraseRecords(const std::unordered_set<std::string>& types)
