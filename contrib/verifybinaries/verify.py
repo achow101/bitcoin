@@ -189,7 +189,7 @@ def parse_gpg_result(
 
     # Ensure that all lines we match on include a prefix that prevents malicious input
     # from fooling the parser.
-    def line_begins_with(patt: str, line: str) -> t.Optional[re.Match[str]]:
+    def line_begins_with(patt: str, line: str) -> t.Optional[re.Match]:
         return re.match(r'^(\[GNUPG:\])\s+' + patt, line)
 
     curr_sigs = unknown_sigs
