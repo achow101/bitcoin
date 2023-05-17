@@ -3,6 +3,7 @@ $(package)_version=3380500
 $(package)_download_path=https://sqlite.org/2022/
 $(package)_file_name=sqlite-autoconf-$($(package)_version).tar.gz
 $(package)_sha256_hash=5af07de982ba658fd91a03170c945f99c971f6955bc79df3266544373e39869c
+$(package)_patches=msan-test.patch
 
 define $(package)_set_vars
 $(package)_config_opts=--disable-shared --disable-readline --disable-dynamic-extensions --enable-option-checking
@@ -18,6 +19,7 @@ $(package)_cflags+=-DSQLITE_OMIT_DECLTYPE -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLI
 endef
 
 define $(package)_preprocess_cmds
+  patch -p0 < $($(package)_patch_dir)/msan-test.patch && \
   cp -f $(BASEDIR)/config.guess $(BASEDIR)/config.sub .
 endef
 

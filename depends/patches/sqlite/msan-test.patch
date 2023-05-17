@@ -1,0 +1,11 @@
+--- sqlite3.c	2022-05-06 11:46:37.000000000 -0400
++++ sqlite3.c	2023-05-17 19:09:18.349791666 -0400
+@@ -57939,7 +57939,7 @@
+     if( zPathname==0 ){
+       return SQLITE_NOMEM_BKPT;
+     }
+-    zPathname[0] = 0; /* Make sure initialized even if FullPathname() fails */
++    memset(zPathname, 0, nPathname);
+     rc = sqlite3OsFullPathname(pVfs, zFilename, nPathname, zPathname);
+     if( rc!=SQLITE_OK ){
+       if( rc==SQLITE_OK_SYMLINK ){
