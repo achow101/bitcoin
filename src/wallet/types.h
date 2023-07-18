@@ -14,6 +14,7 @@
 #define BITCOIN_WALLET_TYPES_H
 
 #include <type_traits>
+#include <pubkey.h>
 
 namespace wallet {
 /**
