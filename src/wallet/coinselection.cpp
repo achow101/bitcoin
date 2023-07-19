@@ -450,7 +450,7 @@ void OutputGroupTypeMap::Push(const OutputGroup& group, OutputType type, bool in
     }
 }
 
-CAmount GetSelectionWaste(const std::set<std::shared_ptr<COutput>>& inputs, CAmount change_cost, CAmount target, bool use_effective_value)
+CAmount SelectionResult::GetSelectionWaste(const std::set<std::shared_ptr<COutput>>& inputs, CAmount change_cost, CAmount target, bool use_effective_value)
 {
     // This function should not be called with empty inputs as that would mean the selection failed
     assert(!inputs.empty());
