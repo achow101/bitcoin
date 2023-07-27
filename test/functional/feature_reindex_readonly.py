@@ -30,8 +30,10 @@ class BlockstoreReindexTest(BitcoinTestFramework):
         self.log.debug("Make the first block file read-only")
 
         filename = self.nodes[0].chain_path / "blocks" / "blk00000.dat"
+        used_chattr = False
         try:
-            subprocess.run(['chattr', '+i', filename])
+            subprocess.check_call(['chattr', '+i', filename])
+            used_chattr = True
         except Exception as e:
             self.log.warning(f"Can not make file immutable ({e}), trying read-only instead")
             (self.nodes[0].chain_path / "blocks" / "blk00000.dat").chmod(stat.S_IREAD)
@@ -41,6 +43,8 @@ class BlockstoreReindexTest(BitcoinTestFramework):
             self.nodes[0].assert_start_raises_init_error(extra_args=['-reindex', '-fastprune'],
                 expected_msg="Error: A fatal internal error occurred, see debug.log for details")
 
+        if used_chattr:
+            subprocess.check_call(['chattr', '-i', filename])
 
     def run_test(self):
         self.reindex_readonly()
