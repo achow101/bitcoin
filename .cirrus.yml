@@ -192,6 +192,7 @@ task:
   << : *GLOBAL_TASK_TEMPLATE
   container:
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: debian:bullseye
       FILE_ENV: "./ci/test/00_setup_env_arm.sh"
   << : *CREDITS_TEMPLATE
@@ -203,6 +204,7 @@ task:
   << : *GLOBAL_TASK_TEMPLATE
   container:
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:jammy
       FILE_ENV: "./ci/test/00_setup_env_win64.sh"
   << : *CREDITS_TEMPLATE
@@ -214,6 +216,7 @@ task:
   << : *GLOBAL_TASK_TEMPLATE
   container:
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: quay.io/centos/centos:stream9
       FILE_ENV: "./ci/test/00_setup_env_i686_centos.sh"
   # For faster CI feedback, immediately schedule one task that runs all tests
@@ -239,6 +242,7 @@ task:
     cpu: 4
     memory: 16G  # The default memory is too small, so double everything
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:lunar
       FILE_ENV: "./ci/test/00_setup_env_native_tsan.sh"
   env:
@@ -249,6 +253,7 @@ task:
   << : *GLOBAL_TASK_TEMPLATE
   container:
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:jammy
       FILE_ENV: "./ci/test/00_setup_env_native_msan.sh"
   env:
@@ -281,6 +286,7 @@ task:
     cpu: 4  # Increase CPU and memory to avoid timeout
     memory: 16G
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:lunar
       FILE_ENV: "./ci/test/00_setup_env_native_fuzz.sh"
   env:
@@ -293,6 +299,7 @@ task:
     cpu: 4
     memory: 16G  # The default memory is too small, so double everything
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:focal
       FILE_ENV: "./ci/test/00_setup_env_i686_multiprocess.sh"
   env:
@@ -303,6 +310,7 @@ task:
   << : *GLOBAL_TASK_TEMPLATE
   container:
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:focal
       FILE_ENV: "./ci/test/00_setup_env_native_nowallet_libbitcoinkernel.sh"
   << : *CREDITS_TEMPLATE
@@ -314,6 +322,7 @@ task:
   << : *CONTAINER_DEPENDS_TEMPLATE
   container:
     docker_arguments:
+      "--cap-add": "LINUX_IMMUTABLE"
       CI_IMAGE_NAME_TAG: ubuntu:jammy
       FILE_ENV: "./ci/test/00_setup_env_mac.sh"
   macos_sdk_cache:
