@@ -40,8 +40,30 @@ class SilentPaymentsReceivingTest(BitcoinTestFramework):
             wallet = self.nodes[0].get_wallet_rpc("legacy_sp")
             assert_raises_rpc_error(-12, "Error: No silent-payment addresses available", wallet.getnewaddress, address_type="silent-payment")
 
+    def test_basic(self):
+        self.log.info("Basic receive and send")
+
+        self.nodes[0].createwallet(wallet_name="basic", silent_payment=True)
+        wallet = self.nodes[0].get_wallet_rpc("basic")
+
+        addr = wallet.getnewaddress(address_type="silent-payment")
+        txid = self.def_wallet.sendtoaddress(addr, 10)
+        self.generate(self.nodes[0], 1)
+
+        assert_equal(wallet.getbalance(), 10)
+        wallet.gettransaction(txid)
+
+        wallet.sendall([self.def_wallet.getnewaddress()])
+        self.generate(self.nodes[0], 1)
+
+        assert_equal(wallet.getbalance(), 0)
+
     def run_test(self):
+        self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        self.generate(self.nodes[0], 101)
+
         self.test_createwallet()
+        self.test_basic()
 
 
 if __name__ == '__main__':
