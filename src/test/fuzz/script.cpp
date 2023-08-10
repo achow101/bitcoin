@@ -152,6 +152,11 @@ FUZZ_TARGET(script, .init = initialize_script)
         (void)GetKeyForDestination(/*store=*/{}, tx_destination_1);
         const CScript dest{GetScriptForDestination(tx_destination_1)};
         const bool valid{IsValidDestination(tx_destination_1)};
+        if (!std::get_if<V0SilentPaymentDestination>(&tx_destination_1)) {
+            // Only do this check for non-silent payments destinations since a V0SilentPaymentDestination
+            // is valid, but does not have a CScript
+            Assert(dest.empty() != valid);
+        }
 
         if (!std::get_if<PubKeyDestination>(&tx_destination_1)) {
             // Only try to round trip non-pubkey destinations since PubKeyDestination has no encoding
