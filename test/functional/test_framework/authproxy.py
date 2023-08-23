@@ -115,8 +115,10 @@ class AuthServiceProxy():
         ))
         if args and argsn:
             params = dict(args=args, **argsn)
-        else:
+        elif args or argsn:
             params = args or argsn
+        else:
+            params = []
         return {'version': '1.1',
                 'method': self._service_name,
                 'params': params,
