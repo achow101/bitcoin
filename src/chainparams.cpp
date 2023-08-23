@@ -277,7 +277,7 @@ public:
         fMiningRequiresPeers = false;
         fAllowMinDifficultyBlocks = true;
         fDefaultConsistencyChecks = true;
-        fRequireStandard = false;
+        fRequireStandard = true;
         fMineBlocksOnDemand = true;
         fTestnetToBeDeprecatedFieldRPC = false;
     }
