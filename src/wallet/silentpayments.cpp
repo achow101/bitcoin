@@ -586,4 +586,12 @@ bool SilentPaymentsSPKM::AddTweakWithDB(WalletBatch& batch, const uint256& tweak
     m_spk_tweaks.emplace(GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{tweaked_pub}}), tweak);
     return batch.WriteSilentPaymentsTweak(GetID(), tweak);
 }
+
+std::pair<CKey, bool> SilentPaymentsSPKM::GetPrivKeyForSilentPayment(const CScript& scriptPubKey) const
+{
+    if (!IsMine(scriptPubKey)) return {};
+
+    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(scriptPubKey, /*include_private=*/true);
+    return {keys->keys.begin()->second, true};
+}
 }
