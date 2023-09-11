@@ -450,3 +450,30 @@ bool CExtPubKey::Derive(CExtPubKey &out, unsigned int _nChild) const {
 
     return CPubKey(output_pubkey);
 }
+
+bool CPubKey::Subtract(const CPubKey& b)
+{
+    bool compressed = IsCompressed();
+
+    // Parse
+    secp256k1_pubkey a_pubkey, b_pubkey;
+    int ret = secp256k1_ec_pubkey_parse(secp256k1_context_static, &a_pubkey, a.data(), a.size());
+    assert(ret == 1);
+    ret = secp256k1_ec_pubkey_parse(secp256k1_context_static, &b_pubkey, b.data(), b.size());
+    assert(ret == 1);
+
+    // Negate b
+    secp256k1_ec_pubkey_negate(secp256k1_context_static, &b_pubkey);
+
+    // Add negated b to a
+    secp256k1_pubkey result;
+    ret = secp256k1_ec_pubkey_combine(secp256k1_context_static, &result, {&a_pubkey, &b_pubkey}, 2);
+    if (ret != 1) return false;
+
+    // Update a
+    unsigned char pub[SIZE];
+    size_t publen = SIZE;
+    secp256k1_ec_pubkey_serialize(secp256k1_context_static, pub, &publen, &pubkey, compressed ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
+    Set(pub, pub + publen);
+    return true;
+}

@@ -63,6 +63,13 @@ std::vector<uint256> GetTxOutputTweaks(const CPubKey& spend_pubkey, const CPubKe
                 output_index++;
                 // Return true so that this output pubkey is removed the from vector and not checked again
                 return true;
+            } else {
+                // Check for label
+                CPubKey sub = output_pubkey.ConvertToCompressedPubKey();
+                sub.Subtract(computed_sp_pubkey);
+                if (labels.contains(sub)) {
+
+                }
             }
             return false;
         }), output_pub_keys.end());

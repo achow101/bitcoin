@@ -217,6 +217,10 @@ public:
     /** Tweak a public key by adding the generator multiplied with tweak32 to it. */
     CPubKey TweakAdd(const unsigned char *tweak32) const;
 
+    //! Subtract a public key from this public key in place
+    //! Returns true if successful, false if the result is 0
+    bool Subtract(const CPubKey& b);
+
     //! Recover a public key from a compact signature.
     bool RecoverCompact(const uint256& hash, const std::vector<unsigned char>& vchSig);
 
