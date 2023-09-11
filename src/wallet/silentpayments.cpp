@@ -221,7 +221,8 @@ SilentPaymentsSPKM::SilentPaymentsSPKM(WalletStorage& storage, const uint256& id
     // Create the scriptPubKeys given the tweaks and store them in memory
     for (const uint256& tweak : tweaks) {
         XOnlyPubKey output_key{m_address.m_spend_pubkey.TweakAdd(tweak.data())};
-        m_spk_tweaks.emplace(GetScriptForDestination(WitnessV1Taproot(output_key)), tweak);
+        CScript s = GetScriptForDestination(WitnessV1Taproot(output_key));
+        m_spk_tweaks.emplace(s, tweak);
     }
 
     // Setup labels and change
@@ -565,6 +566,16 @@ isminetype SilentPaymentsSPKM::IsMineSilentPayments(const CTransaction& tx, cons
     // Retrieve the output tweaks
     std::vector<uint256> tweaks = GetTxOutputTweaks(m_address.m_spend_pubkey, ecdh_pubkey, output_keys);
 
+    // Also check change outputs
+    // TODO: Do it as if it were a label
+    std::vector<uint256> change_tweaks = GetTxOutputTweaks(m_change_address.m_spend_pubkey, ecdh_pubkey, output_keys);
+    // Add change label's tweak to each change_tweak too
+    for (const uint256& tweak : change_tweaks) {
+        arith_uint256 final_tweak = UintToArith256(tweak);
+        final_tweak += UintToArith256(m_change_label.first);
+        tweaks.emplace_back(std::move(ArithToUint256(final_tweak)));
+    }
+
     // If no tweaks, not mine
     if (tweaks.empty()) {
         return ISMINE_NO;
@@ -583,7 +594,8 @@ isminetype SilentPaymentsSPKM::IsMineSilentPayments(const CTransaction& tx, cons
 bool SilentPaymentsSPKM::AddTweakWithDB(WalletBatch& batch, const uint256& tweak)
 {
     CPubKey tweaked_pub = m_address.m_spend_pubkey.TweakAdd(tweak.data());
-    m_spk_tweaks.emplace(GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{tweaked_pub}}), tweak);
+    CScript s = GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{tweaked_pub}});
+    m_spk_tweaks.emplace(s, tweak);
     return batch.WriteSilentPaymentsTweak(GetID(), tweak);
 }
 
