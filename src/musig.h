@@ -55,4 +55,6 @@ public:
     bool IsValid();
 };
 
+uint256 MuSig2SessionID(const CPubKey& script_pubkey, const CPubKey& part_pubkey, const uint256& sighash);
+
 #endif // BITCOIN_MUSIG_H

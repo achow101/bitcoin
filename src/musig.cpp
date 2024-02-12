@@ -100,3 +100,10 @@ bool MuSig2SecNonce::IsValid()
 {
     return m_impl->IsValid();
 }
+
+uint256 MuSig2SessionID(const CPubKey& script_pubkey, const CPubKey& part_pubkey, const uint256& sighash)
+{
+    HashWriter hasher;
+    hasher << script_pubkey << part_pubkey << sighash;
+    return hasher.GetSHA256();
+}
