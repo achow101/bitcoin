@@ -527,6 +527,9 @@ public:
     void RefreshTXOsFromTx(const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /** Cache outputs that belong to the wallet for all transactions in the wallet */
     void RefreshAllTXOs(WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void PruneSpentTXOs() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::pair<TXOMap::iterator, TXOMap::iterator> MarkTXOUnusable(const COutPoint& outpoint) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::pair<TXOMap::iterator, TXOMap::iterator> MarkTXOUsable(const COutPoint& outpoint) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Return depth of transaction in blockchain:

@@ -18,6 +18,9 @@
 #include <wallet/types.h>
 
 #include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/indexed_by.hpp>
+#include <boost/multi_index/mem_fun.hpp>
+#include <boost/multi_index/tag.hpp>
 #include <boost/multi_index_container.hpp>
 
 #include <bitset>
@@ -140,21 +143,23 @@ private:
     bool m_tx_coinbase;
     bool m_tx_from_me;
     int64_t m_tx_time;
+    bool m_usable;
 
 public:
-    WalletTXO(const COutPoint& outpoint, const CTxOut& output, const TxState& state, bool coinbase, bool tx_from_me, int64_t tx_time, uint32_t tx_version)
+    WalletTXO(const COutPoint& outpoint, const CTxOut& output, const TxState& state, bool coinbase, bool tx_from_me, int64_t tx_time, uint32_t tx_version, bool usable)
     : m_outpoint(outpoint),
     m_output(output),
     m_tx_state(state),
     m_tx_coinbase(coinbase),
     m_tx_from_me(tx_from_me),
     m_tx_time(tx_time),
+    m_usable(usable),
     m_tx_version(tx_version)
     {}
 
     const uint32_t m_tx_version;
 
-    const COutPoint GetOutpoint() const { return m_outpoint; }
+    COutPoint GetOutpoint() const { return m_outpoint; }
     const CTxOut& GetTxOut() const { return m_output; }
 
     const TxState& GetState() const { return m_tx_state; }
@@ -166,21 +171,25 @@ public:
     bool GetTxFromMe() const { return m_tx_from_me; }
 
     int64_t GetTxTime() const { return m_tx_time; }
+
+    void MarkUsable() { m_usable = true; }
+    void MarkUnusable() { m_usable = false; }
+    bool GetUsable() const { return m_usable; }
 };
 
-struct wallettxo_outpoint
-{
-    typedef COutPoint result_type;
-    result_type operator() (const WalletTXO& txo) const
-    {
-        return txo.GetOutpoint();
-    }
-};
+struct index_by_spent {};
 
 using TXOIndex = boost::multi_index_container<
     WalletTXO,
     boost::multi_index::indexed_by<
-        boost::multi_index::hashed_unique<wallettxo_outpoint, SaltedOutpointHasher>
+        boost::multi_index::hashed_unique<
+            boost::multi_index::const_mem_fun<WalletTXO, COutPoint, &WalletTXO::GetOutpoint>,
+            SaltedOutpointHasher
+        >,
+        boost::multi_index::hashed_non_unique<
+            boost::multi_index::tag<index_by_spent>,
+            boost::multi_index::const_mem_fun<WalletTXO, bool, &WalletTXO::GetUsable>
+        >
     >
 >;
 
