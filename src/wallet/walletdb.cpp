@@ -1035,7 +1035,7 @@ static std::map<Wtxid, CTransactionRef> ReadWtxVariants(DatabaseBatch& batch, co
     return variants;
 }
 
-static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch, WalletBatch& wallet_batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     std::unique_ptr<DatabaseCursor> cursor = batch.GetNewTransactionsCursor();
     if (!cursor) {
@@ -1044,7 +1044,7 @@ static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
     }
 
     LoadResult tx_res = LoadRecords(pwallet, *cursor, DBKeys::TX,
-        [&batch] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+        [&batch, &wallet_batch] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
         DBErrors result = DBErrors::LOAD_OK;
         Txid hash;
         key >> hash;
@@ -1052,6 +1052,11 @@ static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
             CWalletTx wtx{deserialize, value, ReadWtxVariants(batch, hash)};
             if (wtx.GetHash() != hash) {
                 result = std::max(result, DBErrors::NEED_RESCAN);
+            }
+
+            if (!wtx.m_from_me.has_value()) {
+                wtx.m_from_me = pwallet->IsFromMe(*wtx.GetTx());
+                wallet_batch.WriteTxMetadata(wtx);
             }
 
             if (!pwallet->LoadToWallet(std::move(wtx))) {
@@ -1067,7 +1072,7 @@ static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
     return tx_res;
 }
 
-static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered, WalletBatch& wallet_batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     AssertLockHeld(pwallet->cs_wallet);
     DBErrors result = DBErrors::LOAD_OK;
@@ -1076,7 +1081,7 @@ static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_
 
     if (pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         // Note that we do not need to handle or set any_unordered for this upgrade. All descriptor wallets will have tx records which have nOrderPos set.
-        LoadResult tx_table_res = LoadWalletTxs(pwallet, batch);
+        LoadResult tx_table_res = LoadWalletTxs(pwallet, batch, wallet_batch);
         result = std::max(result, tx_table_res.m_result);
     } else {
         // Load the old way for legacy wallet migration
@@ -1247,7 +1252,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         result = std::max(LoadDecryptionKeys(pwallet, *m_batch), result);
 
         // Load tx records
-        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered), result);
+        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered, *this), result);
     } catch (std::runtime_error& e) {
         // Exceptions that can be ignored or treated as non-critical are handled by the individual loading functions.
         // Any uncaught exceptions will be caught here and treated as critical.
