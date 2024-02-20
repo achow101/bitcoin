@@ -415,7 +415,15 @@ public:
         wallet->SetLastBlockProcessed(wallet->GetLastBlockHeight() + 1, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         auto it = wallet->mapWallet.find(tx->GetHash());
         BOOST_CHECK(it != wallet->mapWallet.end());
-        it->second.m_state = TxStateConfirmed{m_node.chainman->ActiveChain().Tip()->GetBlockHash(), m_node.chainman->ActiveChain().Height(), /*index=*/1};
+        TxStateConfirmed conf_state{m_node.chainman->ActiveChain().Tip()->GetBlockHash(), m_node.chainman->ActiveChain().Height(), /*index=*/1};
+        it->second.m_state = conf_state;
+        for (unsigned int i = 0; i < tx->vout.size(); ++i) {
+            COutPoint outpoint(tx->GetHash(), i);
+            auto it = wallet->m_txos.find(outpoint);
+            if (it != wallet->m_txos.end()) {
+                it->second.SetState(conf_state);
+            }
+        }
         return it->second;
     }
 
