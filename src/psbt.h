@@ -320,7 +320,7 @@ public:
     bool IsNull() const;
     void FillSignatureData(SignatureData& sigdata) const;
     void FromSignatureData(const SignatureData& sigdata);
-    void Merge(const PSBTInput& input);
+    [[nodiscard]] bool Merge(const PSBTInput& input);
     COutPoint GetOutPoint() const;
     /**
      * Retrieves the UTXO for this input
@@ -1048,7 +1048,7 @@ public:
     bool IsNull() const;
     void FillSignatureData(SignatureData& sigdata) const;
     void FromSignatureData(const SignatureData& sigdata);
-    void Merge(const PSBTOutput& output);
+    [[nodiscard]] bool Merge(const PSBTOutput& output);
 
     explicit PSBTOutput(uint32_t psbt_version, CAmount amount, const CScript& script)
         : m_psbt_version(psbt_version),
