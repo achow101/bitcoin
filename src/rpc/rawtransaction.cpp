@@ -1872,7 +1872,7 @@ static RPCHelpMan joinpsbts()
     CMutableTransaction tx;
     tx.version = best_version;
     tx.nLockTime = best_locktime;
-    PartiallySignedTransaction merged_psbt(tx);
+    PartiallySignedTransaction merged_psbt(tx, psbtxs.at(0).GetVersion());
 
     // Merge
     for (auto& psbt : psbtxs) {
@@ -1904,7 +1904,7 @@ static RPCHelpMan joinpsbts()
     std::shuffle(input_indices.begin(), input_indices.end(), FastRandomContext());
     std::shuffle(output_indices.begin(), output_indices.end(), FastRandomContext());
 
-    PartiallySignedTransaction shuffled_psbt(tx);
+    PartiallySignedTransaction shuffled_psbt(tx, merged_psbt.GetVersion());
     for (int i : input_indices) {
         shuffled_psbt.AddInput(merged_psbt.inputs[i]);
     }

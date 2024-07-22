@@ -15,7 +15,7 @@
 
 using common::PSBTError;
 
-PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction& tx)
+PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction& tx, uint32_t version) : m_version(version)
 {
     tx_version = tx.version;
     fallback_locktime = tx.nLockTime;
