@@ -111,6 +111,10 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
         if (bdb_ro_err && !db) {
             return;
         }
+        if (!db) {
+            std::cout << error.original << std::endl;
+            throw std::runtime_error(error.original);
+        }
         assert(db);
         if (bdb_ro_strict_err) {
             // BerkeleyRO will be stricter than BDB. Ignore when those specific errors are hit.
