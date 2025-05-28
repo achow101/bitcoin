@@ -585,7 +585,7 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
-    auto wallet = TestLoadWallet(context);
+    auto wallet = TestCreateWallet(context);
     CKey key = GenerateRandomKey();
     AddKey(*wallet, key);
     TestUnloadWallet(std::move(wallet));
@@ -682,7 +682,7 @@ BOOST_FIXTURE_TEST_CASE(CreateWalletWithoutChain, BasicTestingSetup)
 {
     WalletContext context;
     context.args = &m_args;
-    auto wallet = TestLoadWallet(context);
+    auto wallet = TestCreateWallet(context);
     BOOST_CHECK(wallet);
     WaitForDeleteWallet(std::move(wallet));
 }
@@ -693,7 +693,7 @@ BOOST_FIXTURE_TEST_CASE(RemoveTxs, TestChain100Setup)
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
-    auto wallet = TestLoadWallet(context);
+    auto wallet = TestCreateWallet(context);
     CKey key = GenerateRandomKey();
     AddKey(*wallet, key);
 
