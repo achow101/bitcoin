@@ -188,7 +188,6 @@ public:
     std::vector<std::string> m_messages;
     // BIP 70 Payment Request (deprecated, field kept to preserve metadata from old wallets)
     std::vector<std::string> m_payment_requests;
-    unsigned int fTimeReceivedIsTxTime;
     unsigned int nTimeReceived; //!< time received by this node
     /**
      * Stable timestamp that never changes, and reflects the order a transaction
