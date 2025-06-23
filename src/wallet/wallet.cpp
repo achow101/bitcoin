@@ -894,6 +894,7 @@ DBErrors CWallet::ReorderTransactions()
 
             if (!batch.WriteTx(*pwtx))
                 return DBErrors::LOAD_FAIL;
+            if (!batch.SQLUpdateFullTx(*pwtx)) return DBErrors::LOAD_FAIL;
         }
         else
         {
@@ -912,6 +913,7 @@ DBErrors CWallet::ReorderTransactions()
             // Since we're changing the order, write it back
             if (!batch.WriteTx(*pwtx))
                 return DBErrors::LOAD_FAIL;
+            if (!batch.SQLUpdateFullTx(*pwtx)) return DBErrors::LOAD_FAIL;
         }
     }
     batch.WriteOrderPosNext(nOrderPosNext);
@@ -963,6 +965,10 @@ bool CWallet::MarkReplaced(const Txid& originalHash, const Txid& newHash)
 
     bool success = true;
     if (!batch.WriteTx(wtx)) {
+        WalletLogPrintf("%s: Updating batch tx %s failed\n", __func__, wtx.GetHash().ToString());
+        success = false;
+    }
+    if (!batch.SQLUpdateTxReplacedBy(wtx)) {
         WalletLogPrintf("%s: Updating batch tx %s failed\n", __func__, wtx.GetHash().ToString());
         success = false;
     }
@@ -1073,6 +1079,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
             // Break caches since we have changed the state
             desc_tx->MarkDirty();
             batch.WriteTx(*desc_tx);
+            batch.SQLWriteTx(*desc_tx);
             MarkInputsDirty(desc_tx->tx);
             for (unsigned int i = 0; i < desc_tx->tx->vout.size(); ++i) {
                 COutPoint outpoint(desc_tx->GetHash(), i);
@@ -1091,9 +1098,14 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     WalletLogPrintf("AddToWallet %s  %s%s %s\n", hash.ToString(), (fInsertedNew ? "new" : ""), (fUpdated ? "update" : ""), TxStateString(state));
 
     // Write to disk
-    if (fInsertedNew || fUpdated)
-        if (!batch.WriteTx(wtx))
-            return nullptr;
+    if (fInsertedNew) {
+        if (!batch.WriteTx(wtx)) return nullptr;
+        if (!batch.SQLWriteTx(wtx)) return nullptr;
+    }
+    if (fUpdated) {
+        if (!batch.WriteTx(wtx)) return nullptr;
+        if (!batch.SQLUpdateTxState(wtx)) return nullptr;
+    }
 
     // Break debit/credit balance caches:
     wtx.MarkDirty();
