@@ -165,13 +165,20 @@ SQLiteDatabase::SQLiteDatabase(const fs::path& dir_path, const fs::path& file_pa
 
 void SQLiteBatch::SetupSQLStatements()
 {
-    const std::vector<std::pair<sqlite3_stmt**, const char*>> statements{
+    std::vector<std::pair<sqlite3_stmt**, const char*>> statements{
         {&m_read_stmt, "SELECT value FROM main WHERE key = ?"},
         {&m_insert_stmt, "INSERT INTO main VALUES(?, ?)"},
         {&m_overwrite_stmt, "INSERT or REPLACE into main values(?, ?)"},
         {&m_delete_stmt, "DELETE FROM main WHERE key = ?"},
         {&m_delete_prefix_stmt, "DELETE FROM main WHERE instr(key, ?) = 1"},
     };
+    if (m_database.GetSchemaVersion() >= 1) {
+        statements.emplace_back(&m_insert_tx_stmt, "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        statements.emplace_back(&m_update_full_tx_stmt, "UPDATE transactions SET comment = ?, comment_to = ?, replaces = ?, replaced_by = ? , timesmart = ?, order_pos = ?, messages= ?, state_type =?, state_data = ? WHERE txid = ?");
+        statements.emplace_back(&m_update_tx_replaces_stmt, "UPDATE transactions SET replaces = ? WHERE txid = ?");
+        statements.emplace_back(&m_update_tx_replaced_by_stmt, "UPDATE transactions SET replaced_by = ? WHERE txid = ?");
+        statements.emplace_back(&m_update_tx_state_stmt, "UPDATE transactions SET state_type = ?, state_data = ? WHERE txid = ?");
+    }
 
     for (const auto& [stmt_prepared, stmt_text] : statements) {
         if (*stmt_prepared == nullptr) {
@@ -221,9 +228,9 @@ bool SQLiteDatabase::Verify(bilingual_str& error)
     // Check our schema version
     read_result = ReadPragmaInteger(m_db, "user_version", "sqlite wallet schema version", error);
     if (!read_result.has_value()) return false;
-    int32_t user_ver = read_result.value();
-    if (user_ver > WALLET_SCHEMA_VERSION) {
-        error = strprintf(_("SQLiteDatabase: Unknown sqlite wallet schema version %d. Only versions less than %d is supported"), user_ver, WALLET_SCHEMA_VERSION);
+    m_schema_version = read_result.value();
+    if (m_schema_version > WALLET_SCHEMA_VERSION) {
+        error = strprintf(_("SQLiteDatabase: Unknown sqlite wallet schema version %d. Only versions less than %d is supported"), m_schema_version, WALLET_SCHEMA_VERSION);
         return false;
     }
 
@@ -418,6 +425,11 @@ std::unique_ptr<DatabaseBatch> SQLiteDatabase::MakeBatch()
     return std::make_unique<SQLiteBatch>(*this);
 }
 
+int32_t SQLiteDatabase::GetSchemaVersion() const
+{
+    return m_schema_version;
+}
+
 SQLiteBatch::SQLiteBatch(SQLiteDatabase& database)
     : m_database(database)
 {
@@ -451,6 +463,11 @@ void SQLiteBatch::Close()
         {&m_overwrite_stmt, "overwrite"},
         {&m_delete_stmt, "delete"},
         {&m_delete_prefix_stmt, "delete prefix"},
+        {&m_insert_tx_stmt, "insert tx"},
+        {&m_update_full_tx_stmt, "update tx"},
+        {&m_update_tx_replaces_stmt, "update tx replaces"},
+        {&m_update_tx_replaced_by_stmt, "update tx replaced_by"},
+        {&m_update_tx_state_stmt, "update tx state"},
     };
 
     for (const auto& [stmt_prepared, stmt_description] : statements) {
@@ -574,6 +591,100 @@ bool SQLiteBatch::HasKey(DataStream&& key)
     sqlite3_clear_bindings(m_read_stmt);
     sqlite3_reset(m_read_stmt);
     return res == SQLITE_ROW;
+}
+
+bool SQLiteBatch::WriteTx(
+    const Txid& txid,
+    const std::span<std::byte>& serialized_tx,
+    const std::optional<std::string>& comment,
+    const std::optional<std::string>& comment_to,
+    const std::optional<Txid>& replaces,
+    const std::optional<Txid>& replaced_by,
+    const uint32_t timesmart,
+    const int64_t order_pos,
+    const std::vector<std::string>& messages,
+    const int32_t state_type,
+    std::span<const std::byte> state_data
+)
+{
+    if (m_database.GetSchemaVersion() < 1) return true;
+
+    DataStream ser_messages; // Lifetime of DataStream needs to be until the statement is executed.
+    if (!BindToStatement(m_insert_tx_stmt, 1, txid, "txid")) return false;
+    if (!BindToStatement(m_insert_tx_stmt, 2, serialized_tx, "tx")) return false;
+    if (comment && !BindToStatement(m_insert_tx_stmt, 3, *comment, "comment")) return false;
+    if (comment_to && !BindToStatement(m_insert_tx_stmt, 4, *comment_to, "comment_to")) return false;
+    if (replaces && !BindToStatement(m_insert_tx_stmt, 5, *replaces, "replaces")) return false;
+    if (replaced_by && !BindToStatement(m_insert_tx_stmt, 6, *replaced_by, "replaced_by")) return false;
+    if (!BindToStatement(m_insert_tx_stmt, 7, timesmart, "timesmart")) return false;
+    if (!BindToStatement(m_insert_tx_stmt, 8, order_pos, "order_pos")) return false;
+    if (!messages.empty()) {
+        ser_messages << messages;
+        if (!BindToStatement(m_insert_tx_stmt, 9, ser_messages, "messages")) return false;
+    }
+    if (!BindToStatement(m_insert_tx_stmt, 10, state_type, "state_type")) return false;
+    if (!BindToStatement(m_insert_tx_stmt, 11, state_data, "state_data")) return false;
+    return ExecStatement(m_insert_tx_stmt);
+}
+
+bool SQLiteBatch::UpdateFullTx(
+    const Txid& txid,
+    const std::optional<std::string>& comment,
+    const std::optional<std::string>& comment_to,
+    const std::optional<Txid>& replaces,
+    const std::optional<Txid>& replaced_by,
+    const uint32_t timesmart,
+    const int64_t order_pos,
+    const std::vector<std::string>& messages,
+    const int32_t state_type,
+    std::span<const std::byte> state_data
+)
+{
+    if (m_database.GetSchemaVersion() < 1) return true;
+
+    DataStream ser_messages; // Lifetime of DataStream needs to be until the statement is executed.
+    if (comment && !BindToStatement(m_update_full_tx_stmt, 1, *comment, "comment")) return false;
+    if (comment_to && !BindToStatement(m_update_full_tx_stmt, 2, *comment_to, "comment_to")) return false;
+    if (replaces && !BindToStatement(m_update_full_tx_stmt, 3, *replaces, "replaces")) return false;
+    if (replaced_by && !BindToStatement(m_update_full_tx_stmt, 4, *replaced_by, "replaced_by")) return false;
+    if (!BindToStatement(m_update_full_tx_stmt, 5, timesmart, "timesmart")) return false;
+    if (!BindToStatement(m_update_full_tx_stmt, 6, order_pos, "order_pos")) return false;
+    if (!messages.empty()) {
+        ser_messages << messages;
+        if (!BindToStatement(m_update_full_tx_stmt, 9, ser_messages, "messages")) return false;
+    }
+    if (!BindToStatement(m_update_full_tx_stmt, 8, state_type, "state_type")) return false;
+    if (!BindToStatement(m_update_full_tx_stmt, 9, state_data, "state_data")) return false;
+    if (!BindToStatement(m_update_full_tx_stmt, 10, txid, "txid")) return false;
+    return ExecStatement(m_update_full_tx_stmt);
+}
+
+bool SQLiteBatch::UpdateTxReplaces(const Txid& txid, const Txid& replaces)
+{
+    if (m_database.GetSchemaVersion() < 1) return true;
+
+    if (!BindToStatement(m_update_tx_replaces_stmt, 1, replaces, "replaces")) return false;
+    if (!BindToStatement(m_update_tx_replaces_stmt, 2, txid, "txid")) return false;
+    return ExecStatement(m_update_tx_replaces_stmt);
+}
+
+bool SQLiteBatch::UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by)
+{
+    if (m_database.GetSchemaVersion() < 1) return true;
+
+    if (!BindToStatement(m_update_tx_replaced_by_stmt, 1, replaced_by, "replaced_by")) return false;
+    if (!BindToStatement(m_update_tx_replaced_by_stmt, 2, txid, "txid")) return false;
+    return ExecStatement(m_update_tx_replaced_by_stmt);
+}
+
+bool SQLiteBatch::UpdateTxState(const Txid& txid, const int32_t state_type, std::span<const std::byte> state_data)
+{
+    if (m_database.GetSchemaVersion() < 1) return true;
+
+    if (!BindToStatement(m_update_tx_state_stmt, 1, state_type, "state_type")) return false;
+    if (!BindToStatement(m_update_tx_state_stmt, 2, state_data, "state_data")) return false;
+    if (!BindToStatement(m_update_tx_state_stmt, 3, txid, "txid")) return false;
+    return ExecStatement(m_update_tx_state_stmt);
 }
 
 DatabaseCursor::Status SQLiteCursor::Next(DataStream& key, DataStream& value)
