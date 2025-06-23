@@ -104,7 +104,7 @@ public:
                  const int64_t order_pos,
                  const std::vector<std::string>& messages,
                  const int32_t state_type,
-                 std::span<const std::byte> state_data);
+                 const std::vector<unsigned char>& state_data);
     bool UpdateFullTx(const Txid& txid,
                  const std::optional<std::string>& comment,
                  const std::optional<std::string>& comment_to,
@@ -114,10 +114,10 @@ public:
                  const int64_t order_pos,
                  const std::vector<std::string>& messages,
                  const int32_t state_type,
-                 std::span<const std::byte> state_data);
+                 const std::vector<unsigned char>& state_data);
     bool UpdateTxReplaces(const Txid& txid, const Txid& replaces);
     bool UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by);
-    bool UpdateTxState(const Txid& txid, const int32_t state_type, std::span<const std::byte> state_data);
+    bool UpdateTxState(const Txid& txid, const int32_t state_type, const std::vector<unsigned char>& state_data);
 
     void Close() override;
 

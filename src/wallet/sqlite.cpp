@@ -604,7 +604,7 @@ bool SQLiteBatch::WriteTx(
     const int64_t order_pos,
     const std::vector<std::string>& messages,
     const int32_t state_type,
-    std::span<const std::byte> state_data
+    const std::vector<unsigned char>& state_data
 )
 {
     if (m_database.GetSchemaVersion() < 1) return true;
@@ -637,7 +637,7 @@ bool SQLiteBatch::UpdateFullTx(
     const int64_t order_pos,
     const std::vector<std::string>& messages,
     const int32_t state_type,
-    std::span<const std::byte> state_data
+    const std::vector<unsigned char>& state_data
 )
 {
     if (m_database.GetSchemaVersion() < 1) return true;
@@ -677,7 +677,7 @@ bool SQLiteBatch::UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by)
     return ExecStatement(m_update_tx_replaced_by_stmt);
 }
 
-bool SQLiteBatch::UpdateTxState(const Txid& txid, const int32_t state_type, std::span<const std::byte> state_data)
+bool SQLiteBatch::UpdateTxState(const Txid& txid, const int32_t state_type, const std::vector<unsigned char>& state_data)
 {
     if (m_database.GetSchemaVersion() < 1) return true;
 
