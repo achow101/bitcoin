@@ -24,7 +24,7 @@
 #include <vector>
 
 namespace wallet {
-static constexpr int32_t WALLET_SCHEMA_VERSION = 0;
+static constexpr int32_t WALLET_SCHEMA_VERSION = 1;
 
 static std::span<const std::byte> SpanFromBlob(sqlite3_stmt* stmt, int col)
 {
@@ -205,8 +205,8 @@ bool SQLiteDatabase::Verify(bilingual_str& error)
     read_result = ReadPragmaInteger(m_db, "user_version", "sqlite wallet schema version", error);
     if (!read_result.has_value()) return false;
     int32_t user_ver = read_result.value();
-    if (user_ver != WALLET_SCHEMA_VERSION) {
-        error = strprintf(_("SQLiteDatabase: Unknown sqlite wallet schema version %d. Only version %d is supported"), user_ver, WALLET_SCHEMA_VERSION);
+    if (user_ver > WALLET_SCHEMA_VERSION) {
+        error = strprintf(_("SQLiteDatabase: Unknown sqlite wallet schema version %d. Only versions less than %d is supported"), user_ver, WALLET_SCHEMA_VERSION);
         return false;
     }
 
@@ -323,6 +323,11 @@ void SQLiteDatabase::Open()
         ret = sqlite3_exec(m_db, "CREATE TABLE main(key BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL)", nullptr, nullptr, nullptr);
         if (ret != SQLITE_OK) {
             throw std::runtime_error(strprintf("SQLiteDatabase: Failed to create new database: %s\n", sqlite3_errstr(ret)));
+        }
+
+        ret = sqlite3_exec(m_db, "CREATE TABLE transactions(txid BLOB PRIMARY KEY NOT NULL, tx BLOB NOT NULL, comment STRING, comment_to STRING, replaces BLOB, replaced_by BLOB, timesmart INTEGER, order_pos INTEGER, messages BLOB, state_type INTEGER, state_data BLOB)", nullptr, nullptr, nullptr);
+        if (ret != SQLITE_OK) {
+            throw std::runtime_error(strprintf("SQLiteDatabase: Failed to create new transactions database: %s\n", sqlite3_errstr(ret)));
         }
 
         // Set the application id

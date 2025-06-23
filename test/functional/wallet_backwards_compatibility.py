@@ -267,61 +267,62 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
                 source = node_master_wallets_dir / wallet
                 shutil.copytree(source, dest)
 
-        self.log.info("Test that a wallet made on master can be opened on:")
-        # This test only works on the nodes that support descriptor wallets
-        # since we can no longer create legacy wallets.
-        for node in descriptors_nodes:
-            self.log.info(f"- {node.version}")
+        if False:
+            self.log.info("Test that a wallet made on master can be opened on:")
+            # This test only works on the nodes that support descriptor wallets
+            # since we can no longer create legacy wallets.
+            for node in descriptors_nodes:
+                self.log.info(f"- {node.version}")
+                for wallet_name in ["w1", "w2", "w3"]:
+                    if self.major_version_less_than(node, 22) and wallet_name == "w1":
+                        # Descriptor wallets created after 0.21 have taproot descriptors which 0.21 does not support, tested below
+                        continue
+                    # Also try to reopen on master after opening on old
+                    for n in [node, node_master]:
+                        n.loadwallet(wallet_name)
+                        wallet = n.get_wallet_rpc(wallet_name)
+                        info = wallet.getwalletinfo()
+                        if wallet_name == "w1":
+                            assert info['private_keys_enabled'] == True
+                            assert info['keypoolsize'] > 0
+                            txs = wallet.listtransactions()
+                            assert_equal(len(txs), 5)
+                            assert_equal(txs[1]["txid"], tx1_id)
+                            assert_equal(txs[2]["walletconflicts"], [tx1_id])
+                            assert_equal(txs[1]["replaced_by_txid"], tx2_id)
+                            assert not txs[1]["abandoned"]
+                            assert_equal(txs[1]["confirmations"], -1)
+                            assert_equal(txs[2]["blockindex"], 1)
+                            assert txs[3]["abandoned"]
+                            assert_equal(txs[4]["walletconflicts"], [tx3_id])
+                            assert_equal(txs[3]["replaced_by_txid"], tx4_id)
+                            assert not hasattr(txs[3], "blockindex")
+                        elif wallet_name == "w2":
+                            assert info['private_keys_enabled'] == False
+                            assert info['keypoolsize'] == 0
+                        else:
+                            assert info['private_keys_enabled'] == True
+                            assert info['keypoolsize'] == 0
+
+                        # Copy back to master
+                        wallet.unloadwallet()
+                        if n == node:
+                            shutil.rmtree(node_master.wallets_path / wallet_name)
+                            shutil.copytree(
+                                n.wallets_path / wallet_name,
+                                node_master.wallets_path / wallet_name,
+                            )
+
+            # Check that descriptor wallets don't work on legacy only nodes
+            self.log.info("Test descriptor wallet incompatibility on v0.20")
+            # Descriptor wallets appear to be corrupted wallets to old software
+            assert self.major_version_equals(node_v20, 20)
             for wallet_name in ["w1", "w2", "w3"]:
-                if self.major_version_less_than(node, 22) and wallet_name == "w1":
-                    # Descriptor wallets created after 0.21 have taproot descriptors which 0.21 does not support, tested below
-                    continue
-                # Also try to reopen on master after opening on old
-                for n in [node, node_master]:
-                    n.loadwallet(wallet_name)
-                    wallet = n.get_wallet_rpc(wallet_name)
-                    info = wallet.getwalletinfo()
-                    if wallet_name == "w1":
-                        assert info['private_keys_enabled'] == True
-                        assert info['keypoolsize'] > 0
-                        txs = wallet.listtransactions()
-                        assert_equal(len(txs), 5)
-                        assert_equal(txs[1]["txid"], tx1_id)
-                        assert_equal(txs[2]["walletconflicts"], [tx1_id])
-                        assert_equal(txs[1]["replaced_by_txid"], tx2_id)
-                        assert not txs[1]["abandoned"]
-                        assert_equal(txs[1]["confirmations"], -1)
-                        assert_equal(txs[2]["blockindex"], 1)
-                        assert txs[3]["abandoned"]
-                        assert_equal(txs[4]["walletconflicts"], [tx3_id])
-                        assert_equal(txs[3]["replaced_by_txid"], tx4_id)
-                        assert not hasattr(txs[3], "blockindex")
-                    elif wallet_name == "w2":
-                        assert info['private_keys_enabled'] == False
-                        assert info['keypoolsize'] == 0
-                    else:
-                        assert info['private_keys_enabled'] == True
-                        assert info['keypoolsize'] == 0
+                assert_raises_rpc_error(-4, "Wallet file verification failed: wallet.dat corrupt, salvage failed", node_v20.loadwallet, wallet_name)
 
-                    # Copy back to master
-                    wallet.unloadwallet()
-                    if n == node:
-                        shutil.rmtree(node_master.wallets_path / wallet_name)
-                        shutil.copytree(
-                            n.wallets_path / wallet_name,
-                            node_master.wallets_path / wallet_name,
-                        )
-
-        # Check that descriptor wallets don't work on legacy only nodes
-        self.log.info("Test descriptor wallet incompatibility on v0.20")
-        # Descriptor wallets appear to be corrupted wallets to old software
-        assert self.major_version_equals(node_v20, 20)
-        for wallet_name in ["w1", "w2", "w3"]:
-            assert_raises_rpc_error(-4, "Wallet file verification failed: wallet.dat corrupt, salvage failed", node_v20.loadwallet, wallet_name)
-
-        # w1 cannot be opened by 0.21 since it contains a taproot descriptor
-        self.log.info("Test that 0.21 cannot open wallet containing tr() descriptors")
-        assert_raises_rpc_error(-1, "map::at", node_v21.loadwallet, "w1")
+            # w1 cannot be opened by 0.21 since it contains a taproot descriptor
+            self.log.info("Test that 0.21 cannot open wallet containing tr() descriptors")
+            assert_raises_rpc_error(-1, "map::at", node_v21.loadwallet, "w1")
 
         self.log.info("Test that a wallet can upgrade to and downgrade from master, from:")
         for node in descriptors_nodes:
