@@ -6,6 +6,7 @@
 #define BITCOIN_WALLET_SQLITE_H
 
 #include <sync.h>
+#include <util/transaction_identifier.h>
 #include <wallet/db.h>
 
 #include <semaphore>
@@ -59,6 +60,11 @@ private:
     sqlite3_stmt* m_overwrite_stmt{nullptr};
     sqlite3_stmt* m_delete_stmt{nullptr};
     sqlite3_stmt* m_delete_prefix_stmt{nullptr};
+    sqlite3_stmt* m_insert_tx_stmt{nullptr};
+    sqlite3_stmt* m_update_full_tx_stmt{nullptr};
+    sqlite3_stmt* m_update_tx_replaces_stmt{nullptr};
+    sqlite3_stmt* m_update_tx_replaced_by_stmt{nullptr};
+    sqlite3_stmt* m_update_tx_state_stmt{nullptr};
 
     /** Whether this batch has started a database transaction and whether it owns SQLiteDatabase::m_write_semaphore.
      * If the batch starts a db tx, it acquires the semaphore and sets this to true, keeping the semaphore
@@ -88,6 +94,31 @@ public:
 
     void SetExecHandler(std::unique_ptr<SQliteExecHandler>&& handler) { m_exec_handler = std::move(handler); }
 
+    bool WriteTx(const Txid& txid,
+                 const std::span<std::byte>& serialized_tx,
+                 const std::optional<std::string>& comment,
+                 const std::optional<std::string>& comment_to,
+                 const std::optional<Txid>& replaces,
+                 const std::optional<Txid>& replaced_by,
+                 const uint32_t timesmart,
+                 const int64_t order_pos,
+                 const std::vector<std::string>& messages,
+                 const int32_t state_type,
+                 std::span<const std::byte> state_data);
+    bool UpdateFullTx(const Txid& txid,
+                 const std::optional<std::string>& comment,
+                 const std::optional<std::string>& comment_to,
+                 const std::optional<Txid>& replaces,
+                 const std::optional<Txid>& replaced_by,
+                 const uint32_t timesmart,
+                 const int64_t order_pos,
+                 const std::vector<std::string>& messages,
+                 const int32_t state_type,
+                 std::span<const std::byte> state_data);
+    bool UpdateTxReplaces(const Txid& txid, const Txid& replaces);
+    bool UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by);
+    bool UpdateTxState(const Txid& txid, const int32_t state_type, std::span<const std::byte> state_data);
+
     void Close() override;
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;
@@ -104,6 +135,7 @@ class SQLiteDatabase : public WalletDatabase
 {
 private:
     const bool m_mock{false};
+    int32_t m_schema_version{0};
 
     const fs::path m_dir_path;
 
@@ -166,6 +198,8 @@ public:
 
     sqlite3* m_db{nullptr};
     bool m_use_unsafe_sync;
+
+    int32_t GetSchemaVersion() const;
 };
 
 std::unique_ptr<SQLiteDatabase> MakeSQLiteDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
