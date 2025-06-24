@@ -58,16 +58,29 @@ static int TraceSqlCallback(unsigned code, void* context, void* param1, void* pa
     return SQLITE_OK;
 }
 
-static bool BindBlobToStatement(sqlite3_stmt* stmt,
-                                int index,
-                                std::span<const std::byte> blob,
-                                const std::string& description)
+template <typename T>
+concept Blob = requires(T a)
+{
+    { a.data() } -> std::convertible_to<const void*>;
+    { a.size() } -> std::convertible_to<size_t>;
+};
+
+template<typename T>
+static bool BindToStatement(sqlite3_stmt* stmt,
+                            int index,
+                            T& data,
+                            const std::string& description)
 {
     // Pass a pointer to the empty string "" below instead of passing the
     // blob.data() pointer if the blob.data() pointer is null. Passing a null
     // data pointer to bind_blob would cause sqlite to bind the SQL NULL value
     // instead of the empty blob value X'', which would mess up SQL comparisons.
-    int res = sqlite3_bind_blob(stmt, index, blob.data() ? static_cast<const void*>(blob.data()) : "", blob.size(), SQLITE_STATIC);
+    int res = SQLITE_ERROR;
+    if constexpr (Blob<T>) {
+        res = sqlite3_bind_blob(stmt, index, data.data() ? static_cast<const void*>(data.data()) : "", data.size(), SQLITE_STATIC);
+    } else {
+        Assume(false);
+    }
     if (res != SQLITE_OK) {
         LogPrintf("Unable to bind %s to statement: %s\n", description, sqlite3_errstr(res));
         sqlite3_clear_bindings(stmt);
@@ -465,7 +478,7 @@ bool SQLiteBatch::ReadKey(DataStream&& key, DataStream& value)
     assert(m_read_stmt);
 
     // Bind: leftmost parameter in statement is index 1
-    if (!BindBlobToStatement(m_read_stmt, 1, key, "key")) return false;
+    if (!BindToStatement(m_read_stmt, 1, key, "key")) return false;
     int res = sqlite3_step(m_read_stmt);
     if (res != SQLITE_ROW) {
         if (res != SQLITE_DONE) {
@@ -520,8 +533,8 @@ bool SQLiteBatch::WriteKey(DataStream&& key, DataStream&& value, bool overwrite)
 
     // Bind: leftmost parameter in statement is index 1
     // Insert index 1 is key, 2 is value
-    if (!BindBlobToStatement(stmt, 1, key, "key")) return false;
-    if (!BindBlobToStatement(stmt, 2, value, "value")) return false;
+    if (!BindToStatement(stmt, 1, key, "key")) return false;
+    if (!BindToStatement(stmt, 2, value, "value")) return false;
 
     return ExecStatement(stmt);
 }
@@ -532,7 +545,7 @@ bool SQLiteBatch::ExecDeleteStatement(sqlite3_stmt* stmt, std::span<const std::b
     assert(stmt);
 
     // Bind: leftmost parameter in statement is index 1
-    if (!BindBlobToStatement(stmt, 1, blob, "key")) return false;
+    if (!BindToStatement(stmt, 1, blob, "key")) return false;
     return ExecStatement(stmt);
 }
 
@@ -552,7 +565,7 @@ bool SQLiteBatch::HasKey(DataStream&& key)
     assert(m_read_stmt);
 
     // Bind: leftmost parameter in statement is index 1
-    if (!BindBlobToStatement(m_read_stmt, 1, key, "key")) return false;
+    if (!BindToStatement(m_read_stmt, 1, key, "key")) return false;
     int res = sqlite3_step(m_read_stmt);
     sqlite3_clear_bindings(m_read_stmt);
     sqlite3_reset(m_read_stmt);
@@ -639,9 +652,9 @@ std::unique_ptr<DatabaseCursor> SQLiteBatch::GetNewPrefixCursor(std::span<const 
             "SQLiteDatabase: Failed to setup cursor SQL statement: %s\n", sqlite3_errstr(res)));
     }
 
-    if (!BindBlobToStatement(cursor->m_cursor_stmt, 1, cursor->m_prefix_range_start, "prefix_start")) return nullptr;
+    if (!BindToStatement(cursor->m_cursor_stmt, 1, cursor->m_prefix_range_start, "prefix_start")) return nullptr;
     if (!end_range.empty()) {
-        if (!BindBlobToStatement(cursor->m_cursor_stmt, 2, cursor->m_prefix_range_end, "prefix_end")) return nullptr;
+        if (!BindToStatement(cursor->m_cursor_stmt, 2, cursor->m_prefix_range_end, "prefix_end")) return nullptr;
     }
 
     return cursor;
