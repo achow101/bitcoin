@@ -76,8 +76,12 @@ static bool BindToStatement(sqlite3_stmt* stmt,
     // data pointer to bind_blob would cause sqlite to bind the SQL NULL value
     // instead of the empty blob value X'', which would mess up SQL comparisons.
     int res = SQLITE_ERROR;
-    if constexpr (Blob<T>) {
+    if constexpr (std::is_same_v<T, std::string>) { // Check for string first since strings also satisfy Blob
+        res = sqlite3_bind_text(stmt, index, data.data(), data.size(), SQLITE_STATIC);
+    } else if constexpr (Blob<T>) {
         res = sqlite3_bind_blob(stmt, index, data.data() ? static_cast<const void*>(data.data()) : "", data.size(), SQLITE_STATIC);
+    } else if constexpr (std::integral<T> ) {
+        res = sqlite3_bind_int64(stmt, index, static_cast<sqlite3_int64>(data));
     } else {
         Assume(false);
     }
