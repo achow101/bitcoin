@@ -1072,10 +1072,24 @@ static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch, WalletBa
     return tx_res;
 }
 
-static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered, WalletBatch& wallet_batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, WalletBatch& wallet_batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     AssertLockHeld(pwallet->cs_wallet);
     DBErrors result = DBErrors::LOAD_OK;
+
+    // Load orderposnext record
+    // Note: There should only be one ORDERPOSNEXT record with nothing trailing the type
+    LoadResult order_pos_res = LoadRecords(pwallet, batch, DBKeys::ORDERPOSNEXT,
+        [] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+        try {
+            value >> pwallet->nOrderPosNext;
+        } catch (const std::exception& e) {
+            err = e.what();
+            return DBErrors::NONCRITICAL_ERROR;
+        }
+        return DBErrors::LOAD_OK;
+    });
+    result = std::max(result, order_pos_res.m_result);
 
     // Load tx record
 
@@ -1085,7 +1099,7 @@ static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_
         result = std::max(result, tx_table_res.m_result);
     } else {
         // Load the old way for legacy wallet migration
-        any_unordered = false;
+        bool any_unordered = false;
         LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
             [&any_unordered, &batch] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
             DBErrors result = DBErrors::LOAD_OK;
@@ -1112,6 +1126,13 @@ static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_
             return result;
         });
         result = std::max(result, tx_res.m_result);
+
+        // Reorder transactions if they are unordered
+        if (any_unordered) {
+            if (!pwallet->ReorderTransactions(wallet_batch)) {
+                result = std::max(result, DBErrors::LOAD_FAIL);
+            }
+        }
     }
 
     // Load locked utxo record
@@ -1125,20 +1146,6 @@ static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_
         return DBErrors::LOAD_OK;
     });
     result = std::max(result, locked_utxo_res.m_result);
-
-    // Load orderposnext record
-    // Note: There should only be one ORDERPOSNEXT record with nothing trailing the type
-    LoadResult order_pos_res = LoadRecords(pwallet, batch, DBKeys::ORDERPOSNEXT,
-        [] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
-        try {
-            value >> pwallet->nOrderPosNext;
-        } catch (const std::exception& e) {
-            err = e.what();
-            return DBErrors::NONCRITICAL_ERROR;
-        }
-        return DBErrors::LOAD_OK;
-    });
-    result = std::max(result, order_pos_res.m_result);
 
     // After loading all tx records, abandon any coinbase that is no longer in the active chain.
     // This could happen during an external wallet load, or if the user replaced the chain data.
@@ -1198,7 +1205,6 @@ static DBErrors LoadDecryptionKeys(CWallet* pwallet, DatabaseBatch& batch) EXCLU
 DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 {
     DBErrors result = DBErrors::LOAD_OK;
-    bool any_unordered = false;
 
     LOCK(pwallet->cs_wallet);
 
@@ -1252,7 +1258,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         result = std::max(LoadDecryptionKeys(pwallet, *m_batch), result);
 
         // Load tx records
-        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered, *this), result);
+        result = std::max(LoadTxRecords(pwallet, *m_batch, *this), result);
     } catch (std::runtime_error& e) {
         // Exceptions that can be ignored or treated as non-critical are handled by the individual loading functions.
         // Any uncaught exceptions will be caught here and treated as critical.
@@ -1269,9 +1275,6 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     // upgrading, we don't want to make it worse.
     if (result != DBErrors::LOAD_OK)
         return result;
-
-    if (any_unordered)
-        result = pwallet->ReorderTransactions();
 
     // Upgrade all of the descriptor caches to cache the last hardened xpub
     // This operation is not atomic, but if it fails, only new entries are added so it is backwards compatible
