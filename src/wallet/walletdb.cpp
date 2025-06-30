@@ -110,6 +110,7 @@ bool WalletBatch::SQLWriteTx(const CWalletTx& wtx)
         wtx.nTimeSmart,
         wtx.nOrderPos,
         wtx.m_messages,
+        wtx.m_payment_requests,
         GetTxStateType(wtx.m_state),
         GetTxStateData(wtx.m_state)
     );
@@ -128,6 +129,7 @@ bool WalletBatch::SQLUpdateFullTx(const CWalletTx& wtx)
         wtx.nTimeSmart,
         wtx.nOrderPos,
         wtx.m_messages,
+        wtx.m_payment_requests,
         GetTxStateType(wtx.m_state),
         GetTxStateData(wtx.m_state)
     );
