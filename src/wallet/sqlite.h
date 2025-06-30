@@ -115,18 +115,20 @@ public:
                  const uint32_t timesmart,
                  const int64_t order_pos,
                  const std::vector<std::string>& messages,
+                 const std::vector<std::string>& payment_requests,
                  const int32_t state_type,
                  const std::vector<unsigned char>& state_data);
     bool UpdateFullTx(const Txid& txid,
-                 const std::optional<std::string>& comment,
-                 const std::optional<std::string>& comment_to,
-                 const std::optional<Txid>& replaces,
-                 const std::optional<Txid>& replaced_by,
-                 const uint32_t timesmart,
-                 const int64_t order_pos,
-                 const std::vector<std::string>& messages,
-                 const int32_t state_type,
-                 const std::vector<unsigned char>& state_data);
+                      const std::optional<std::string>& comment,
+                      const std::optional<std::string>& comment_to,
+                      const std::optional<Txid>& replaces,
+                      const std::optional<Txid>& replaced_by,
+                      const uint32_t timesmart,
+                      const int64_t order_pos,
+                      const std::vector<std::string>& messages,
+                      const std::vector<std::string>& payment_requests,
+                      const int32_t state_type,
+                      const std::vector<unsigned char>& state_data);
     bool UpdateTxReplaces(const Txid& txid, const Txid& replaces);
     bool UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by);
     bool UpdateTxState(const Txid& txid, const int32_t state_type, const std::vector<unsigned char>& state_data);

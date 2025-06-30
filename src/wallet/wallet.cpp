@@ -1354,7 +1354,10 @@ void CWallet::RecursiveUpdateTxState(WalletBatch* batch, const Txid& tx_hash, co
         TxUpdate update_state = try_updating_state(wtx);
         if (update_state != TxUpdate::UNCHANGED) {
             wtx.MarkDirty();
-            if (batch) batch->WriteTx(wtx);
+            if (batch) {
+                batch->WriteTx(wtx);
+                batch->SQLUpdateTxState(wtx);
+            }
             // Iterate over all its outputs, and update those tx states as well (if applicable)
             for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
                 std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(COutPoint(now, i));
@@ -3970,6 +3973,7 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
                     return util::Error{strprintf(_("Error: Could not add watchonly tx %s to watchonly wallet"), wtx->GetHash().GetHex())};
                 }
                 watchonly_batch->WriteTx(data.watchonly_wallet->mapWallet.at(hash));
+                watchonly_batch->SQLWriteTx(data.watchonly_wallet->mapWallet.at(hash));
                 // Mark as to remove from the migrated wallet only if it does not also belong to it
                 if (!is_mine) {
                     txids_to_delete.push_back(hash);
