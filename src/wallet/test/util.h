@@ -85,6 +85,7 @@ public:
     std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) override {
         return std::make_unique<MockableCursor>(m_records, m_pass, prefix);
     }
+    std::unique_ptr<DatabaseCursor> GetNewTransactionsCursor() override { return nullptr; }
     bool TxnBegin() override { return m_pass; }
     bool TxnCommit() override { return m_pass; }
     bool TxnAbort() override { return m_pass; }
