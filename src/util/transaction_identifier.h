@@ -31,7 +31,10 @@ class transaction_identifier
     }
 
 public:
+    using value_type = uint256::value_type;
+
     transaction_identifier() : m_wrapped{} {}
+    transaction_identifier(std::span<const value_type> sp) : m_wrapped(sp) {}
 
     template <typename Other>
     bool operator==(const Other& other) const { return Compare(other) == 0; }

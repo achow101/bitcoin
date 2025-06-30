@@ -31,6 +31,8 @@ protected:
     static_assert(WIDTH == sizeof(m_data), "Sanity check");
 
 public:
+    using value_type = unsigned char;
+
     /* construct 0 value by default */
     constexpr base_blob() : m_data() {}
 
