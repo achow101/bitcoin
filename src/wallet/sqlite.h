@@ -35,6 +35,20 @@ public:
     explicit SQLiteCursor(sqlite3* db, const std::string& stmt_text, std::vector<std::byte> start_range, std::vector<std::byte> end_range);
 
     Status Next(DataStream& key, DataStream& value) override;
+        Status NextTx(
+        Txid& txid,
+        DataStream& ser_tx,
+        std::optional<std::string>& comment,
+        std::optional<std::string>& comment_to,
+        std::optional<Txid>& replaces,
+        std::optional<Txid>& replaced_by,
+        uint32_t& timesmart,
+        int64_t& order_pos,
+        std::vector<std::string>& messages,
+        std::vector<std::string>& payment_requests,
+        int32_t& state_type,
+        std::vector<unsigned char>& state_data
+    );
 };
 
 /** Class responsible for executing SQL statements in SQLite databases.
@@ -121,6 +135,7 @@ public:
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;
     std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) override;
+    std::unique_ptr<DatabaseCursor> GetNewTransactionsCursor() override;
     bool TxnBegin() override;
     bool TxnCommit() override;
     bool TxnAbort() override;
