@@ -66,6 +66,7 @@ extern const std::string FLAGS;
 extern const std::string HDCHAIN;
 extern const std::string KEY;
 extern const std::string KEYMETA;
+extern const std::string LAST_DECRYPTED_VERSION;
 extern const std::string LOCKED_UTXO;
 extern const std::string MASTER_KEY;
 extern const std::string MINVERSION;
@@ -267,6 +268,9 @@ public:
 
     bool WriteActiveScriptPubKeyMan(uint8_t type, const uint256& id, bool internal);
     bool EraseActiveScriptPubKeyMan(uint8_t type, bool internal);
+
+    // Write the current version as the last version to decrypt the keys in this wallet file
+    bool WriteLastDecryptedVersion();
 
     DBErrors LoadWallet(CWallet* pwallet);
 
