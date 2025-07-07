@@ -1325,9 +1325,6 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     if (result != DBErrors::LOAD_OK)
         return result;
 
-    if (!has_last_client || last_client != CLIENT_VERSION) // Update
-        m_batch->Write(DBKeys::VERSION, CLIENT_VERSION);
-
     if (any_unordered)
         result = pwallet->ReorderTransactions();
 
@@ -1352,6 +1349,14 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
             }
         }
         pwallet->mapMasterKeys.clear();
+    }
+
+
+    // Record the current client version as the last version to successfully open this wallet file
+    // This must always be done after all automatic upgrades so that those upgrades can be performed
+    // in an upgrade-downgrade-upgrade scenario.
+    if (!has_last_client || last_client != CLIENT_VERSION) {
+        m_batch->Write(DBKeys::VERSION, CLIENT_VERSION);
     }
 
     return result;
