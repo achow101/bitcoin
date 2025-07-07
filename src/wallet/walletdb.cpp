@@ -1140,46 +1140,49 @@ static LoadResult LoadTxsRecords(CWallet* pwallet, DatabaseBatch& batch)
     return result;
 }
 
-static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered, int last_client_version) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     AssertLockHeld(pwallet->cs_wallet);
     DBErrors result = DBErrors::LOAD_OK;
 
-    /*
-    // Load tx record
-    any_unordered = false;
-    LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
-        [&any_unordered] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
-        DBErrors result = DBErrors::LOAD_OK;
-        Txid hash;
-        key >> hash;
-        // LoadToWallet call below creates a new CWalletTx that fill_wtx
-        // callback fills with transaction metadata.
-        auto fill_wtx = [&](CWalletTx& wtx, bool new_tx) {
-            if(!new_tx) {
-                // There's some corruption here since the tx we just tried to load was already in the wallet.
-                err = "Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.";
-                result = DBErrors::CORRUPT;
-                return false;
+    if (last_client_version <= 290000) {
+        // Load tx record
+        any_unordered = false;
+        LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
+            [&any_unordered] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+            DBErrors result = DBErrors::LOAD_OK;
+            Txid hash;
+            key >> hash;
+            // LoadToWallet call below creates a new CWalletTx that fill_wtx
+            // callback fills with transaction metadata.
+            auto fill_wtx = [&](CWalletTx& wtx, bool new_tx) {
+                if(!new_tx) {
+                    // There's some corruption here since the tx we just tried to load was already in the wallet.
+                    err = "Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.";
+                    result = DBErrors::CORRUPT;
+                    return false;
+                }
+                value >> wtx;
+                if (wtx.GetHash() != hash)
+                    return false;
+
+                if (wtx.nOrderPos == -1)
+                    any_unordered = true;
+
+                return true;
+            };
+            if (!pwallet->LoadToWallet(hash, fill_wtx)) {
+                // Use std::max as fill_wtx may have already set result to CORRUPT
+                result = std::max(result, DBErrors::NEED_RESCAN);
             }
-            value >> wtx;
-            if (wtx.GetHash() != hash)
-                return false;
-
-            if (wtx.nOrderPos == -1)
-                any_unordered = true;
-
-            return true;
-        };
-        if (!pwallet->LoadToWallet(hash, fill_wtx)) {
-            // Use std::max as fill_wtx may have already set result to CORRUPT
-            result = std::max(result, DBErrors::NEED_RESCAN);
-        }
-        return result;
-    });
-    */
-    LoadResult tx_res = LoadTxsRecords(pwallet, batch);
-    result = std::max(result, tx_res.m_result);
+            return result;
+        });
+        result = std::max(result, tx_res.m_result);
+        // TODO: Upgrade step
+    } else {
+        LoadResult tx_res = LoadTxsRecords(pwallet, batch);
+        result = std::max(result, tx_res.m_result);
+    }
 
     // Load locked utxo record
     LoadResult locked_utxo_res = LoadRecords(pwallet, batch, DBKeys::LOCKED_UTXO,
@@ -1313,7 +1316,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         result = std::max(LoadDecryptionKeys(pwallet, *m_batch), result);
 
         // Load tx records
-        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered), result);
+        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered, last_client), result);
     } catch (std::runtime_error& e) {
         // Exceptions that can be ignored or treated as non-critical are handled by the individual loading functions.
         // Any uncaught exceptions will be caught here and treated as critical.
