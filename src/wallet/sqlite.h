@@ -75,12 +75,6 @@ private:
     void SetupSQLStatements();
     bool ExecStatement(sqlite3_stmt* stmt, std::span<const std::byte> blob);
 
-    bool ReadKey(DataStream&& key, DataStream& value) override;
-    bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override;
-    bool EraseKey(DataStream&& key) override;
-    bool HasKey(DataStream&& key) override;
-    bool ErasePrefix(std::span<const std::byte> prefix) override;
-
 public:
     explicit SQLiteBatch(SQLiteDatabase& database);
     ~SQLiteBatch() override { Close(); }
@@ -95,6 +89,14 @@ public:
     bool TxnCommit() override;
     bool TxnAbort() override;
     bool HasActiveTxn() override { return m_txn; }
+
+    // DO NOT CALL DIRECTLY, use DatabaseBatch::Read, Write, Erase, Exists, and ErasePrefix.
+    // These functions are public for testing only.
+    bool ReadKey(DataStream&& key, DataStream& value) override;
+    bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override;
+    bool EraseKey(DataStream&& key) override;
+    bool HasKey(DataStream&& key) override;
+    bool ErasePrefix(std::span<const std::byte> prefix) override;
 };
 
 /** An instance of this class represents one SQLite3 database.
@@ -150,12 +152,17 @@ public:
     /** Return paths to all database created files */
     std::vector<fs::path> Files() override
     {
+        if (m_mock) return {};
         std::vector<fs::path> files;
         files.emplace_back(m_dir_path / fs::PathFromString(m_file_path));
         files.emplace_back(m_dir_path / fs::PathFromString(m_file_path + "-journal"));
         return files;
     }
-    std::string Format() override { return "sqlite"; }
+    std::string Format() override
+    {
+        if (m_mock) return "sqlite-mock";
+        return "sqlite";
+    }
 
     /** Make a SQLiteBatch connected to this database */
     std::unique_ptr<DatabaseBatch> MakeBatch() override;
