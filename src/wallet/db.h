@@ -49,7 +49,7 @@ public:
 /** RAII class that provides access to a WalletDatabase */
 class DatabaseBatch
 {
-private:
+protected:
     virtual bool ReadKey(DataStream&& key, DataStream& value) = 0;
     virtual bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) = 0;
     virtual bool EraseKey(DataStream&& key) = 0;
