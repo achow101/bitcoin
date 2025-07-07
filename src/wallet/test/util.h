@@ -46,77 +46,7 @@ CTxDestination getNewDestination(CWallet& w, OutputType output_type);
 
 using MockableData = std::map<SerializeData, SerializeData, std::less<>>;
 
-class MockableCursor: public DatabaseCursor
-{
-public:
-    MockableData::const_iterator m_cursor;
-    MockableData::const_iterator m_cursor_end;
-    bool m_pass;
-
-    explicit MockableCursor(const MockableData& records, bool pass) : m_cursor(records.begin()), m_cursor_end(records.end()), m_pass(pass) {}
-    MockableCursor(const MockableData& records, bool pass, std::span<const std::byte> prefix);
-    ~MockableCursor() = default;
-
-    Status Next(DataStream& key, DataStream& value) override;
-};
-
-class MockableBatch : public DatabaseBatch
-{
-private:
-    MockableData& m_records;
-    bool m_pass;
-
-public:
-    explicit MockableBatch(MockableData& records, bool pass) : m_records(records), m_pass(pass) {}
-    ~MockableBatch() = default;
-
-    void Close() override {}
-
-    bool ReadKey(DataStream&& key, DataStream& value) override;
-    bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite=true) override;
-    bool EraseKey(DataStream&& key) override;
-    bool HasKey(DataStream&& key) override;
-    bool ErasePrefix(std::span<const std::byte> prefix) override;
-
-    std::unique_ptr<DatabaseCursor> GetNewCursor() override
-    {
-        return std::make_unique<MockableCursor>(m_records, m_pass);
-    }
-    std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) override {
-        return std::make_unique<MockableCursor>(m_records, m_pass, prefix);
-    }
-    std::unique_ptr<DatabaseCursor> GetNewTransactionsCursor() override { return nullptr; }
-    bool TxnBegin() override { return m_pass; }
-    bool TxnCommit() override { return m_pass; }
-    bool TxnAbort() override { return m_pass; }
-    bool HasActiveTxn() override { return false; }
-};
-
-/** A WalletDatabase whose contents and return values can be modified as needed for testing
- **/
-class MockableDatabase : public WalletDatabase
-{
-public:
-    MockableData m_records;
-    bool m_pass{true};
-
-    MockableDatabase() : WalletDatabase() {}
-    ~MockableDatabase() = default;
-
-    void Open() override {}
-
-    bool Rewrite(const char* pszSkip=nullptr) override { return m_pass; }
-    bool Backup(const std::string& strDest) const override { return m_pass; }
-    void Close() override {}
-
-    std::string Filename() override { return "mockable"; }
-    std::vector<fs::path> Files() override { return {}; }
-    std::string Format() override { return "mock"; }
-    std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<MockableBatch>(m_records, m_pass); }
-};
-
 std::unique_ptr<WalletDatabase> CreateMockableWalletDatabase();
-MockableDatabase& GetMockableDatabase(CWallet& wallet);
 
 DescriptorScriptPubKeyMan* CreateDescriptor(CWallet& keystore, const std::string& desc_str, const bool success);
 } // namespace wallet

@@ -428,6 +428,7 @@ bool SQLiteDatabase::Rewrite(const char* skip)
 
 bool SQLiteDatabase::Backup(const std::string& dest) const
 {
+    if (m_mock) return true;
     sqlite3* db_copy;
     int res = sqlite3_open(dest.c_str(), &db_copy);
     if (res != SQLITE_OK) {
