@@ -25,7 +25,7 @@
 #include <vector>
 
 namespace wallet {
-static constexpr int32_t WALLET_SCHEMA_VERSION = 1;
+static constexpr int32_t WALLET_SCHEMA_VERSION = 0;
 
 static void ErrorLogCallback(void* arg, int code, const char* msg)
 {
@@ -241,7 +241,7 @@ void SQLiteBatch::SetupSQLStatements()
     m_delete_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "DELETE FROM main WHERE key = ?");
     m_delete_prefix_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "DELETE FROM main WHERE instr(key, ?) = 1");
 
-    if (m_database.GetSchemaVersion() >= 1) {
+    if (m_database.HasTxsTable()) {
         m_insert_tx_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         m_update_full_tx_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET comment = ?, comment_to = ?, replaces = ?, replaced_by = ? , timesmart = ?, order_pos = ?, messages= ?, payment_requests = ?, state_type =?, state_data = ? WHERE txid = ?");
         m_update_tx_replaces_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET replaces = ? WHERE txid = ?");
@@ -287,9 +287,9 @@ bool SQLiteDatabase::Verify(bilingual_str& error)
     // Check our schema version
     read_result = ReadPragmaInteger(m_db, "user_version", "sqlite wallet schema version", error);
     if (!read_result.has_value()) return false;
-    m_schema_version = read_result.value();
-    if (m_schema_version > WALLET_SCHEMA_VERSION) {
-        error = strprintf(_("SQLiteDatabase: Unknown sqlite wallet schema version %d. Only versions less than %d is supported"), m_schema_version, WALLET_SCHEMA_VERSION);
+    int32_t user_ver = read_result.value();
+    if (user_ver > WALLET_SCHEMA_VERSION) {
+        error = strprintf(_("SQLiteDatabase: Unknown sqlite wallet schema version %d. Only versions less than %d is supported"), user_ver, WALLET_SCHEMA_VERSION);
         return false;
     }
 
@@ -379,7 +379,18 @@ void SQLiteDatabase::Open()
     } else if (ret == SQLITE_ROW) {
         table_exists = true;
     } else {
-        throw std::runtime_error(strprintf("SQLiteDatabase: Failed to execute statement to check table existence: %s\n", sqlite3_errstr(ret)));
+        throw std::runtime_error(strprintf("SQLiteDatabase: Failed to execute statement to check main table existence: %s\n", sqlite3_errstr(ret)));
+    }
+
+    // Then check that the transactions table exists
+    SQLiteStatement check_txs_stmt(m_db, "SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'");
+    ret = check_txs_stmt.Step();
+    if (ret == SQLITE_DONE) {
+        m_has_txs_table = false;
+    } else if (ret == SQLITE_ROW) {
+        m_has_txs_table = true;
+    } else {
+        throw std::runtime_error(strprintf("SQLiteDatabase: Failed to execute statement to check transactions table existence: %s\n", sqlite3_errstr(ret)));
     }
 
     // Do the db setup things because the table doesn't exist only when we are creating a new wallet
@@ -387,11 +398,6 @@ void SQLiteDatabase::Open()
         ret = sqlite3_exec(m_db, "CREATE TABLE main(key BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL)", nullptr, nullptr, nullptr);
         if (ret != SQLITE_OK) {
             throw std::runtime_error(strprintf("SQLiteDatabase: Failed to create new database: %s\n", sqlite3_errstr(ret)));
-        }
-
-        ret = sqlite3_exec(m_db, "CREATE TABLE transactions(txid BLOB PRIMARY KEY NOT NULL, tx BLOB NOT NULL, comment STRING, comment_to STRING, replaces BLOB, replaced_by BLOB, timesmart INTEGER, order_pos INTEGER, messages BLOB, payment_requests BLOB, state_type INTEGER, state_data BLOB)", nullptr, nullptr, nullptr);
-        if (ret != SQLITE_OK) {
-            throw std::runtime_error(strprintf("SQLiteDatabase: Failed to create new transactions database: %s\n", sqlite3_errstr(ret)));
         }
 
         // Set the application id
@@ -402,6 +408,14 @@ void SQLiteDatabase::Open()
         // Set the user version
         SetPragma(m_db, "user_version", strprintf("%d", WALLET_SCHEMA_VERSION),
                   "Failed to set the wallet schema version");
+    }
+
+    if (!m_has_txs_table) {
+        ret = sqlite3_exec(m_db, "CREATE TABLE transactions(txid BLOB PRIMARY KEY NOT NULL, tx BLOB NOT NULL, comment STRING, comment_to STRING, replaces BLOB, replaced_by BLOB, timesmart INTEGER, order_pos INTEGER, messages BLOB, payment_requests BLOB, state_type INTEGER, state_data BLOB)", nullptr, nullptr, nullptr);
+        if (ret != SQLITE_OK) {
+            throw std::runtime_error(strprintf("SQLiteDatabase: Failed to create new transactions database: %s\n", sqlite3_errstr(ret)));
+        }
+        m_has_txs_table = true;
     }
 }
 
@@ -465,9 +479,9 @@ std::unique_ptr<DatabaseBatch> SQLiteDatabase::MakeBatch()
     return std::make_unique<SQLiteBatch>(*this);
 }
 
-int32_t SQLiteDatabase::GetSchemaVersion() const
+bool SQLiteDatabase::HasTxsTable() const
 {
-    return m_schema_version;
+    return m_has_txs_table;
 }
 
 SQLiteBatch::SQLiteBatch(SQLiteDatabase& database)
@@ -644,7 +658,7 @@ bool SQLiteBatch::WriteTx(
     const std::vector<unsigned char>& state_data
 )
 {
-    if (m_database.GetSchemaVersion() < 1) return true;
+    if (!m_database.HasTxsTable()) return true;
 
     // Lifetime of DataStream needs to be until the statement is executed.
     DataStream ser_messages, ser_payment_reqs;
@@ -684,7 +698,7 @@ bool SQLiteBatch::UpdateFullTx(
     const std::vector<unsigned char>& state_data
 )
 {
-    if (m_database.GetSchemaVersion() < 1) return true;
+    if (!m_database.HasTxsTable()) return true;
 
     // Lifetime of DataStream needs to be until the statement is executed.
     DataStream ser_messages, ser_payment_reqs;
@@ -711,7 +725,7 @@ bool SQLiteBatch::UpdateFullTx(
 
 bool SQLiteBatch::UpdateTxReplaces(const Txid& txid, const Txid& replaces)
 {
-    if (m_database.GetSchemaVersion() < 1) return true;
+    if (!m_database.HasTxsTable()) return true;
 
     if (!m_update_tx_replaces_stmt->Bind(1, replaces, "replaces")) return false;
     if (!m_update_tx_replaces_stmt->Bind(2, txid, "txid")) return false;
@@ -720,7 +734,7 @@ bool SQLiteBatch::UpdateTxReplaces(const Txid& txid, const Txid& replaces)
 
 bool SQLiteBatch::UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by)
 {
-    if (m_database.GetSchemaVersion() < 1) return true;
+    if (!m_database.HasTxsTable()) return true;
 
     if (!m_update_tx_replaced_by_stmt->Bind(1, replaced_by, "replaced_by")) return false;
     if (!m_update_tx_replaced_by_stmt->Bind(2, txid, "txid")) return false;
@@ -729,7 +743,7 @@ bool SQLiteBatch::UpdateTxReplacedBy(const Txid& txid, const Txid& replaced_by)
 
 bool SQLiteBatch::UpdateTxState(const Txid& txid, const int32_t state_type, const std::vector<unsigned char>& state_data)
 {
-    if (m_database.GetSchemaVersion() < 1) return true;
+    if (!m_database.HasTxsTable()) return true;
 
     if (!m_update_tx_state_stmt->Bind(1, state_type, "state_type")) return false;
     if (!m_update_tx_state_stmt->Bind(2, state_data, "state_data")) return false;

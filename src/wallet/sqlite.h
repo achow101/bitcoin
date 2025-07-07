@@ -150,7 +150,7 @@ class SQLiteDatabase : public WalletDatabase
 {
 private:
     const bool m_mock{false};
-    int32_t m_schema_version{0};
+    bool m_has_txs_table{false};
 
     const fs::path m_dir_path;
 
@@ -214,7 +214,7 @@ public:
     sqlite3* m_db{nullptr};
     bool m_use_unsafe_sync;
 
-    int32_t GetSchemaVersion() const;
+    bool HasTxsTable() const;
 };
 
 std::unique_ptr<SQLiteDatabase> MakeSQLiteDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
