@@ -130,6 +130,11 @@ public:
     template<typename T>
     std::optional<T> Column(int col)
     {
+        int column_type = sqlite3_column_type(m_stmt, col);
+        if (column_type == SQLITE_NULL) {
+            return std::nullopt;
+        }
+
         if constexpr (std::integral<T> && sizeof(T) <= 4) {
             return sqlite3_column_int(m_stmt, col);
         } else if constexpr (std::integral<T> && sizeof(T) <= 8) {
