@@ -673,6 +673,7 @@ bool SQLiteBatch::WriteTx(
     const std::optional<Txid>& replaces,
     const std::optional<Txid>& replaced_by,
     const uint32_t timesmart,
+    const uint32_t timereceived,
     const int64_t order_pos,
     const std::vector<std::string>& messages,
     const std::vector<std::string>& payment_requests,
@@ -692,17 +693,18 @@ bool SQLiteBatch::WriteTx(
     if (replaces && !m_insert_tx_stmt->Bind(5, *replaces, "replaces")) return false;
     if (replaced_by && !m_insert_tx_stmt->Bind(6, *replaced_by, "replaced_by")) return false;
     if (!m_insert_tx_stmt->Bind(7, timesmart, "timesmart")) return false;
-    if (!m_insert_tx_stmt->Bind(8, order_pos, "order_pos")) return false;
+    if (!m_insert_tx_stmt->Bind(8, timereceived, "timereceived")) return false;
+    if (!m_insert_tx_stmt->Bind(9, order_pos, "order_pos")) return false;
     if (!messages.empty()) {
         ser_messages << messages;
-        if (!m_insert_tx_stmt->Bind(9, ser_messages, "messages")) return false;
+        if (!m_insert_tx_stmt->Bind(10, ser_messages, "messages")) return false;
     }
     if (!payment_requests.empty()) {
         ser_payment_reqs << payment_requests;
-        if (!m_insert_tx_stmt->Bind(10, ser_payment_reqs, "payment_requests")) return false;
+        if (!m_insert_tx_stmt->Bind(11, ser_payment_reqs, "payment_requests")) return false;
     }
-    if (!m_insert_tx_stmt->Bind(11, state_type, "state_type")) return false;
-    if (!m_insert_tx_stmt->Bind(12, state_data, "state_data")) return false;
+    if (!m_insert_tx_stmt->Bind(12, state_type, "state_type")) return false;
+    if (!m_insert_tx_stmt->Bind(13, state_data, "state_data")) return false;
     return ExecStatement(m_insert_tx_stmt.get());
 }
 
@@ -713,6 +715,7 @@ bool SQLiteBatch::UpdateFullTx(
     const std::optional<Txid>& replaces,
     const std::optional<Txid>& replaced_by,
     const uint32_t timesmart,
+    const uint32_t timereceived,
     const int64_t order_pos,
     const std::vector<std::string>& messages,
     const std::vector<std::string>& payment_requests,
@@ -730,18 +733,19 @@ bool SQLiteBatch::UpdateFullTx(
     if (replaces && !m_update_full_tx_stmt->Bind(3, *replaces, "replaces")) return false;
     if (replaced_by && !m_update_full_tx_stmt->Bind(4, *replaced_by, "replaced_by")) return false;
     if (!m_update_full_tx_stmt->Bind(5, timesmart, "timesmart")) return false;
-    if (!m_update_full_tx_stmt->Bind(6, order_pos, "order_pos")) return false;
+    if (!m_update_full_tx_stmt->Bind(6, timereceived, "timereceived")) return false;
+    if (!m_update_full_tx_stmt->Bind(7, order_pos, "order_pos")) return false;
     if (!messages.empty()) {
         ser_messages << messages;
-        if (!m_update_full_tx_stmt->Bind(9, ser_messages, "messages")) return false;
+        if (!m_update_full_tx_stmt->Bind(8, ser_messages, "messages")) return false;
     }
     if (!payment_requests.empty()) {
         ser_payment_reqs << payment_requests;
-        if (!m_update_full_tx_stmt->Bind(10, ser_payment_reqs, "payment_requests")) return false;
+        if (!m_update_full_tx_stmt->Bind(9, ser_payment_reqs, "payment_requests")) return false;
     }
-    if (!m_update_full_tx_stmt->Bind(11, state_type, "state_type")) return false;
-    if (!m_update_full_tx_stmt->Bind(12, state_data, "state_data")) return false;
-    if (!m_update_full_tx_stmt->Bind(13, txid, "txid")) return false;
+    if (!m_update_full_tx_stmt->Bind(10, state_type, "state_type")) return false;
+    if (!m_update_full_tx_stmt->Bind(11, state_data, "state_data")) return false;
+    if (!m_update_full_tx_stmt->Bind(12, txid, "txid")) return false;
     return ExecStatement(m_update_full_tx_stmt.get());
 }
 
