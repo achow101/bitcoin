@@ -416,12 +416,20 @@ void SQLiteDatabase::Open()
     }
 
     if (!m_has_txs_table) {
-        ret = sqlite3_exec(m_db, "CREATE TABLE transactions(txid BLOB PRIMARY KEY NOT NULL, tx BLOB NOT NULL, comment STRING, comment_to STRING, replaces BLOB, replaced_by BLOB, timesmart INTEGER, order_pos INTEGER, messages BLOB, payment_requests BLOB, state_type INTEGER, state_data BLOB)", nullptr, nullptr, nullptr);
-        if (ret != SQLITE_OK) {
+        if (!CreateTxsTable()) {
             throw std::runtime_error(strprintf("SQLiteDatabase: Failed to create new transactions database: %s\n", sqlite3_errstr(ret)));
         }
-        m_has_txs_table = true;
     }
+}
+
+bool SQLiteDatabase::CreateTxsTable()
+{
+    int ret = sqlite3_exec(m_db, "CREATE TABLE transactions(txid BLOB PRIMARY KEY NOT NULL, tx BLOB NOT NULL, comment STRING, comment_to STRING, replaces BLOB, replaced_by BLOB, timesmart INTEGER, timereceived INTEGER, order_pos INTEGER, messages BLOB, payment_requests BLOB, state_type INTEGER, state_data BLOB)", nullptr, nullptr, nullptr);
+    if (ret != SQLITE_OK) {
+        return false;
+    }
+    m_has_txs_table = true;
+    return true;
 }
 
 bool SQLiteDatabase::Rewrite(const char* skip)
@@ -502,6 +510,14 @@ SQLiteBatch::SQLiteBatch(SQLiteDatabase& database)
 SQLiteBatch::~SQLiteBatch()
 {
     Close();
+}
+
+bool SQLiteBatch::CreateTxsTable()
+{
+    if (m_database.HasTxsTable()) return true;
+    if (!m_database.CreateTxsTable()) return false;
+    SetupSQLStatements();
+    return true;
 }
 
 void SQLiteBatch::Close()
