@@ -247,8 +247,8 @@ void SQLiteBatch::SetupSQLStatements()
     m_delete_prefix_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "DELETE FROM main WHERE instr(key, ?) = 1");
 
     if (m_database.HasTxsTable()) {
-        m_insert_tx_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        m_update_full_tx_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET comment = ?, comment_to = ?, replaces = ?, replaced_by = ? , timesmart = ?, order_pos = ?, messages= ?, payment_requests = ?, state_type =?, state_data = ? WHERE txid = ?");
+        m_insert_tx_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "INSERT or REPLACE INTO transactions (txid, tx, comment, comment_to, replaces, replaced_by, timesmart, timereceived, order_pos, messages, payment_requests, state_type, state_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        m_update_full_tx_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET comment = ?, comment_to = ?, replaces = ?, replaced_by = ? , timesmart = ?, timereceived = ?, order_pos = ?, messages= ?, payment_requests = ?, state_type =?, state_data = ? WHERE txid = ?");
         m_update_tx_replaces_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET replaces = ? WHERE txid = ?");
         m_update_tx_replaced_by_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET replaced_by = ? WHERE txid = ?");
         m_update_tx_state_stmt = std::make_unique<SQLiteStatement>(m_database.m_db, "UPDATE transactions SET state_type = ?, state_data = ? WHERE txid = ?");
