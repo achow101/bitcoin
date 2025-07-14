@@ -110,6 +110,7 @@ bool WalletBatch::SQLWriteTx(const CWalletTx& wtx)
         wtx.m_replaces_txid,
         wtx.m_replaced_by_txid,
         wtx.nTimeSmart,
+        wtx.nTimeReceived,
         wtx.nOrderPos,
         wtx.m_messages,
         wtx.m_payment_requests,
@@ -129,6 +130,7 @@ bool WalletBatch::SQLUpdateFullTx(const CWalletTx& wtx)
         wtx.m_replaces_txid,
         wtx.m_replaced_by_txid,
         wtx.nTimeSmart,
+        wtx.nTimeReceived,
         wtx.nOrderPos,
         wtx.m_messages,
         wtx.m_payment_requests,
@@ -158,6 +160,13 @@ bool WalletBatch::SQLUpdateTxState(const CWalletTx& wtx)
     SQLiteBatch* batch = dynamic_cast<SQLiteBatch*>(m_batch.get());
     if (!batch) return true;
     return batch->UpdateTxState(wtx.GetHash(), GetTxStateType(wtx.m_state), GetTxStateData(wtx.m_state));
+}
+
+bool WalletBatch::CreateTxsTable()
+{
+    SQLiteBatch* batch = dynamic_cast<SQLiteBatch*>(m_batch.get());
+    if (!batch) return true;
+    return batch->CreateTxsTable();
 }
 
 bool WalletBatch::EraseTx(Txid hash)
@@ -1091,13 +1100,14 @@ static LoadResult LoadTxsRecords(CWallet* pwallet, DatabaseBatch& batch)
         std::optional<Txid> replaces;
         std::optional<Txid> replaced_by;
         uint32_t timesmart;
+        uint32_t timereceived;
         int64_t order_pos;
         std::vector<std::string> messages;
         std::vector<std::string> payment_requests;
         int32_t state_type;
         std::vector<unsigned char> state_data;
 
-        DatabaseCursor::Status status = cursor->NextTx(txid, ser_tx, comment, comment_to, replaces, replaced_by, timesmart, order_pos, messages, payment_requests, state_type, state_data);
+        DatabaseCursor::Status status = cursor->NextTx(txid, ser_tx, comment, comment_to, replaces, replaced_by, timesmart, timereceived, order_pos, messages, payment_requests, state_type, state_data);
         if (status == DatabaseCursor::Status::DONE) {
             break;
         } else if (status == DatabaseCursor::Status::FAIL) {
@@ -1122,6 +1132,7 @@ static LoadResult LoadTxsRecords(CWallet* pwallet, DatabaseBatch& batch)
             wtx.m_replaces_txid = replaces;
             wtx.m_replaced_by_txid = replaced_by;
             wtx.nTimeSmart = timesmart;
+            wtx.nTimeReceived = timereceived;
             wtx.nOrderPos = order_pos;
             wtx.m_messages = messages;
             wtx.m_payment_requests = payment_requests;
@@ -1141,46 +1152,58 @@ static LoadResult LoadTxsRecords(CWallet* pwallet, DatabaseBatch& batch)
     return result;
 }
 
-static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static DBErrors LoadTxRecords(CWallet* pwallet, WalletBatch& wbatch, bool& any_unordered, std::optional<uint64_t> last_client_features) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     AssertLockHeld(pwallet->cs_wallet);
     DBErrors result = DBErrors::LOAD_OK;
 
-    /*
-    // Load tx record
-    any_unordered = false;
-    LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
-        [&any_unordered] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
-        DBErrors result = DBErrors::LOAD_OK;
-        Txid hash;
-        key >> hash;
-        // LoadToWallet call below creates a new CWalletTx that fill_wtx
-        // callback fills with transaction metadata.
-        auto fill_wtx = [&](CWalletTx& wtx, bool new_tx) {
-            if(!new_tx) {
-                // There's some corruption here since the tx we just tried to load was already in the wallet.
-                err = "Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.";
-                result = DBErrors::CORRUPT;
-                return false;
+    DatabaseBatch& batch = wbatch.GetDatabaseBatch();
+
+    if (!last_client_features || !(*last_client_features & WALLET_CLIENT_SQL_DATABASE)) {
+        // Load tx record
+        any_unordered = false;
+        LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
+            [&any_unordered] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+            DBErrors result = DBErrors::LOAD_OK;
+            Txid hash;
+            key >> hash;
+            // LoadToWallet call below creates a new CWalletTx that fill_wtx
+            // callback fills with transaction metadata.
+            auto fill_wtx = [&](CWalletTx& wtx, bool new_tx) {
+                if(!new_tx) {
+                    // There's some corruption here since the tx we just tried to load was already in the wallet.
+                    err = "Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.";
+                    result = DBErrors::CORRUPT;
+                    return false;
+                }
+                value >> wtx;
+                if (wtx.GetHash() != hash)
+                    return false;
+
+                if (wtx.nOrderPos == -1)
+                    any_unordered = true;
+
+                return true;
+            };
+            if (!pwallet->LoadToWallet(hash, fill_wtx)) {
+                // Use std::max as fill_wtx may have already set result to CORRUPT
+                result = std::max(result, DBErrors::NEED_RESCAN);
             }
-            value >> wtx;
-            if (wtx.GetHash() != hash)
-                return false;
+            return result;
+        });
+        result = std::max(result, tx_res.m_result);
 
-            if (wtx.nOrderPos == -1)
-                any_unordered = true;
-
-            return true;
-        };
-        if (!pwallet->LoadToWallet(hash, fill_wtx)) {
-            // Use std::max as fill_wtx may have already set result to CORRUPT
-            result = std::max(result, DBErrors::NEED_RESCAN);
+        // Upgrade the wallet to use the database as a SQL database by rewriting all txs into the transactions table
+        pwallet->WalletLogPrintf("Performing automatic upgrade to using transactions table\n");
+        wbatch.CreateTxsTable();
+        for (const auto& [_, tx] : pwallet->mapWallet) {
+            wbatch.SQLWriteTx(tx);
         }
-        return result;
-    });
-    */
-    LoadResult tx_res = LoadTxsRecords(pwallet, batch);
-    result = std::max(result, tx_res.m_result);
+
+    } else {
+        LoadResult tx_res = LoadTxsRecords(pwallet, batch);
+        result = std::max(result, tx_res.m_result);
+    }
 
     // Load locked utxo record
     LoadResult locked_utxo_res = LoadRecords(pwallet, batch, DBKeys::LOCKED_UTXO,
@@ -1277,13 +1300,15 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
     // Features of last client to open this wallet
     std::optional<uint64_t> last_client_features;
-    if (uint64_t features; m_batch->Read(DBKeys::LAST_OPENED_FEATURES, features)) {
-        last_client_features = features;
-    }
+    if (last_client >= VERSION_LAST_CLIENT_FEATURES) {
+        if (uint64_t features; m_batch->Read(DBKeys::LAST_OPENED_FEATURES, features)) {
+            last_client_features = features;
+        }
 
-    // Features of last client to decrypt this wallet
-    if (uint64_t last_decrypted; m_batch->Read(DBKeys::LAST_DECRYPTED_FEATURES, last_decrypted)) {
-        pwallet->SetLastDecryptedFeatures(last_decrypted);
+        // Features of last client to decrypt this wallet
+        if (uint64_t last_decrypted; m_batch->Read(DBKeys::LAST_DECRYPTED_FEATURES, last_decrypted)) {
+            pwallet->SetLastDecryptedFeatures(last_decrypted);
+        }
     }
 
     try {
@@ -1320,7 +1345,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         result = std::max(LoadDecryptionKeys(pwallet, *m_batch), result);
 
         // Load tx records
-        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered), result);
+        result = std::max(LoadTxRecords(pwallet, *this, any_unordered, last_client_features), result);
     } catch (std::runtime_error& e) {
         // Exceptions that can be ignored or treated as non-critical are handled by the individual loading functions.
         // Any uncaught exceptions will be caught here and treated as critical.

@@ -805,6 +805,7 @@ DatabaseCursor::Status SQLiteCursor::NextTx(
     std::optional<Txid>& replaces,
     std::optional<Txid>& replaced_by,
     uint32_t& timesmart,
+    uint32_t& timereceived,
     int64_t& order_pos,
     std::vector<std::string>& messages,
     std::vector<std::string>& payment_requests,
@@ -829,19 +830,20 @@ DatabaseCursor::Status SQLiteCursor::NextTx(
     replaces = m_cursor_stmt->Column<Txid>(4);
     replaced_by = m_cursor_stmt->Column<Txid>(5);
     timesmart = *m_cursor_stmt->Column<uint32_t>(6);
-    order_pos = *m_cursor_stmt->Column<int64_t>(7);
+    timereceived = *m_cursor_stmt->Column<uint32_t>(7);
+    order_pos = *m_cursor_stmt->Column<int64_t>(8);
 
-    std::optional<DataStream> messages_data = m_cursor_stmt->Column<DataStream>(8);
+    std::optional<DataStream> messages_data = m_cursor_stmt->Column<DataStream>(9);
     if (messages_data) {
         *messages_data >> messages;
     }
-    std::optional<DataStream> pay_reqs_data = m_cursor_stmt->Column<DataStream>(9);
+    std::optional<DataStream> pay_reqs_data = m_cursor_stmt->Column<DataStream>(10);
     if (pay_reqs_data) {
         *pay_reqs_data >> payment_requests;
     }
 
-    state_type = *m_cursor_stmt->Column<int32_t>(10);
-    state_data = *m_cursor_stmt->Column<std::vector<unsigned char>>(11);
+    state_type = *m_cursor_stmt->Column<int32_t>(11);
+    state_data = *m_cursor_stmt->Column<std::vector<unsigned char>>(12);
     return Status::MORE;
 }
 
@@ -900,7 +902,7 @@ std::unique_ptr<DatabaseCursor> SQLiteBatch::GetNewPrefixCursor(std::span<const 
 std::unique_ptr<DatabaseCursor> SQLiteBatch::GetNewTransactionsCursor()
 {
     if (!m_database.m_db) return nullptr;
-    const char* stmt_text = "SELECT txid, tx, comment, comment_to, replaces, replaced_by, timesmart, order_pos, messages, payment_requests, state_type, state_data FROM transactions ORDER BY order_pos";
+    const char* stmt_text = "SELECT txid, tx, comment, comment_to, replaces, replaced_by, timesmart, timereceived, order_pos, messages, payment_requests, state_type, state_data FROM transactions ORDER BY order_pos";
     return std::make_unique<SQLiteCursor>(m_database.m_db, stmt_text);
 }
 

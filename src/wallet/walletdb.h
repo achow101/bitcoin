@@ -231,6 +231,7 @@ public:
     bool SQLUpdateTxReplaces(const CWalletTx& wtx);
     bool SQLUpdateTxReplacedBy(const CWalletTx& wtx);
     bool SQLUpdateTxState(const CWalletTx& wtx);
+    bool CreateTxsTable();
 
     bool WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubkey, const bool overwrite);
     bool WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata &keyMeta);
@@ -292,6 +293,8 @@ public:
 
     //! Registers db txn callback functions
     void RegisterTxnListener(const DbTxnListener& l);
+
+    DatabaseBatch& GetDatabaseBatch() { return *m_batch; }
 
 private:
     std::unique_ptr<DatabaseBatch> m_batch;

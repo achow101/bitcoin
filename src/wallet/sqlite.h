@@ -140,6 +140,8 @@ public:
     bool TxnAbort() override;
     bool HasActiveTxn() override { return m_txn; }
 
+    bool CreateTxsTable();
+
     // DO NOT CALL DIRECTLY, use DatabaseBatch::Read, Write, Erase, Exists, and ErasePrefix.
     // These functions are public for testing only.
     bool ReadKey(DataStream&& key, DataStream& value) override;
@@ -225,6 +227,7 @@ public:
     bool m_use_unsafe_sync;
 
     bool HasTxsTable() const;
+    bool CreateTxsTable();
 };
 
 std::unique_ptr<SQLiteDatabase> MakeSQLiteDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
