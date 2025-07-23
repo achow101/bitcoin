@@ -10,6 +10,7 @@
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/translation.h>
+#include <wallet/context.h>
 #include <wallet/dump.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
@@ -41,7 +42,7 @@ static void WalletCreate(CWallet* wallet_instance, uint64_t wallet_creation_flag
     wallet_instance->TopUpKeyPool();
 }
 
-static std::shared_ptr<CWallet> MakeWallet(const std::string& name, const fs::path& path, DatabaseOptions options)
+static std::shared_ptr<CWallet> ToolCreateWallet(const std::string& name, const fs::path& path, DatabaseOptions options)
 {
     DatabaseStatus status;
     bilingual_str error;
@@ -53,37 +54,29 @@ static std::shared_ptr<CWallet> MakeWallet(const std::string& name, const fs::pa
 
     // dummy chain interface
     std::shared_ptr<CWallet> wallet_instance{new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet};
-    DBErrors load_wallet_ret;
+    if (Assume(options.require_create)) WalletCreate(wallet_instance.get(), options.create_flags);
+
+    return wallet_instance;
+}
+
+static std::shared_ptr<CWallet> ToolLoadWallet(const std::string& name, const fs::path& path, DatabaseOptions options)
+{
+    DatabaseStatus status;
+    bilingual_str error;
+    std::unique_ptr<WalletDatabase> database = MakeDatabase(path, options, status, error);
+    if (!database) {
+        tfm::format(std::cerr, "%s\n", error.original);
+        return nullptr;
+    }
+
+    // dummy chain interface
+    std::shared_ptr<CWallet> wallet_instance{new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet};
     try {
-        load_wallet_ret = wallet_instance->PopulateWalletFromDB();
+        wallet_instance->PopulateWalletFromDB();
     } catch (const std::runtime_error&) {
         tfm::format(std::cerr, "Error loading %s. Is wallet being used by another process?\n", name);
         return nullptr;
     }
-
-    if (load_wallet_ret != DBErrors::LOAD_OK) {
-        if (load_wallet_ret == DBErrors::CORRUPT) {
-            tfm::format(std::cerr, "Error loading %s: Wallet corrupted", name);
-            return nullptr;
-        } else if (load_wallet_ret == DBErrors::NONCRITICAL_ERROR) {
-            tfm::format(std::cerr, "Error reading %s! All keys read correctly, but transaction data"
-                            " or address book entries might be missing or incorrect.",
-                name);
-        } else if (load_wallet_ret == DBErrors::TOO_NEW) {
-            tfm::format(std::cerr, "Error loading %s: Wallet requires newer version of %s",
-                name, CLIENT_NAME);
-            return nullptr;
-        } else if (load_wallet_ret == DBErrors::NEED_RESCAN) {
-            tfm::format(std::cerr, "Error reading %s! Some transaction data might be missing or"
-                           " incorrect. Wallet requires a rescan.",
-                name);
-        } else {
-            tfm::format(std::cerr, "Error loading %s", name);
-            return nullptr;
-        }
-    }
-
-    if (options.require_create) WalletCreate(wallet_instance.get(), options.create_flags);
 
     return wallet_instance;
 }
@@ -123,7 +116,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
         options.create_flags |= WALLET_FLAG_DESCRIPTORS;
         options.require_format = DatabaseFormat::SQLITE;
 
-        const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
+        const std::shared_ptr<CWallet> wallet_instance = ToolCreateWallet(name, path, options);
         if (wallet_instance) {
             WalletShowInfo(wallet_instance.get());
             wallet_instance->Close();
@@ -132,7 +125,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
         options.require_existing = true;
-        const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
+        const std::shared_ptr<CWallet> wallet_instance = ToolLoadWallet(name, path, options);
         if (!wallet_instance) return false;
         WalletShowInfo(wallet_instance.get());
         wallet_instance->Close();

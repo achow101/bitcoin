@@ -199,10 +199,6 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
     std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet);
     {
         LOCK(wallet->cs_wallet);
-        if (wallet->PopulateWalletFromDB() != DBErrors::LOAD_OK) {
-            error = strprintf(_("Error creating %s"), name);
-            return false;
-        }
 
         // Get the database handle
         WalletDatabase& db = wallet->GetDatabase();

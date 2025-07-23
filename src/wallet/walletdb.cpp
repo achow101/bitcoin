@@ -557,16 +557,6 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
     AssertLockHeld(pwallet->cs_wallet);
     DBErrors result = DBErrors::LOAD_OK;
 
-    // Make sure descriptor wallets don't have any legacy records
-    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-        if (HasLegacyRecords(*pwallet, batch)) {
-            pwallet->WalletLogPrintf("Error: Unexpected legacy entry found in descriptor wallet %s. The wallet might have been tampered with or created with malicious intent.\n", pwallet->GetName());
-            return DBErrors::UNEXPECTED_LEGACY_ENTRY;
-        }
-
-        return DBErrors::LOAD_OK;
-    }
-
     // Load HD Chain
     // Note: There should only be one HDCHAIN record with no data following the type
     LoadResult hd_chain_res = LoadRecords(pwallet, batch, DBKeys::HDCHAIN,
@@ -1118,7 +1108,7 @@ static DBErrors LoadDecryptionKeys(CWallet* pwallet, DatabaseBatch& batch) EXCLU
     return mkey_res.m_result;
 }
 
-DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
+DBErrors WalletBatch::LoadDescriptorWallet(CWallet* pwallet)
 {
     DBErrors result = DBErrors::LOAD_OK;
     bool any_unordered = false;
@@ -1144,8 +1134,12 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         }
 #endif
 
-        // Load legacy wallet keys
-        result = std::max(LoadLegacyWalletRecords(pwallet, *m_batch, last_client), result);
+        // Make sure descriptor wallets don't have any legacy records
+        Assume(pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
+        if (HasLegacyRecords(*pwallet, *m_batch)) {
+            pwallet->WalletLogPrintf("Error: Unexpected legacy entry found in descriptor wallet %s. The wallet might have been tampered with or created with malicious intent.\n", pwallet->GetName());
+            return DBErrors::UNEXPECTED_LEGACY_ENTRY;
+        }
 
         // Load descriptors
         result = std::max(LoadDescriptorWalletRecords(pwallet, *m_batch, last_client), result);
@@ -1210,6 +1204,65 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
         }
         pwallet->mapMasterKeys.clear();
     }
+
+    return result;
+}
+
+bool WalletBatch::WriteLastClientVersion()
+{
+    return m_batch->Write(DBKeys::VERSION, CLIENT_VERSION);
+}
+
+DBErrors WalletBatch::LoadLegacyWallet(CWallet* pwallet)
+{
+    DBErrors result = DBErrors::LOAD_OK;
+    bool any_unordered = false;
+
+    LOCK(pwallet->cs_wallet);
+
+    // Last client version to open this wallet
+    int last_client = CLIENT_VERSION;
+    bool has_last_client = m_batch->Read(DBKeys::VERSION, last_client);
+    if (has_last_client) pwallet->WalletLogPrintf("Last client version = %d\n", last_client);
+
+    try {
+        if ((result = LoadMinVersion(pwallet, *m_batch)) != DBErrors::LOAD_OK) return result;
+
+        // Load wallet flags, so they are known when processing other records.
+        // The FLAGS key is absent during wallet creation.
+        if ((result = LoadWalletFlags(pwallet, *m_batch)) != DBErrors::LOAD_OK) return result;
+
+        // Load legacy wallet keys
+        result = std::max(LoadLegacyWalletRecords(pwallet, *m_batch, last_client), result);
+
+        // Load address book
+        result = std::max(LoadAddressBookRecords(pwallet, *m_batch), result);
+
+        // Load decryption keys
+        result = std::max(LoadDecryptionKeys(pwallet, *m_batch), result);
+
+        // Load tx records
+        result = std::max(LoadTxRecords(pwallet, *m_batch, any_unordered), result);
+    } catch (std::runtime_error& e) {
+        // Exceptions that can be ignored or treated as non-critical are handled by the individual loading functions.
+        // Any uncaught exceptions will be caught here and treated as critical.
+        // Catch std::runtime_error specifically as many functions throw these and they at least have some message that
+        // we can log
+        pwallet->WalletLogPrintf("%s\n", e.what());
+        result = DBErrors::CORRUPT;
+    } catch (...) {
+        // All other exceptions are still problematic, but we can't log them
+        result = DBErrors::CORRUPT;
+    }
+
+    // Any wallet corruption at all: skip any rewriting or
+    // upgrading, we don't want to make it worse.
+    if (result != DBErrors::LOAD_OK)
+        return result;
+
+    // Reorder transactions in memory. Writes will silently fail
+    if (any_unordered)
+        result = pwallet->ReorderTransactions();
 
     return result;
 }

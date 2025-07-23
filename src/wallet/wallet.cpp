@@ -280,7 +280,7 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
             return nullptr;
         }
 
-        context.chain->initMessage(_("Loading wallet…"));
+        if (context.chain) context.chain->initMessage(_("Loading wallet…"));
         std::shared_ptr<CWallet> wallet = CWallet::LoadExisting(context, name, std::move(database), options.create_flags, error, warnings);
         if (!wallet) {
             error = Untranslated("Wallet loading failed.") + Untranslated(" ") + error;
@@ -290,10 +290,12 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
 
         NotifyWalletLoaded(context, wallet);
         AddWallet(context, wallet);
-        wallet->postInitProcess();
+        if (context.chain) {
+            wallet->postInitProcess();
 
-        // Write the wallet setting
-        UpdateWalletSetting(*context.chain, name, load_on_start, warnings);
+            // Write the wallet setting
+            UpdateWalletSetting(*context.chain, name, load_on_start, warnings);
+        }
 
         return wallet;
     } catch (const std::runtime_error& e) {
@@ -2271,7 +2273,51 @@ DBErrors CWallet::PopulateWalletFromDB(bilingual_str& error, std::vector<bilingu
 
     Assert(m_spk_managers.empty());
     Assert(m_wallet_flags == 0);
-    DBErrors nLoadWalletRet = WalletBatch(GetDatabase()).LoadWallet(this);
+    DBErrors nLoadWalletRet = WalletBatch(GetDatabase()).LoadDescriptorWallet(this);
+
+    if (m_spk_managers.empty()) {
+        assert(m_external_spk_managers.empty());
+        assert(m_internal_spk_managers.empty());
+    }
+
+    if (nLoadWalletRet != DBErrors::LOAD_OK) {
+        const auto wallet_file = m_database->Filename();
+        if (nLoadWalletRet == DBErrors::CORRUPT) {
+            error = strprintf(_("Error loading %s: Wallet corrupted"), wallet_file);
+        } else if (nLoadWalletRet == DBErrors::NONCRITICAL_ERROR) {
+            warnings.push_back(strprintf(_("Error reading %s! All keys read correctly, but transaction data"
+                                           " or address metadata may be missing or incorrect."),
+                wallet_file));
+        } else if (nLoadWalletRet == DBErrors::TOO_NEW) {
+            error = strprintf(_("Error loading %s: Wallet requires newer version of %s"), wallet_file, CLIENT_NAME);
+        } else if (nLoadWalletRet == DBErrors::EXTERNAL_SIGNER_SUPPORT_REQUIRED) {
+            error = strprintf(_("Error loading %s: External signer wallet being loaded without external signer support compiled"), wallet_file);
+        } else if (nLoadWalletRet == DBErrors::NEED_RESCAN) {
+            warnings.push_back(strprintf(_("Error reading %s! Transaction data may be missing or incorrect."
+                                           " Rescanning wallet."), wallet_file));
+        } else if (nLoadWalletRet == DBErrors::UNKNOWN_DESCRIPTOR) {
+            error = strprintf(_("Unrecognized descriptor found. Loading wallet %s\n\n"
+                                "The wallet might had been created on a newer version.\n"
+                                "Please try running the latest software version.\n"), wallet_file);
+        } else if (nLoadWalletRet == DBErrors::UNEXPECTED_LEGACY_ENTRY) {
+            error = strprintf(_("Unexpected legacy entry in descriptor wallet found. Loading wallet %s\n\n"
+                                "The wallet might have been tampered with or created with malicious intent.\n"), wallet_file);
+        } else if (nLoadWalletRet == DBErrors::LEGACY_WALLET) {
+            error = strprintf(_("Error loading %s: Wallet is a legacy wallet. Please migrate to a descriptor wallet using the migration tool (migratewallet RPC)."), wallet_file);
+        } else {
+            error = strprintf(_("Error loading %s"), wallet_file);
+        }
+    }
+    return nLoadWalletRet;
+}
+
+DBErrors CWallet::PopulateWalletFromLegacyDB(bilingual_str& error, std::vector<bilingual_str>& warnings)
+{
+    LOCK(cs_wallet);
+
+    Assert(m_spk_managers.empty());
+    Assert(m_wallet_flags == 0);
+    auto nLoadWalletRet = WalletBatch(GetDatabase()).LoadLegacyWallet(this);
 
     if (m_spk_managers.empty()) {
         assert(m_external_spk_managers.empty());
@@ -2980,20 +3026,17 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
         return nullptr;
     }
 
-    // Load wallet
-    bool rescan_required = false;
-    auto nLoadWalletRet = walletInstance->PopulateWalletFromDB(error, warnings);
-    if (nLoadWalletRet == DBErrors::NEED_RESCAN) {
-        rescan_required = true;
-    } else if (nLoadWalletRet != DBErrors::LOAD_OK && nLoadWalletRet != DBErrors::NONCRITICAL_ERROR) {
-        return nullptr;
-    }
-
     {
         LOCK(walletInstance->cs_wallet);
 
         // ensure this wallet.dat can only be opened by clients supporting HD with chain split and expects no default key
         walletInstance->SetMinVersion(FEATURE_LATEST);
+
+        // Set last client version
+        {
+            WalletBatch batch(walletInstance->GetDatabase());
+            batch.WriteLastClientVersion();
+        }
 
         // Init with passed flags.
         // Always set the cache upgrade flag as this feature is supported from the beginning.
@@ -3019,7 +3062,7 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
     // Try to top up keypool. No-op if the wallet is locked.
     walletInstance->TopUpKeyPool();
 
-    if (chain && !AttachChain(walletInstance, *chain, rescan_required, error, warnings)) {
+    if (chain && !AttachChain(walletInstance, *chain, /*rescan_required=*/false, error, warnings)) {
         walletInstance->m_chain_notifications_handler.reset(); // Reset this pointer so that the wallet will actually be unloaded
         return nullptr;
     }
@@ -3078,6 +3121,55 @@ std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std
     return walletInstance;
 }
 
+
+std::shared_ptr<CWallet> CWallet::LoadLegacyWallet(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatabase> database, uint64_t wallet_creation_flags, bilingual_str& error, std::vector<bilingual_str>& warnings)
+{
+    interfaces::Chain* chain = context.chain;
+    const std::string& walletFile = database->Filename();
+
+    const auto start{SteadyClock::now()};
+    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), FlushAndDeleteWallet);
+
+    if (!LoadWalletArgs(walletInstance, context, error, warnings)) {
+        return nullptr;
+    }
+
+    // Load wallet
+    bool rescan_required = false;
+    auto nLoadWalletRet = walletInstance->PopulateWalletFromLegacyDB(error, warnings);
+    if (nLoadWalletRet == DBErrors::NEED_RESCAN) {
+        rescan_required = true;
+    } else if (nLoadWalletRet != DBErrors::LOAD_OK && nLoadWalletRet != DBErrors::NONCRITICAL_ERROR) {
+        return nullptr;
+    }
+
+    if (wallet_creation_flags & WALLET_FLAG_DISABLE_PRIVATE_KEYS) {
+        // Make it impossible to disable private keys after creation
+        error = strprintf(_("Error loading %s: Private keys can only be disabled during creation"), walletFile);
+        return nullptr;
+    } else if (walletInstance->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        for (auto spk_man : walletInstance->GetActiveScriptPubKeyMans()) {
+            if (spk_man->HavePrivateKeys()) {
+                warnings.push_back(strprintf(_("Warning: Private keys detected in wallet {%s} with disabled private keys"), walletFile));
+                break;
+            }
+        }
+    }
+
+    walletInstance->WalletLogPrintf("Wallet completed loading in %15dms\n", Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
+
+    // Try to top up keypool. No-op if the wallet is locked.
+    walletInstance->TopUpKeyPool();
+
+    if (chain && !AttachChain(walletInstance, *chain, rescan_required, error, warnings)) {
+        walletInstance->m_chain_notifications_handler.reset(); // Reset this pointer so that the wallet will actually be unloaded
+        return nullptr;
+    }
+
+    WITH_LOCK(walletInstance->cs_wallet, walletInstance->LogStats());
+
+    return walletInstance;
+}
 
 bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interfaces::Chain& chain, const bool rescan_required, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
@@ -4224,7 +4316,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
     }
 
     // Make the local wallet
-    std::shared_ptr<CWallet> local_wallet = CWallet::LoadExisting(empty_context, wallet_name, std::move(database), options.create_flags, error, warnings);
+    std::shared_ptr<CWallet> local_wallet = CWallet::LoadLegacyWallet(empty_context, wallet_name, std::move(database), options.create_flags, error, warnings);
     if (!local_wallet) {
         return util::Error{Untranslated("Wallet loading failed.") + Untranslated(" ") + error};
     }

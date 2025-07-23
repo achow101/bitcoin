@@ -261,7 +261,8 @@ public:
     bool WriteActiveScriptPubKeyMan(uint8_t type, const uint256& id, bool internal);
     bool EraseActiveScriptPubKeyMan(uint8_t type, bool internal);
 
-    DBErrors LoadWallet(CWallet* pwallet);
+    DBErrors LoadDescriptorWallet(CWallet* pwallet);
+    DBErrors LoadLegacyWallet(CWallet* pwallet);
 
     //! Delete records of the given types
     bool EraseRecords(const std::unordered_set<std::string>& types);
@@ -277,6 +278,8 @@ public:
 
     //! Registers db txn callback functions
     void RegisterTxnListener(const DbTxnListener& l);
+
+    bool WriteLastClientVersion();
 
 private:
     std::unique_ptr<DatabaseBatch> m_batch;
