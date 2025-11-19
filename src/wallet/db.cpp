@@ -28,6 +28,7 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wall
     for (auto it = fs::recursive_directory_iterator(wallet_dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
         assert(!ec); // Loop should exit on error.
         try {
+            LogPrintf("Searching for wallet in %s\n", fs::PathToString(it->path()));
             const fs::path path{it->path().lexically_relative(wallet_dir)};
 
             if (it->status().type() == fs::file_type::directory) {
@@ -37,6 +38,13 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wall
                 } else if (IsSQLiteFile(SQLiteDataFile(it->path()))) {
                     // Found a directory which contains wallet.dat sqlite file, add it as a wallet with SQLITE format.
                     paths.emplace_back(path, "sqlite");
+                }
+                // recursive_directory_iterator should't recurse into symlinked directories, but for some reason,
+                // it does on some toolchains, e.g x86_64-w64-mingw32.
+                // Ensure consistency in this behavior by disabling pending recursion if the current path is a symlink to a directory
+                if (it->is_symlink()) {
+                    LogPrintf("Disabling recursion\n");
+                    it.disable_recursion_pending();
                 }
             } else if (it.depth() == 0 && it->symlink_status().type() == fs::file_type::regular && it->path().extension() != ".bak") {
                 if (it->path().filename() == "wallet.dat") {
