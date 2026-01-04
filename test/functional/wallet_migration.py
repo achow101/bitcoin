@@ -1135,6 +1135,31 @@ class WalletMigrationTest(BitcoinTestFramework):
         wallet.unloadwallet()
 
 
+    def unsynced_wallet_on_pruned_node_fails(self):
+        self.log.info("Test migration of an unsynced wallet on a pruned node fails gracefully")
+        wallet_name = "pruned"
+        wallet = self.create_legacy_wallet(wallet_name, load_on_startup=False)
+        last_wallet_synced_block = wallet.getwalletinfo()['lastprocessedblock']['height']
+        wallet.unloadwallet()
+
+        # Generate blocks just so the wallet best block is pruned
+        self.restart_node(0, ["-fastprune", "-prune=1", "-nowallet"])
+        self.generate(self.nodes[0], 450, sync_fun=self.no_op)
+        self.nodes[0].pruneblockchain(250)
+        # Ensure next block to sync is unavailable
+        assert_raises_rpc_error(-1, "Block not available (pruned data)", self.nodes[0].getblock, self.nodes[0].getblockhash(last_wallet_synced_block + 1))
+
+        # Check migration failure
+        mocked_time = int(time.time())
+        self.nodes[0].setmocktime(mocked_time)
+        assert_raises_rpc_error(-4, "last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)", self.nodes[0].migratewallet, wallet_name=wallet_name)
+        self.nodes[0].setmocktime(0)
+
+        # The wallet will not have been restored, and the backup will be in the wallets directory.
+        backup_path = self.nodes[0].wallets_path / f"{wallet_name}_{mocked_time}.legacy.bak"
+        assert backup_path.exists()
+
+
     def run_test(self):
         self.generate(self.nodes[0], 101)
 
@@ -1160,6 +1185,9 @@ class WalletMigrationTest(BitcoinTestFramework):
         self.test_avoidreuse()
         self.test_preserve_tx_extra_info()
         self.test_blank()
+
+        # Note: After this test the first 250 blocks of 'nodes[0]' are pruned
+        self.unsynced_wallet_on_pruned_node_fails()
 
 if __name__ == '__main__':
     WalletMigrationTest(__file__).main()
