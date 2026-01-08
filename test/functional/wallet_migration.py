@@ -669,6 +669,56 @@ class WalletMigrationTest(BitcoinTestFramework):
         os.unlink(wallet_path)
         shutil.rmtree(watch_only_dir)
 
+    def test_absolute_path_wallet_failure(self):
+        self.log.info("Test failure during migration of absolute path wallet")
+
+        wallet_name = "absolutely"
+        absolute_path = os.path.abspath(self.master_node.datadir_path / wallet_name)
+
+        master_wallet = self.master_node.get_wallet_rpc(self.default_wallet_name)
+        wallet = self.create_legacy_wallet(absolute_path, blank=True)
+        wallet.importaddress(master_wallet.getnewaddress(address_type="legacy"))
+
+        # Unload legacy wallet, see migrate_and_get_rpc
+        self.old_node.unloadwallet(absolute_path)
+        self.old_node.loadwallet(absolute_path)
+        self.old_node.unloadwallet(absolute_path)
+
+        # Create wallet directory with the watch-only name and a wallet file.
+        # Because the wallet dir exists, this will cause migration to fail.
+        watch_only_dir = self.master_node.datadir_path / f"{wallet_name}_watchonly"
+        os.mkdir(watch_only_dir)
+        shutil.copyfile(os.path.join(absolute_path, "wallet.dat"), watch_only_dir / "wallet.dat")
+
+        mocked_time = int(time.time())
+        self.master_node.setmocktime(mocked_time)
+        assert_raises_rpc_error(-4, "Wallet file creation failed: Failed to create database path", self.master_node.migratewallet, absolute_path)
+        self.master_node.setmocktime(0)
+
+        # Migration will fail to restore the original unnamed wallet
+        # Verify the original wallet was not deleted
+        absolute_wallet_path = os.path.join(absolute_path, "wallet.dat")
+        assert os.path.exists(absolute_wallet_path)
+        # And verify it is now a SQLite wallet
+        with open(absolute_wallet_path, 'rb') as f:
+            data = f.read(16)
+            _, _, magic = struct.unpack("QII", data)
+            assert_equal(magic, BTREE_MAGIC)
+        # Verify the watchonly wallet was not deleted
+        assert os.path.exists(watch_only_dir / "wallet.dat")
+
+        # Check backup file exists.
+        backup_prefix = os.path.basename(absolute_path)
+        backup_path = os.path.join(absolute_path, f"{backup_prefix}_{mocked_time}.legacy.bak")
+        assert os.path.exists(backup_path)
+
+        # Cleanup for next test
+        os.unlink(backup_path)
+        shutil.rmtree(absolute_path)
+        shutil.rmtree(watch_only_dir)
+
+
+
     def test_direct_file(self):
         self.log.info("Test migration of a wallet that is not in a wallet directory")
         wallet = self.create_legacy_wallet("plainfile")
@@ -1530,6 +1580,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         self.test_unloaded_by_path()
         self.test_default_wallet_failure()
         self.test_relative_path_wallet_failure()
+        self.test_absolute_path_wallet_failure()
         self.test_default_wallet()
         self.test_default_wallet_watch_only()
         self.test_direct_file()
