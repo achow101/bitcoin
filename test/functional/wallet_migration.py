@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test Migrating a wallet from legacy to descriptor."""
 
+import os
 import random
 import shutil
 import struct
@@ -535,6 +536,53 @@ class WalletMigrationTest(BitcoinTestFramework):
 
         assert_equal(bals, wallet.getbalances())
 
+    def test_absolute_path_wallet_failure(self):
+        self.log.info("Test failure during migration of absolute path wallet")
+
+        wallet_name = "absolutely"
+        absolute_path = os.path.abspath(self.nodes[0].datadir_path / wallet_name)
+
+        master_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        wallet = self.create_legacy_wallet(absolute_path, blank=True)
+        wallet.importaddress(master_wallet.getnewaddress(address_type="legacy"))
+
+        # Unload legacy wallet, see migrate_and_get_rpc
+        self.nodes[0].unloadwallet(absolute_path)
+        self.nodes[0].loadwallet(absolute_path)
+        self.nodes[0].unloadwallet(absolute_path)
+
+        # Create wallet directory with the watch-only name and a wallet file.
+        # Because the wallet dir exists, this will cause migration to fail.
+        watch_only_dir = self.nodes[0].datadir_path / f"{wallet_name}_watchonly"
+        os.mkdir(watch_only_dir)
+        shutil.copyfile(os.path.join(absolute_path, "wallet.dat"), watch_only_dir / "wallet.dat")
+
+        mocked_time = int(time.time())
+        self.nodes[0].setmocktime(mocked_time)
+        assert_raises_rpc_error(-1, "filesystem error: cannot copy file", self.nodes[0].migratewallet, absolute_path)
+        self.nodes[0].setmocktime(0)
+
+        # Migration will fail to restore the original unnamed wallet
+        # Verify the original wallet was not deleted
+        abs_wallet_path = os.path.join(absolute_path, "wallet.dat")
+        assert os.path.exists(abs_wallet_path)
+        # And verify it is now a SQLite wallet
+        with open(abs_wallet_path, 'rb') as f:
+            file_magic = f.read(16)
+            assert_equal(file_magic, b'SQLite format 3\x00')
+        # Verify the watchonly wallet was not deleted
+        assert os.path.exists(watch_only_dir / "wallet.dat")
+
+        # Check backup file exists.
+        backup_prefix = os.path.basename(absolute_path)
+        backup_path = os.path.join(self.nodes[0].datadir_path, f"{backup_prefix}_{mocked_time}.legacy.bak")
+        assert os.path.exists(backup_path)
+
+        # Cleanup for next test
+        os.unlink(backup_path)
+        shutil.rmtree(absolute_path)
+        shutil.rmtree(watch_only_dir)
+
     def test_default_wallet(self):
         self.log.info("Test migration of the wallet named as the empty string")
         wallet = self.create_legacy_wallet("")
@@ -1025,6 +1073,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         self.test_encrypted()
         self.test_unloaded()
         self.test_unloaded_by_path()
+        self.test_absolute_path_wallet_failure()
         self.test_default_wallet()
         self.test_direct_file()
         self.test_addressbook()
