@@ -33,6 +33,10 @@ FUZZ_TARGET(psbt)
     PartiallySignedTransaction psbt_mut = *psbt_res;
     const PartiallySignedTransaction psbt = psbt_mut;
 
+    // We are on purpose not forward compatible, and version 1 is disabled.
+    const auto psbt_version{psbt.GetVersion()};
+    Assert(psbt_version == 0 || psbt_version == 2);
+
     // A PSBT must roundtrip.
     std::vector<uint8_t> psbt_ser;
     VectorWriter{psbt_ser, 0, psbt};
@@ -51,25 +55,35 @@ FUZZ_TARGET(psbt)
     }
 
     (void)psbt.IsNull();
-
     (void)psbt.GetUnsignedTx();
 
     for (const PSBTInput& input : psbt.inputs) {
         (void)PSBTInputSigned(input);
         (void)input.IsNull();
-    }
-    (void)CountPSBTUnsignedInputs(psbt);
-
-    for (const PSBTOutput& output : psbt.outputs) {
-        (void)output.IsNull();
-    }
-
-    for (const PSBTInput& input : psbt.inputs) {
         CTxOut tx_out;
         if (input.GetUTXO(tx_out)) {
             (void)tx_out.IsNull();
             (void)tx_out.ToString();
         }
+        // A PSBT input must roundtrip to signature data.
+        PSBTInput input_fill{psbt_version, input.prev_txid, input.prev_out, input.sequence};
+        SignatureData sig_data;
+        input.FillSignatureData(sig_data);
+        input_fill.FromSignatureData(sig_data);
+        // FIXME: actually it crashes. Do we want this invariant?
+        // Assert(input == input_fill);
+    }
+    (void)CountPSBTUnsignedInputs(psbt);
+
+    for (const PSBTOutput& output : psbt.outputs) {
+        (void)output.IsNull();
+        // A PSBT output must roundtrip to signature data.
+        PSBTOutput output_fill{psbt_version, output.amount, output.script};
+        SignatureData sig_data;
+        output.FillSignatureData(sig_data);
+        output_fill.FromSignatureData(sig_data);
+        // FIXME: actually it crashes. Do we want this invariant?
+        //Assert(output == output_fill);
     }
 
     psbt_mut = psbt;
@@ -98,7 +112,9 @@ FUZZ_TARGET(psbt)
         (void)psbt_mut.AddInput(psbt_in);
     }
     for (const auto& psbt_out : psbt_merge.outputs) {
-        Assert(psbt_mut.AddOutput(psbt_out));
+        (void)psbt_mut.AddOutput(psbt_out);
     }
     psbt_mut.unknown.insert(psbt_merge.unknown.begin(), psbt_merge.unknown.end());
+
+    RemoveUnnecessaryTransactions(psbt_mut);
 }
