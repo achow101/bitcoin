@@ -277,6 +277,10 @@ public:
     std::map<uint160, std::vector<unsigned char>> hash160_preimages;
     std::map<uint256, std::vector<unsigned char>> hash256_preimages;
 
+    Txid prev_txid;
+    uint32_t prev_out;
+    std::optional<uint32_t> sequence;
+
     // Taproot fields
     std::vector<unsigned char> m_tap_key_sig;
     std::map<std::pair<XOnlyPubKey, uint256>, std::vector<unsigned char>> m_tap_script_sigs;
@@ -300,7 +304,12 @@ public:
     void FillSignatureData(SignatureData& sigdata) const;
     void FromSignatureData(const SignatureData& sigdata);
     void Merge(const PSBTInput& input);
-    explicit PSBTInput(uint32_t psbt_version) : m_psbt_version(psbt_version) {}
+    explicit PSBTInput(uint32_t psbt_version, const Txid& prev_txid, uint32_t prev_out, std::optional<uint32_t> sequence = std::nullopt)
+        : m_psbt_version(psbt_version),
+        prev_txid(prev_txid),
+        prev_out(prev_out),
+        sequence(sequence)
+    {}
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -894,11 +903,18 @@ public:
     std::map<std::vector<unsigned char>, std::vector<unsigned char>> unknown;
     std::set<PSBTProprietary> m_proprietary;
 
+    CAmount amount;
+    CScript script;
+
     bool IsNull() const;
     void FillSignatureData(SignatureData& sigdata) const;
     void FromSignatureData(const SignatureData& sigdata);
     void Merge(const PSBTOutput& output);
-    explicit PSBTOutput(uint32_t psbt_version) : m_psbt_version(psbt_version) {}
+    explicit PSBTOutput(uint32_t psbt_version, CAmount amount, const CScript& script)
+        : m_psbt_version(psbt_version),
+        amount(amount),
+        script(script)
+    {}
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -1376,7 +1392,7 @@ public:
         // Read input data
         unsigned int i = 0;
         while (!s.empty() && i < tx->vin.size()) {
-            PSBTInput input(psbt_ver);
+            PSBTInput input(psbt_ver, tx->vin[i].prevout.hash, tx->vin[i].prevout.n, tx->vin[i].nSequence);
             s >> input;
             inputs.push_back(input);
 
@@ -1399,7 +1415,7 @@ public:
         // Read output data
         i = 0;
         while (!s.empty() && i < tx->vout.size()) {
-            PSBTOutput output(psbt_ver);
+            PSBTOutput output(psbt_ver, tx->vout[i].nValue, tx->vout[i].scriptPubKey);
             s >> output;
             outputs.push_back(output);
             ++i;
