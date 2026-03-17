@@ -15,6 +15,7 @@
 #include <script/signingprovider.h>
 #include <span.h>
 #include <streams.h>
+#include <util/result.h>
 
 #include <optional>
 
@@ -1182,7 +1183,6 @@ public:
     [[nodiscard]] bool Merge(const PartiallySignedTransaction& psbt);
     bool AddInput(const CTxIn& txin, PSBTInput& psbtin);
     bool AddOutput(const CTxOut& txout, const PSBTOutput& psbtout);
-    PartiallySignedTransaction() = default;
     explicit PartiallySignedTransaction(const CMutableTransaction& tx);
     /**
      * Finds the UTXO for a given input index
@@ -1494,11 +1494,11 @@ bool FinalizeAndExtractPSBT(PartiallySignedTransaction& psbtx, CMutableTransacti
  * @param[in]  psbtxs the PSBTs to combine
  * @return True if we successfully combined the transactions, false if they were not compatible
  */
-[[nodiscard]] bool CombinePSBTs(PartiallySignedTransaction& out, const std::vector<PartiallySignedTransaction>& psbtxs);
+[[nodiscard]] std::optional<PartiallySignedTransaction> CombinePSBTs(const std::vector<PartiallySignedTransaction>& psbtxs);
 
 //! Decode a base64ed PSBT into a PartiallySignedTransaction
-[[nodiscard]] bool DecodeBase64PSBT(PartiallySignedTransaction& decoded_psbt, const std::string& base64_psbt, std::string& error);
+[[nodiscard]] util::Result<PartiallySignedTransaction> DecodeBase64PSBT(const std::string& base64_tx);
 //! Decode a raw (binary blob) PSBT into a PartiallySignedTransaction
-[[nodiscard]] bool DecodeRawPSBT(PartiallySignedTransaction& decoded_psbt, std::span<const std::byte> raw_psbt, std::string& error);
+[[nodiscard]] util::Result<PartiallySignedTransaction> DecodeRawPSBT(std::span<const std::byte> tx_data);
 
 #endif // BITCOIN_PSBT_H
