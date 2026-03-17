@@ -1449,7 +1449,7 @@ enum class PSBTRole {
 std::string PSBTRoleName(PSBTRole role);
 
 /** Compute a PrecomputedTransactionData object from a psbt. */
-PrecomputedTransactionData PrecomputePSBTData(const PartiallySignedTransaction& psbt);
+std::optional<PrecomputedTransactionData> PrecomputePSBTData(const PartiallySignedTransaction& psbt);
 
 /** Checks whether a PSBTInput is already signed by checking for non-null finalized fields. */
 bool PSBTInputSigned(const PSBTInput& input);
