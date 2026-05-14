@@ -686,6 +686,7 @@ void CWallet::SetLastBlockProcessedInMem(int block_height, uint256 block_hash)
 
     m_last_block_processed = block_hash;
     m_last_block_processed_height = block_height;
+    WalletLogPrintf("SetLastBlockProcessedInMem %s %d", block_hash.ToString(), block_height);
 }
 
 void CWallet::SetLastBlockProcessed(int block_height, uint256 block_hash)
@@ -1221,6 +1222,8 @@ bool CWallet::LoadToWallet(const Txid& hash, const UpdateWalletTxFn& fill_wtx)
 
     // Make sure the tx outputs are known by the wallet
     RefreshTXOsFromTx(wtx);
+
+    WalletLogPrintf("LoadToWallet %s %s", hash.ToString(), TxStateString(wtx.m_state));
     return true;
 }
 
@@ -3248,6 +3251,7 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
             if (const std::optional<int> fork_height = chain.findLocatorFork(locator)) {
                 rescan_height = *fork_height;
             }
+            walletInstance->WalletLogPrintf("Loaded best block %s", locator.vHave.front().ToString());
         }
     }
 
@@ -4586,7 +4590,11 @@ void CWallet::WriteBestBlock() const
 
         if (!loc.IsNull()) {
             WalletBatch batch(GetDatabase());
-            batch.WriteBestBlock(loc);
+            if (batch.WriteBestBlock(loc)) {
+                WalletLogPrintf("WriteBestBlock %s", loc.vHave.front().ToString());
+            } else {
+                WalletLogPrintf("WriteBestBlock failed %s", loc.vHave.front().ToString());
+            }
         }
     }
 }
