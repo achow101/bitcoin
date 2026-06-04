@@ -8,7 +8,8 @@ export LC_ALL=C
 
 set -o errexit -o pipefail -o xtrace
 
-export CI_RETRY_EXE="/ci_retry --"
+export DEBIAN_FRONTEND=noninteractive
+export CI_RETRY_EXE="/ci_retry"
 
 pushd "/"
 
@@ -18,42 +19,25 @@ ${CI_RETRY_EXE} apt-get update
 # - curl/xz-utils (to install shellcheck)
 # - git (used in many lint scripts)
 # - gpg (used by verify-commits)
-${CI_RETRY_EXE} apt-get install -y cargo curl xz-utils git gpg
+# - moreutils (used by scripted-diff)
+${CI_RETRY_EXE} apt-get install -y cargo curl xz-utils git gpg moreutils
 
-PYTHON_PATH="/python_build"
-if [ ! -d "${PYTHON_PATH}/bin" ]; then
-  (
-    ${CI_RETRY_EXE} git clone --depth=1 https://github.com/pyenv/pyenv.git
-    cd pyenv/plugins/python-build || exit 1
-    ./install.sh
-  )
-  # For dependencies see https://github.com/pyenv/pyenv/wiki#suggested-build-environment
-  ${CI_RETRY_EXE} apt-get install -y build-essential libssl-dev zlib1g-dev \
-    libbz2-dev libreadline-dev libsqlite3-dev curl llvm \
-    libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
-    clang
-  env CC=clang python-build "$(cat "/.python-version")" "${PYTHON_PATH}"
-fi
-export PATH="${PYTHON_PATH}/bin:${PATH}"
+# Install Python and create venv using uv (reads version from .python-version)
+uv venv /python_env
+
+export PATH="/python_env/bin:${PATH}"
 command -v python3
 python3 --version
 
-${CI_RETRY_EXE} pip3 install \
-  codespell==2.4.1 \
-  lief==0.16.6 \
-  mypy==1.4.1 \
-  pyzmq==25.1.0 \
-  ruff==0.5.5 \
-  vulture==2.6
+uv pip install --python /python_env --requirements /ci/lint/requirements.txt
 
 SHELLCHECK_VERSION=v0.11.0
-curl -sL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | \
+curl --fail -L "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.$(uname --machine).tar.xz" | \
     tar --xz -xf - --directory /tmp/
 mv "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/bin/
 
-MLC_VERSION=v1
-MLC_BIN=mlc-x86_64-linux
-curl -sL "https://github.com/becheran/mlc/releases/download/${MLC_VERSION}/${MLC_BIN}" -o "/usr/bin/mlc"
+MLC_VERSION=v1.2.0
+curl --fail -L "https://github.com/becheran/mlc/releases/download/${MLC_VERSION}/mlc-$(uname --machine)-linux" -o "/usr/bin/mlc"
 chmod +x /usr/bin/mlc
 
 popd || exit

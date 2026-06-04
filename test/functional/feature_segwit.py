@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016-2022 The Bitcoin Core developers
+# Copyright (c) 2016-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the SegWit changeover logic."""
@@ -11,6 +11,7 @@ from test_framework.address import (
     script_to_p2wsh,
 )
 from test_framework.blocktools import (
+    NORMAL_GBT_REQUEST_PARAMS,
     send_to_witness,
     witness_script,
 )
@@ -29,11 +30,7 @@ from test_framework.script import (
     OP_TRUE,
 )
 from test_framework.script_util import (
-    key_to_p2pk_script,
-    key_to_p2wpkh_script,
     keys_to_multisig_script,
-    script_to_p2sh_script,
-    script_to_p2wsh_script,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -65,9 +62,6 @@ def find_spendable_utxo(node, min_value):
             return utxo
 
     raise AssertionError(f"Unspent output equal or higher than {min_value} not found")
-
-
-txs_mined = {}  # txindex from txid to blockhash
 
 
 class SegWitTest(BitcoinTestFramework):
@@ -116,7 +110,7 @@ class SegWitTest(BitcoinTestFramework):
 
         self.log.info("Verify sigops are counted in GBT with pre-BIP141 rules before the fork")
         txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 1)
-        tmpl = self.nodes[0].getblocktemplate({'rules': ['segwit']})
+        tmpl = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         assert_equal(tmpl['sizelimit'], 1000000)
         assert 'weightlimit' not in tmpl
         assert_equal(tmpl['sigoplimit'], 20000)
@@ -228,7 +222,7 @@ class SegWitTest(BitcoinTestFramework):
         self.log.info("Verify sigops are counted in GBT with BIP141 rules after the fork")
         txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 1)
         raw_tx = self.nodes[0].getrawtransaction(txid, True)
-        tmpl = self.nodes[0].getblocktemplate({'rules': ['segwit']})
+        tmpl = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         assert_greater_than_or_equal(tmpl['sizelimit'], 3999577)  # actual maximum size is lower due to minimum mandatory non-witness data
         assert_equal(tmpl['weightlimit'], 4000000)
         assert_equal(tmpl['sigoplimit'], 80000)
@@ -282,7 +276,7 @@ class SegWitTest(BitcoinTestFramework):
         assert txid3 in self.nodes[0].getrawmempool()
 
         # Check that getblocktemplate includes all transactions.
-        template = self.nodes[0].getblocktemplate({"rules": ["segwit"]})
+        template = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         template_txids = [t['txid'] for t in template['transactions']]
         assert txid1 in template_txids
         assert txid2 in template_txids
@@ -296,64 +290,6 @@ class SegWitTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].getmempoolentry(txid3)["weight"], tx.get_weight())
 
         # Mine a block to clear the gbt cache again.
-        self.generate(self.nodes[0], 1)
-
-    def mine_and_test_listunspent(self, script_list, ismine):
-        utxo = find_spendable_utxo(self.nodes[0], 50)
-        tx = CTransaction()
-        tx.vin.append(CTxIn(COutPoint(int('0x' + utxo['txid'], 0), utxo['vout'])))
-        for i in script_list:
-            tx.vout.append(CTxOut(10000000, i))
-        signresults = self.nodes[0].signrawtransactionwithwallet(tx.serialize_without_witness().hex())['hex']
-        txid = self.nodes[0].sendrawtransaction(hexstring=signresults, maxfeerate=0)
-        txs_mined[txid] = self.generate(self.nodes[0], 1)[0]
-        watchcount = 0
-        spendcount = 0
-        for i in self.nodes[0].listunspent():
-            if i['txid'] == txid:
-                watchcount += 1
-                if i['spendable']:
-                    spendcount += 1
-        if ismine == 2:
-            assert_equal(spendcount, len(script_list))
-        elif ismine == 1:
-            assert_equal(watchcount, len(script_list))
-            assert_equal(spendcount, 0)
-        else:
-            assert_equal(watchcount, 0)
-        return txid
-
-    def p2sh_address_to_script(self, v):
-        bare = CScript(bytes.fromhex(v['hex']))
-        p2sh = CScript(bytes.fromhex(v['scriptPubKey']))
-        p2wsh = script_to_p2wsh_script(bare)
-        p2sh_p2wsh = script_to_p2sh_script(p2wsh)
-        return [bare, p2sh, p2wsh, p2sh_p2wsh]
-
-    def p2pkh_address_to_script(self, v):
-        pubkey = bytes.fromhex(v['pubkey'])
-        p2wpkh = key_to_p2wpkh_script(pubkey)
-        p2sh_p2wpkh = script_to_p2sh_script(p2wpkh)
-        p2pk = key_to_p2pk_script(pubkey)
-        p2pkh = CScript(bytes.fromhex(v['scriptPubKey']))
-        p2sh_p2pk = script_to_p2sh_script(p2pk)
-        p2sh_p2pkh = script_to_p2sh_script(p2pkh)
-        p2wsh_p2pk = script_to_p2wsh_script(p2pk)
-        p2wsh_p2pkh = script_to_p2wsh_script(p2pkh)
-        p2sh_p2wsh_p2pk = script_to_p2sh_script(p2wsh_p2pk)
-        p2sh_p2wsh_p2pkh = script_to_p2sh_script(p2wsh_p2pkh)
-        return [p2wpkh, p2sh_p2wpkh, p2pk, p2pkh, p2sh_p2pk, p2sh_p2pkh, p2wsh_p2pk, p2wsh_p2pkh, p2sh_p2wsh_p2pk, p2sh_p2wsh_p2pkh]
-
-    def create_and_mine_tx_from_txids(self, txids, success=True):
-        tx = CTransaction()
-        for i in txids:
-            txraw = self.nodes[0].getrawtransaction(i, 0, txs_mined[i])
-            txtmp = tx_from_hex(txraw)
-            for j in range(len(txtmp.vout)):
-                tx.vin.append(CTxIn(COutPoint(int('0x' + i, 0), j)))
-        tx.vout.append(CTxOut(0, CScript()))
-        signresults = self.nodes[0].signrawtransactionwithwallet(tx.serialize_without_witness().hex())['hex']
-        self.nodes[0].sendrawtransaction(hexstring=signresults, maxfeerate=0)
         self.generate(self.nodes[0], 1)
 
 

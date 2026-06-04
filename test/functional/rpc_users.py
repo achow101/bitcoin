@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2022 The Bitcoin Core developers
+# Copyright (c) 2015-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test multiple RPC users."""
@@ -36,7 +36,6 @@ def call_with_auth(node, user, password, method="getbestblockhash"):
 class HTTPBasicsTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
-        self.supports_cli = False
 
     def conf_setup(self):
         #Append rpcauth to bitcoin.conf before initialization
@@ -61,15 +60,15 @@ class HTTPBasicsTest(BitcoinTestFramework):
         rpcauth3 = lines[1]
         self.password = lines[3]
 
-        with open(self.nodes[0].datadir_path / "bitcoin.conf", "a", encoding="utf8") as f:
+        self.stop_nodes()
+        with open(self.nodes[0].datadir_path / "bitcoin.conf", "a") as f:
             f.write(rpcauth + "\n")
             f.write(rpcauth2 + "\n")
             f.write(rpcauth3 + "\n")
-        with open(self.nodes[1].datadir_path / "bitcoin.conf", "a", encoding="utf8") as f:
+        with open(self.nodes[1].datadir_path / "bitcoin.conf", "a") as f:
             f.write("rpcuser={}\n".format(self.rpcuser))
             f.write("rpcpassword={}\n".format(self.rpcpassword))
-        self.restart_node(0)
-        self.restart_node(1)
+        self.start_nodes()
 
     def test_auth(self, node, user, password):
         self.log.info('Correct...')
@@ -109,6 +108,7 @@ class HTTPBasicsTest(BitcoinTestFramework):
             assert_equal(expected_perms, actual_perms)
 
         # Remove any leftover rpc{user|password} config options from previous tests
+        self.stop_node(1)
         self.nodes[1].replace_in_config([("rpcuser", "#rpcuser"), ("rpcpassword", "#rpcpassword")])
 
         self.log.info('Check default cookie permission')

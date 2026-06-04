@@ -14,10 +14,6 @@
         <translation type="unfinished">&amp;Jauns</translation>
     </message>
     <message>
-        <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">Kopēt iezīmēto adresi uz starpliktuvi</translation>
-    </message>
-    <message>
         <source>&amp;Copy</source>
         <translation type="unfinished">&amp;Kopēt</translation>
     </message>
@@ -565,6 +561,14 @@
     </message>
     </context>
 <context>
+    <name>MigrateWalletActivity</name>
+    <message>
+        <source>Restore Wallet</source>
+        <extracomment>Title of progress window which is displayed when wallets are being restored.</extracomment>
+        <translation type="unfinished">Atjaunot maku</translation>
+    </message>
+    </context>
+<context>
     <name>OpenWalletActivity</name>
     <message>
         <source>Open Wallet</source>
@@ -649,7 +653,37 @@
     </message>
 </context>
 <context>
+    <name>HelpMessageDialog</name>
+    <message>
+        <source>version</source>
+        <translation type="unfinished">versija</translation>
+    </message>
+    <message>
+        <source>Command-line options</source>
+        <translation type="unfinished">Komandrindas iespējas</translation>
+    </message>
+</context>
+<context>
+    <name>ShutdownWindow</name>
+    <message>
+        <source>Do not shut down the computer until this window disappears.</source>
+        <translation type="unfinished">Neizslēdziet datoru kamēr šis logs nepazūd.</translation>
+    </message>
+</context>
+<context>
     <name>Intro</name>
+    <message>
+        <source>Welcome</source>
+        <translation type="unfinished">Sveiciens</translation>
+    </message>
+    <message>
+        <source>Use the default data directory</source>
+        <translation type="unfinished">Izmantot noklusēto datu mapi</translation>
+    </message>
+    <message>
+        <source>Use a custom data directory:</source>
+        <translation type="unfinished">Izmantot pielāgotu datu mapi:</translation>
+    </message>
     <message numerus="yes">
         <source>%n GB of space available</source>
         <translation type="unfinished">
@@ -686,36 +720,6 @@
     <message>
         <source>Error</source>
         <translation type="unfinished">Kļūda</translation>
-    </message>
-    <message>
-        <source>Welcome</source>
-        <translation type="unfinished">Sveiciens</translation>
-    </message>
-    <message>
-        <source>Use the default data directory</source>
-        <translation type="unfinished">Izmantot noklusēto datu mapi</translation>
-    </message>
-    <message>
-        <source>Use a custom data directory:</source>
-        <translation type="unfinished">Izmantot pielāgotu datu mapi:</translation>
-    </message>
-</context>
-<context>
-    <name>HelpMessageDialog</name>
-    <message>
-        <source>version</source>
-        <translation type="unfinished">versija</translation>
-    </message>
-    <message>
-        <source>Command-line options</source>
-        <translation type="unfinished">Komandrindas iespējas</translation>
-    </message>
-</context>
-<context>
-    <name>ShutdownWindow</name>
-    <message>
-        <source>Do not shut down the computer until this window disappears.</source>
-        <translation type="unfinished">Neizslēdziet datoru kamēr šis logs nepazūd.</translation>
     </message>
 </context>
 <context>
@@ -921,10 +925,6 @@
         <translation type="unfinished">Jūsu kopējā tekošā bilance</translation>
     </message>
     <message>
-        <source>Spendable:</source>
-        <translation type="unfinished">Iztērējams:</translation>
-    </message>
-    <message>
         <source>Recent transactions</source>
         <translation type="unfinished">Nesenās transakcijas</translation>
     </message>
@@ -943,9 +943,25 @@
         <source>Close</source>
         <translation type="unfinished">Aiztaisīt</translation>
     </message>
+    <message numerus="yes">
+        <source>Signed %n input(s), but more signatures are still required.</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+            <numerusform />
+        </translation>
+    </message>
     <message>
         <source>or</source>
         <translation type="unfinished">vai</translation>
+    </message>
+    <message numerus="yes">
+        <source>Transaction has %n unsigned input(s).</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+            <numerusform />
+        </translation>
     </message>
     </context>
 <context>
@@ -1309,10 +1325,6 @@
     <message>
         <source>Signature</source>
         <translation type="unfinished">Paraksts</translation>
-    </message>
-    <message>
-        <source>Copy the current signature to the system clipboard</source>
-        <translation type="unfinished">Kopēt parakstu uz sistēmas starpliktuvi</translation>
     </message>
     <message>
         <source>Sign the message to prove you own this Bitcoin address</source>

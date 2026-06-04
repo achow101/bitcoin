@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2021 The Bitcoin Core developers
+# Copyright (c) 2017-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -55,10 +55,10 @@ class GetblockstatsTest(BitcoinTestFramework):
 
         self.nodes[0].sendtoaddress(address=address, amount=10, subtractfeefromamount=True)
         self.nodes[0].sendtoaddress(address=address, amount=10, subtractfeefromamount=False)
-        self.nodes[0].settxfee(amount=0.003)
-        self.nodes[0].sendtoaddress(address=address, amount=1, subtractfeefromamount=True)
+        self.fee_rate=300
+        self.nodes[0].sendtoaddress(address=address, amount=1, subtractfeefromamount=True, fee_rate=self.fee_rate)
         # Send to OP_RETURN output to test its exclusion from statistics
-        self.nodes[0].send(outputs={"data": "21"})
+        self.nodes[0].send(outputs={"data": "21"}, fee_rate=self.fee_rate)
         self.sync_all()
         self.generate(self.nodes[0], 1)
 
@@ -78,11 +78,11 @@ class GetblockstatsTest(BitcoinTestFramework):
             'mocktime': int(mocktime),
             'stats': self.expected_stats,
         }
-        with open(filename, 'w', encoding="utf8") as f:
+        with open(filename, 'w') as f:
             json.dump(to_dump, f, sort_keys=True, indent=2)
 
     def load_test_data(self, filename):
-        with open(filename, 'r', encoding="utf8") as f:
+        with open(filename, 'r') as f:
             d = json.load(f)
             blocks = d['blocks']
             mocktime = d['mocktime']
@@ -119,7 +119,7 @@ class GetblockstatsTest(BitcoinTestFramework):
 
             # Check selecting block by hash too
             blockhash = self.expected_stats[i]['blockhash']
-            stats_by_hash = self.nodes[0].getblockstats(hash_or_height=self.convert_to_json_for_cli(blockhash))
+            stats_by_hash = self.nodes[0].getblockstats(hash_or_height=blockhash)
             assert_equal(stats_by_hash, self.expected_stats[i])
 
         # Make sure each stat can be queried on its own
@@ -161,31 +161,31 @@ class GetblockstatsTest(BitcoinTestFramework):
                                 self.nodes[0].getblockstats, hash_or_height=1, stats=['minfee', f'aaa{inv_sel_stat}'])
         # Mainchain's genesis block shouldn't be found on regtest
         assert_raises_rpc_error(-5, 'Block not found', self.nodes[0].getblockstats,
-                                hash_or_height=self.convert_to_json_for_cli('000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f'))
+                                hash_or_height='000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f')
 
         # Invalid number of args
-        assert_raises_rpc_error(-1, 'getblockstats hash_or_height ( stats )', self.nodes[0].getblockstats, self.convert_to_json_for_cli('00'), 1, 2)
+        assert_raises_rpc_error(-1, 'getblockstats hash_or_height ( stats )', self.nodes[0].getblockstats, '00', 1, 2)
         assert_raises_rpc_error(-1, 'getblockstats hash_or_height ( stats )', self.nodes[0].getblockstats)
 
         self.log.info('Test block height 0')
         genesis_stats = self.nodes[0].getblockstats(0)
         assert_equal(genesis_stats["blockhash"], "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")
         assert_equal(genesis_stats["utxo_increase"], 1)
-        assert_equal(genesis_stats["utxo_size_inc"], 117)
+        assert_equal(genesis_stats["utxo_size_inc"], 116)
         assert_equal(genesis_stats["utxo_increase_actual"], 0)
         assert_equal(genesis_stats["utxo_size_inc_actual"], 0)
 
         self.log.info('Test tip including OP_RETURN')
         tip_stats = self.nodes[0].getblockstats(tip)
         assert_equal(tip_stats["utxo_increase"], 6)
-        assert_equal(tip_stats["utxo_size_inc"], 441)
+        assert_equal(tip_stats["utxo_size_inc"], 435)
         assert_equal(tip_stats["utxo_increase_actual"], 4)
-        assert_equal(tip_stats["utxo_size_inc_actual"], 300)
+        assert_equal(tip_stats["utxo_size_inc_actual"], 296)
 
         self.log.info("Test when only header is known")
         block = self.generateblock(self.nodes[0], output="raw(55)", transactions=[], submit=False)
         self.nodes[0].submitheader(block["hex"])
-        assert_raises_rpc_error(-1, "Block not available (not fully downloaded)", lambda: self.nodes[0].getblockstats(self.convert_to_json_for_cli(block['hash'])))
+        assert_raises_rpc_error(-1, "Block not available (not fully downloaded)", lambda: self.nodes[0].getblockstats(block['hash']))
 
         self.log.info('Test when block is missing')
         (self.nodes[0].blocks_path / 'blk00000.dat').rename(self.nodes[0].blocks_path / 'blk00000.dat.backup')

@@ -15,6 +15,7 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
+#include <test/util/time.h>
 #include <uint256.h>
 #include <util/check.h>
 #include <util/feefrac.h>
@@ -40,7 +41,7 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     FastRandomContext orphanage_rng{ConsumeUInt256(fuzzed_data_provider)};
-    SetMockTime(ConsumeTime(fuzzed_data_provider));
+    NodeClockContext clock_ctx{ConsumeTime(fuzzed_data_provider)};
 
     auto orphanage = node::MakeTxOrphanage();
     std::vector<COutPoint> outpoints; // Duplicates are tolerated
@@ -196,9 +197,13 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
                 [&] {
                     // Make a block out of txs and then EraseForBlock
                     CBlock block;
+                    int64_t block_weight{0};
                     int num_txs = fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(0, 1000);
                     for (int i{0}; i < num_txs; ++i) {
                         auto& tx_to_remove = PickValue(fuzzed_data_provider, tx_history);
+                        const auto tx_weight = GetTransactionWeight(*tx_to_remove);
+                        if (block_weight + tx_weight > MAX_BLOCK_WEIGHT) break;
+                        block_weight += tx_weight;
                         block.vtx.push_back(tx_to_remove);
                     }
                     orphanage->EraseForBlock(block);
@@ -227,7 +232,7 @@ FUZZ_TARGET(txorphan_protected, .init = initialize_orphanage)
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     FastRandomContext orphanage_rng{ConsumeUInt256(fuzzed_data_provider)};
-    SetMockTime(ConsumeTime(fuzzed_data_provider));
+    NodeClockContext clock_ctx{ConsumeTime(fuzzed_data_provider)};
 
     // We have num_peers peers. Some subset of them will never exceed their reserved weight or announcement count, and
     // should therefore never have any orphans evicted.
@@ -339,7 +344,7 @@ FUZZ_TARGET(txorphan_protected, .init = initialize_orphanage)
                     }
                 },
                 [&] { // EraseTx
-                    if (protected_wtxids.count(tx->GetWitnessHash())) {
+                    if (protected_wtxids.contains(tx->GetWitnessHash())) {
                         protected_wtxids.erase(wtxid);
                     }
                     orphanage->EraseTx(wtxid);
@@ -554,7 +559,7 @@ FUZZ_TARGET(txorphanage_sim)
             count += 1 + (txn[ann.tx]->vin.size() / 10);
             usage += GetTransactionWeight(*txn[ann.tx]);
         }
-        return std::max(FeeFrac{count, max_count}, FeeFrac{usage, max_usage});
+        return std::max<ByRatioNegSize<FeeFrac>>(FeeFrac{count, max_count}, FeeFrac{usage, max_usage});
     };
 
     //
@@ -616,7 +621,7 @@ FUZZ_TARGET(txorphanage_sim)
                 real->EraseForBlock(block);
                 std::erase_if(sim_announcements, [&](auto& ann) {
                     for (auto& txin : txn[ann.tx]->vin) {
-                        if (spent.count(txin.prevout)) return true;
+                        if (spent.contains(txin.prevout)) return true;
                     }
                     return false;
                 });
@@ -706,13 +711,13 @@ FUZZ_TARGET(txorphanage_sim)
                 auto dos_score = dos_score_fn(peer, max_ann, max_mem);
                 // Use >= so that the more recent peer (higher NodeId) wins in case of
                 // ties.
-                if (dos_score >= worst_dos_score) {
+                if (ByRatioNegSize{dos_score} >= ByRatioNegSize{worst_dos_score}) {
                     worst_dos_score = dos_score;
                     worst_peer = peer;
                 }
             }
             assert(worst_peer != unsigned(-1));
-            assert(worst_dos_score >> FeeFrac(1, 1));
+            assert(ByRatio{worst_dos_score} > ByRatio{FeeFrac(1, 1)});
             // Find oldest announcement from worst_peer, preferring non-reconsiderable ones.
             bool done{false};
             for (int reconsider = 0; reconsider < 2; ++reconsider) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2018-2022 The Bitcoin Core developers
+# Copyright (c) 2018-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet balance RPC methods."""
@@ -55,9 +55,9 @@ class WalletTest(BitcoinTestFramework):
         # whitelist peers to speed up tx relay / mempool sync
         self.noban_tx_relay = True
         self.extra_args = [
-            # Limit mempool descendants as a hack to have wallet txs rejected from the mempool.
+            # Limit mempool clusters as a hack to have wallet txs rejected from the mempool.
             # Set walletrejectlongchains=0 so the wallet still creates the transactions.
-            ['-limitdescendantcount=3', '-walletrejectlongchains=0'],
+            ['-limitclustercount=3', '-walletrejectlongchains=0'],
             [],
         ]
 
@@ -145,10 +145,12 @@ class WalletTest(BitcoinTestFramework):
             # getbalances
             expected_balances_0 = {'mine':      {'immature':          Decimal('0E-8'),
                                                  'trusted':           Decimal('9.99'),  # change from node 0's send
-                                                 'untrusted_pending': Decimal('60.0')}}
+                                                 'untrusted_pending': Decimal('60.0'),
+                                                 'nonmempool':        Decimal('0.0')}}
             expected_balances_1 = {'mine':      {'immature':          Decimal('0E-8'),
                                                  'trusted':           Decimal('0E-8'),  # node 1's send had an unsafe input
-                                                 'untrusted_pending': Decimal('30.0') - fee_node_1}}  # Doesn't include output of node 0's send since it was spent
+                                                 'untrusted_pending': Decimal('30.0') - fee_node_1,  # Doesn't include output of node 0's send since it was spent
+                                                 'nonmempool':        Decimal('0.0')}}
             balances_0 = self.nodes[0].getbalances()
             balances_1 = self.nodes[1].getbalances()
             # remove lastprocessedblock keys (they will be tested later)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2022 The Bitcoin Core developers
+# Copyright (c) 2017-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test external signer.
@@ -37,7 +37,7 @@ class RPCSignerTest(BitcoinTestFramework):
         self.skip_if_no_external_signer()
 
     def set_mock_result(self, node, res):
-        with open(os.path.join(node.cwd, "mock_result"), "w", encoding="utf8") as f:
+        with open(os.path.join(node.cwd, "mock_result"), "w") as f:
             f.write(res)
 
     def clear_mock_result(self, node):
@@ -70,6 +70,19 @@ class RPCSignerTest(BitcoinTestFramework):
         assert_raises_rpc_error(-1, 'fingerprint not found',
             self.nodes[1].enumeratesigners
         )
+        self.clear_mock_result(self.nodes[1])
+
+        # Duplicate fingerprints
+        self.set_mock_result(self.nodes[1],
+            '0 ['
+            '{"fingerprint": "00000001", "type": "trezor", "model": "trezor_t"}, '
+            '{"fingerprint": "00000001", "type": "trezor", "model": "trezor_t"}, '
+            '{"fingerprint": "00000002", "type": "trezor", "model": "trezor_one"}'
+            ']')
+        assert_equal(self.nodes[1].enumeratesigners(), {"signers": [
+            {"fingerprint": "00000001", "name": "trezor_t"},
+            {"fingerprint": "00000002", "name": "trezor_one"},
+        ]})
         self.clear_mock_result(self.nodes[1])
 
         assert_equal({'fingerprint': '00000001', 'name': 'trezor_t'} in self.nodes[1].enumeratesigners()['signers'], True)

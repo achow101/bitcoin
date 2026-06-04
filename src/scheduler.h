@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2022 The Bitcoin Core developers
+// Copyright (c) 2015-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,7 +7,6 @@
 
 #include <attributes.h>
 #include <sync.h>
-#include <threadsafety.h>
 #include <util/task_runner.h>
 
 #include <chrono>
@@ -71,6 +70,7 @@ public:
     void MockForward(std::chrono::seconds delta_seconds) EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);
 
     /**
+     * \anchor scheduler
      * Services the queue 'forever'. Should be run in a thread.
      */
     void serviceQueue() EXCLUSIVE_LOCKS_REQUIRED(!newTaskMutex);

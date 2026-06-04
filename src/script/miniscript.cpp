@@ -2,16 +2,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <limits>
-#include <vector>
+#include <script/miniscript.h>
 
 #include <primitives/transaction.h>
-#include <script/miniscript.h>
 #include <script/script.h>
 #include <script/solver.h>
-#include <span.h>
 #include <util/check.h>
 #include <util/vector.h>
+
+#include <limits>
+#include <vector>
 
 namespace miniscript {
 namespace internal {
@@ -144,7 +144,7 @@ Type ComputeType(Fragment fragment, Type x, Type y, Type z, const std::vector<Ty
             (y & "KVB"_mst).If(x << "V"_mst) | // B=V_x*B_y, V=V_x*V_y, K=V_x*K_y
             (x & "n"_mst) | (y & "n"_mst).If(x << "z"_mst) | // n=n_x+z_x*n_y
             ((x | y) & "o"_mst).If((x | y) << "z"_mst) | // o=o_x*z_y+z_x*o_y
-            (x & y & "dmz"_mst) | // d=d_x*d_y, m=m_x*m_y, z=z_x*z_y
+            (x & y & "mz"_mst) | // m=m_x*m_y, z=z_x*z_y
             ((x | y) & "s"_mst) | // s=s_x+s_y
             "f"_mst.If((y << "f"_mst) || (x << "s"_mst)) | // f=f_y+s_x
             (y & "ux"_mst) | // u=u_y, x=x_y

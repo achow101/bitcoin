@@ -7,7 +7,6 @@
 
 #include <chainparamsbase.h>
 #include <common/settings.h>
-#include <logging.h>
 #include <sync.h>
 #include <tinyformat.h>
 #include <univalue.h>
@@ -15,12 +14,11 @@
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/log.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
 #ifdef WIN32
-#include <codecvt>
-#include <shellapi.h>
 #include <shlobj.h>
 #endif
 
@@ -115,7 +113,7 @@ std::optional<common::SettingsValue> InterpretValue(const KeyInfo& key, const st
         }
         // Double negatives like -nofoo=0 are supported (but discouraged)
         if (value && !InterpretBool(*value)) {
-            LogPrintf("Warning: parsed potentially confusing double-negative -%s=%s\n", key.name, *value);
+            LogWarning("Parsed potentially confusing double-negative -%s=%s", key.name, *value);
             return true;
         }
         return false;
@@ -166,7 +164,7 @@ std::list<SectionInfo> ArgsManager::GetUnrecognizedSections() const
 
     LOCK(cs_args);
     std::list<SectionInfo> unrecognized = m_config_sections;
-    unrecognized.remove_if([](const SectionInfo& appeared){ return available_sections.find(appeared.m_name) != available_sections.end(); });
+    unrecognized.remove_if([](const SectionInfo& appeared){ return available_sections.contains(appeared.m_name); });
     return unrecognized;
 }
 
@@ -208,7 +206,7 @@ bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::strin
         if (key[0] != '-') {
             if (!m_accept_any_command && m_command.empty()) {
                 // The first non-dash arg is a registered command
-                std::optional<unsigned int> flags = GetArgFlags(key);
+                std::optional<unsigned int> flags = GetArgFlags_(key);
                 if (!flags || !(*flags & ArgsManager::COMMAND)) {
                     error = strprintf("Invalid command '%s'", argv[i]);
                     return false;
@@ -229,7 +227,7 @@ bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::strin
         // Transform -foo to foo
         key.erase(0, 1);
         KeyInfo keyinfo = InterpretKey(key);
-        std::optional<unsigned int> flags = GetArgFlags('-' + keyinfo.name);
+        std::optional<unsigned int> flags = GetArgFlags_('-' + keyinfo.name);
 
         // Unknown command line options and command line options with dot
         // characters (which are returned from InterpretKey with nonempty
@@ -257,26 +255,46 @@ bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::strin
     return true;
 }
 
-std::optional<unsigned int> ArgsManager::GetArgFlags(const std::string& name) const
+std::optional<unsigned int> ArgsManager::GetArgFlags_(const std::string& name) const
 {
-    LOCK(cs_args);
+    AssertLockHeld(cs_args);
     for (const auto& arg_map : m_available_args) {
         const auto search = arg_map.second.find(name);
         if (search != arg_map.second.end()) {
             return search->second.m_flags;
         }
     }
-    return std::nullopt;
+    return m_default_flags;
 }
 
-fs::path ArgsManager::GetPathArg(std::string arg, const fs::path& default_value) const
+std::optional<unsigned int> ArgsManager::GetArgFlags(const std::string& name) const
 {
-    if (IsArgNegated(arg)) return fs::path{};
-    std::string path_str = GetArg(arg, "");
+    LOCK(cs_args);
+    return GetArgFlags_(name);
+}
+
+void ArgsManager::SetDefaultFlags(std::optional<unsigned int> flags)
+{
+    LOCK(cs_args);
+    m_default_flags = flags;
+}
+
+fs::path ArgsManager::GetPathArg_(std::string arg, const fs::path& default_value) const
+{
+    AssertLockHeld(cs_args);
+    const auto value = GetSetting_(arg);
+    if (value.isFalse()) return {};
+    std::string path_str = SettingToString(value, "");
     if (path_str.empty()) return default_value;
     fs::path result = fs::PathFromString(path_str).lexically_normal();
     // Remove trailing slash, if present.
     return result.has_filename() ? result : result.parent_path();
+}
+
+fs::path ArgsManager::GetPathArg(std::string arg, const fs::path& default_value) const
+{
+    LOCK(cs_args);
+    return GetPathArg_(std::move(arg), default_value);
 }
 
 fs::path ArgsManager::GetBlocksDirPath() const
@@ -288,14 +306,14 @@ fs::path ArgsManager::GetBlocksDirPath() const
     // this function
     if (!path.empty()) return path;
 
-    if (IsArgSet("-blocksdir")) {
-        path = fs::absolute(GetPathArg("-blocksdir"));
+    if (!GetSetting_("-blocksdir").isNull()) {
+        path = fs::absolute(GetPathArg_("-blocksdir"));
         if (!fs::is_directory(path)) {
             path = "";
             return path;
         }
     } else {
-        path = GetDataDirBase();
+        path = GetDataDir(/*net_specific=*/false);
     }
 
     path /= fs::PathFromString(BaseParams().DataDir());
@@ -304,15 +322,25 @@ fs::path ArgsManager::GetBlocksDirPath() const
     return path;
 }
 
+fs::path ArgsManager::GetDataDirBase() const {
+    LOCK(cs_args);
+    return GetDataDir(/*net_specific=*/false);
+}
+
+fs::path ArgsManager::GetDataDirNet() const {
+    LOCK(cs_args);
+    return GetDataDir(/*net_specific=*/true);
+}
+
 fs::path ArgsManager::GetDataDir(bool net_specific) const
 {
-    LOCK(cs_args);
+    AssertLockHeld(cs_args);
     fs::path& path = net_specific ? m_cached_network_datadir_path : m_cached_datadir_path;
 
     // Used cached path if available
     if (!path.empty()) return path;
 
-    const fs::path datadir{GetPathArg("-datadir")};
+    const fs::path datadir{GetPathArg_("-datadir")};
     if (!datadir.empty()) {
         path = fs::absolute(datadir);
         if (!fs::is_directory(path)) {
@@ -359,6 +387,40 @@ std::optional<const ArgsManager::Command> ArgsManager::GetCommand() const
     return ret;
 }
 
+bool ArgsManager::CheckCommandOptions(const std::string& command, std::vector<std::string>* errors) const
+{
+    LOCK(cs_args);
+
+    auto command_options = m_available_args.find(OptionsCategory::COMMAND_OPTIONS);
+    if (command_options == m_available_args.end()) {
+        // There are no command-specific options at all, so everything is fine
+        return true;
+    }
+
+    const auto command_args = m_command_args.find(command);
+    auto is_valid_opt = [&](const auto& opt) EXCLUSIVE_LOCKS_REQUIRED(cs_args) -> bool {
+        if (command_args == m_command_args.end()) {
+            // Caller may not have checked that command actually exists
+            // before calling this function.  In that case, treat it as
+            // having no valid command-specific options.
+            return false;
+        } else {
+            return command_args->second.contains(opt);
+        }
+    };
+
+    bool ok = true;
+    for (const auto& [arg, _] : command_options->second) {
+        if (!GetSetting_(arg).isNull() && !is_valid_opt(arg)) {
+            ok = false;
+            if (errors != nullptr) {
+                errors->emplace_back(strprintf("The %s option cannot be used with the '%s' command.", arg, command));
+            }
+        }
+    }
+    return ok;
+}
+
 std::vector<std::string> ArgsManager::GetArgs(const std::string& strArg) const
 {
     std::vector<std::string> result;
@@ -394,7 +456,7 @@ static void SaveErrors(const std::vector<std::string> errors, std::vector<std::s
         if (error_out) {
             error_out->emplace_back(error);
         } else {
-            LogPrintf("%s\n", error);
+            LogWarning("%s", error);
         }
     }
 }
@@ -415,8 +477,8 @@ bool ArgsManager::ReadSettingsFile(std::vector<std::string>* errors)
     }
     for (const auto& setting : m_settings.rw_settings) {
         KeyInfo key = InterpretKey(setting.first); // Split setting key into section and argname
-        if (!GetArgFlags('-' + key.name)) {
-            LogPrintf("Ignoring unknown rw_settings value %s\n", setting.first);
+        if (!GetArgFlags_('-' + key.name)) {
+            LogWarning("Ignoring unknown rw_settings value %s", setting.first);
         }
     }
     return true;
@@ -479,29 +541,33 @@ std::string SettingToString(const common::SettingsValue& value, const std::strin
     return SettingToString(value).value_or(strDefault);
 }
 
-int64_t ArgsManager::GetIntArg(const std::string& strArg, int64_t nDefault) const
+template <std::integral Int>
+Int ArgsManager::GetArg(const std::string& strArg, Int nDefault) const
 {
-    return GetIntArg(strArg).value_or(nDefault);
+    return GetArg<Int>(strArg).value_or(nDefault);
 }
 
-std::optional<int64_t> ArgsManager::GetIntArg(const std::string& strArg) const
+template <std::integral Int>
+std::optional<Int> ArgsManager::GetArg(const std::string& strArg) const
 {
     const common::SettingsValue value = GetSetting(strArg);
-    return SettingToInt(value);
+    return SettingTo<Int>(value);
 }
 
-std::optional<int64_t> SettingToInt(const common::SettingsValue& value)
+template <std::integral Int>
+std::optional<Int> SettingTo(const common::SettingsValue& value)
 {
     if (value.isNull()) return std::nullopt;
     if (value.isFalse()) return 0;
     if (value.isTrue()) return 1;
-    if (value.isNum()) return value.getInt<int64_t>();
-    return LocaleIndependentAtoi<int64_t>(value.get_str());
+    if (value.isNum()) return value.getInt<Int>();
+    return LocaleIndependentAtoi<Int>(value.get_str());
 }
 
-int64_t SettingToInt(const common::SettingsValue& value, int64_t nDefault)
+template <std::integral Int>
+Int SettingTo(const common::SettingsValue& value, Int nDefault)
 {
-    return SettingToInt(value).value_or(nDefault);
+    return SettingTo<Int>(value).value_or(nDefault);
 }
 
 bool ArgsManager::GetBoolArg(const std::string& strArg, bool fDefault) const
@@ -527,11 +593,28 @@ bool SettingToBool(const common::SettingsValue& value, bool fDefault)
     return SettingToBool(value).value_or(fDefault);
 }
 
+#define INSTANTIATE_INT_TYPE(Type)                                                    \
+    template Type ArgsManager::GetArg<Type>(const std::string&, Type) const;          \
+    template std::optional<Type> ArgsManager::GetArg<Type>(const std::string&) const; \
+    template Type SettingTo<Type>(const common::SettingsValue&, Type);                \
+    template std::optional<Type> SettingTo<Type>(const common::SettingsValue&)
+
+INSTANTIATE_INT_TYPE(int8_t);
+INSTANTIATE_INT_TYPE(uint8_t);
+INSTANTIATE_INT_TYPE(int16_t);
+INSTANTIATE_INT_TYPE(uint16_t);
+INSTANTIATE_INT_TYPE(int32_t);
+INSTANTIATE_INT_TYPE(uint32_t);
+INSTANTIATE_INT_TYPE(int64_t);
+INSTANTIATE_INT_TYPE(uint64_t);
+
+#undef INSTANTIATE_INT_TYPE
+
 bool ArgsManager::SoftSetArg(const std::string& strArg, const std::string& strValue)
 {
     LOCK(cs_args);
-    if (IsArgSet(strArg)) return false;
-    ForceSetArg(strArg, strValue);
+    if (!GetSetting_(strArg).isNull()) return false;
+    m_settings.forced_settings[SettingName(strArg)] = strValue;
     return true;
 }
 
@@ -549,7 +632,7 @@ void ArgsManager::ForceSetArg(const std::string& strArg, const std::string& strV
     m_settings.forced_settings[SettingName(strArg)] = strValue;
 }
 
-void ArgsManager::AddCommand(const std::string& cmd, const std::string& help)
+void ArgsManager::AddCommand(const std::string& cmd, const std::string& help, std::set<std::string> options)
 {
     Assert(cmd.find('=') == std::string::npos);
     Assert(cmd.at(0) != '-');
@@ -558,6 +641,18 @@ void ArgsManager::AddCommand(const std::string& cmd, const std::string& help)
     m_accept_any_command = false; // latch to false
     std::map<std::string, Arg>& arg_map = m_available_args[OptionsCategory::COMMANDS];
     auto ret = arg_map.emplace(cmd, Arg{"", help, ArgsManager::COMMAND});
+    if (!options.empty()) {
+        auto& cmdopts = m_available_args[OptionsCategory::COMMAND_OPTIONS];
+        bool command_has_all_options_defined = true;
+        for (const auto& opt : options) {
+            if (!cmdopts.contains(opt)) {
+                command_has_all_options_defined = false;
+            }
+        }
+        Assert(command_has_all_options_defined);
+
+        m_command_args.try_emplace(cmd, std::move(options));
+    }
     Assert(ret.second); // Fail on duplicate commands
 }
 
@@ -594,7 +689,9 @@ void ArgsManager::ClearArgs()
     LOCK(cs_args);
     m_settings = {};
     m_available_args.clear();
+    m_command_args.clear();
     m_network_only_args.clear();
+    m_config_sections.clear();
 }
 
 void ArgsManager::CheckMultipleCLIArgs() const
@@ -604,7 +701,7 @@ void ArgsManager::CheckMultipleCLIArgs() const
     auto cmds = m_available_args.find(OptionsCategory::CLI_COMMANDS);
     if (cmds != m_available_args.end()) {
         for (const auto& [cmd, argspec] : cmds->second) {
-            if (IsArgSet(cmd)) {
+            if (!GetSetting_(cmd).isNull()) {
                 found.push_back(cmd);
             }
         }
@@ -620,8 +717,20 @@ std::string ArgsManager::GetHelpMessage() const
 
     std::string usage;
     LOCK(cs_args);
-    for (const auto& arg_map : m_available_args) {
-        switch(arg_map.first) {
+
+    const auto command_options = m_available_args.find(OptionsCategory::COMMAND_OPTIONS);
+    const auto for_matching_cmd_opts = [&](const std::set<std::string>& select, auto&& fn) EXCLUSIVE_LOCKS_REQUIRED(cs_args) {
+        if (select.empty()) return;
+        if (command_options == m_available_args.end()) return;
+        for (const auto& [name, info] : command_options->second) {
+            if (!show_debug && (info.m_flags & ArgsManager::DEBUG_ONLY)) continue;
+            if (!select.contains(name)) continue;
+            fn(name, info);
+        }
+    };
+
+    for (const auto& [category, category_args] : m_available_args) {
+        switch(category) {
             case OptionsCategory::OPTIONS:
                 usage += HelpMessageGroup("Options:");
                 break;
@@ -667,22 +776,27 @@ std::string ArgsManager::GetHelpMessage() const
             case OptionsCategory::CLI_COMMANDS:
                 usage += HelpMessageGroup("CLI Commands:");
                 break;
-            default:
+            case OptionsCategory::COMMAND_OPTIONS:
+            case OptionsCategory::HIDDEN:
                 break;
-        }
+        } // no default case, so the compiler can warn about missing cases
+
+        if (category == OptionsCategory::COMMAND_OPTIONS) continue;
 
         // When we get to the hidden options, stop
-        if (arg_map.first == OptionsCategory::HIDDEN) break;
+        if (category == OptionsCategory::HIDDEN) break;
 
-        for (const auto& arg : arg_map.second) {
-            if (show_debug || !(arg.second.m_flags & ArgsManager::DEBUG_ONLY)) {
-                std::string name;
-                if (arg.second.m_help_param.empty()) {
-                    name = arg.first;
-                } else {
-                    name = arg.first + arg.second.m_help_param;
+        for (const auto& [arg_name, arg_info] : category_args) {
+            if (show_debug || !(arg_info.m_flags & ArgsManager::DEBUG_ONLY)) {
+                usage += HelpMessageOpt(arg_name, arg_info.m_help_param, arg_info.m_help_text);
+
+                if (category == OptionsCategory::COMMANDS) {
+                    const auto cmd_args = m_command_args.find(arg_name);
+                    if (cmd_args == m_command_args.end()) continue;
+                    for_matching_cmd_opts(cmd_args->second, [&](const auto& cmdopt_name, const auto& cmdopt_info) {
+                        usage += HelpMessageOpt(cmdopt_name, cmdopt_info.m_help_param, cmdopt_info.m_help_text, /*subopt=*/true);
+                    });
                 }
-                usage += HelpMessageOpt(name, arg.second.m_help_text);
             }
         }
     }
@@ -700,19 +814,26 @@ void SetupHelpOptions(ArgsManager& args)
     args.AddHiddenArgs({"-h", "-?"});
 }
 
-static const int screenWidth = 79;
-static const int optIndent = 2;
-static const int msgIndent = 7;
-
 std::string HelpMessageGroup(const std::string &message) {
     return std::string(message) + std::string("\n\n");
 }
 
-std::string HelpMessageOpt(const std::string &option, const std::string &message) {
-    return std::string(optIndent,' ') + std::string(option) +
-           std::string("\n") + std::string(msgIndent,' ') +
-           FormatParagraph(message, screenWidth - msgIndent, msgIndent) +
-           std::string("\n\n");
+std::string HelpMessageOpt(std::string_view option, std::string_view help_param, std::string_view message, bool subopt)
+{
+    constexpr int screen_width = 79;
+    int opt_indent = 2;
+    int msg_indent = 7;
+
+    if (subopt) {
+        int bump = msg_indent - opt_indent;
+        opt_indent += bump; // opt_indent now at the old msg_indent level
+        msg_indent += bump; // indent by the same amount
+    }
+    int msg_width = screen_width - msg_indent;
+
+    return strprintf("%*s%s%s\n%*s%s\n\n",
+                     opt_indent, "", option, help_param,
+                     msg_indent, "", FormatParagraph(message, msg_width, msg_indent));
 }
 
 const std::vector<std::string> TEST_OPTIONS_DOC{
@@ -828,15 +949,22 @@ std::variant<ChainType, std::string> ArgsManager::GetChainArg() const
 
 bool ArgsManager::UseDefaultSection(const std::string& arg) const
 {
-    return m_network == ChainTypeToString(ChainType::MAIN) || m_network_only_args.count(arg) == 0;
+    AssertLockHeld(cs_args);
+    return m_network == ChainTypeToString(ChainType::MAIN) || !m_network_only_args.contains(arg);
+}
+
+common::SettingsValue ArgsManager::GetSetting_(const std::string& arg) const
+{
+    AssertLockHeld(cs_args);
+    return common::GetSetting(
+        m_settings, m_network, SettingName(arg), !UseDefaultSection(arg),
+        /*ignore_nonpersistent=*/false, /*get_chain_type=*/false);
 }
 
 common::SettingsValue ArgsManager::GetSetting(const std::string& arg) const
 {
     LOCK(cs_args);
-    return common::GetSetting(
-        m_settings, m_network, SettingName(arg), !UseDefaultSection(arg),
-        /*ignore_nonpersistent=*/false, /*get_chain_type=*/false);
+    return GetSetting_(arg);
 }
 
 std::vector<common::SettingsValue> ArgsManager::GetSettingsList(const std::string& arg) const
@@ -850,13 +978,14 @@ void ArgsManager::logArgsPrefix(
     const std::string& section,
     const std::map<std::string, std::vector<common::SettingsValue>>& args) const
 {
+    AssertLockHeld(cs_args);
     std::string section_str = section.empty() ? "" : "[" + section + "] ";
     for (const auto& arg : args) {
         for (const auto& value : arg.second) {
-            std::optional<unsigned int> flags = GetArgFlags('-' + arg.first);
+            std::optional<unsigned int> flags = GetArgFlags_('-' + arg.first);
             if (flags) {
                 std::string value_str = (*flags & SENSITIVE) ? "****" : value.write();
-                LogPrintf("%s %s%s=%s\n", prefix, section_str, arg.first, value_str);
+                LogInfo("%s %s%s=%s\n", prefix, section_str, arg.first, value_str);
             }
         }
     }
@@ -869,34 +998,7 @@ void ArgsManager::LogArgs() const
         logArgsPrefix("Config file arg:", section.first, section.second);
     }
     for (const auto& setting : m_settings.rw_settings) {
-        LogPrintf("Setting file arg: %s = %s\n", setting.first, setting.second.write());
+        LogInfo("Setting file arg: %s = %s\n", setting.first, setting.second.write());
     }
     logArgsPrefix("Command-line arg:", "", m_settings.command_line_options);
 }
-
-namespace common {
-#ifdef WIN32
-WinCmdLineArgs::WinCmdLineArgs()
-{
-    wchar_t** wargv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> utf8_cvt;
-    argv = new char*[argc];
-    args.resize(argc);
-    for (int i = 0; i < argc; i++) {
-        args[i] = utf8_cvt.to_bytes(wargv[i]);
-        argv[i] = &*args[i].begin();
-    }
-    LocalFree(wargv);
-}
-
-WinCmdLineArgs::~WinCmdLineArgs()
-{
-    delete[] argv;
-}
-
-std::pair<int, char**> WinCmdLineArgs::get()
-{
-    return std::make_pair(argc, argv);
-}
-#endif
-} // namespace common

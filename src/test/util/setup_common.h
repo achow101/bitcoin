@@ -6,37 +6,29 @@
 #define BITCOIN_TEST_UTIL_SETUP_COMMON_H
 
 #include <common/args.h> // IWYU pragma: export
+#include <consensus/amount.h>
 #include <kernel/caches.h>
-#include <kernel/context.h>
 #include <key.h>
 #include <node/caches.h>
 #include <node/context.h> // IWYU pragma: export
-#include <optional>
-#include <ostream>
 #include <primitives/transaction.h>
-#include <pubkey.h>
-#include <stdexcept>
+#include <random.h>
 #include <test/util/random.h>
 #include <util/chaintype.h> // IWYU pragma: export
-#include <util/check.h>
 #include <util/fs.h>
 #include <util/signalinterrupt.h>
-#include <util/string.h>
 #include <util/vector.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <type_traits>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
-class arith_uint256;
 class CFeeRate;
-class Chainstate;
-class FastRandomContext;
-class uint160;
-class uint256;
-
-/** This is connected to the logger. Can be used to redirect logs to any other log */
-extern const std::function<void(const std::string&)> G_TEST_LOG_FUN;
 
 /** Retrieve the command line arguments. */
 extern const std::function<std::vector<const char*>()> G_TEST_COMMAND_LINE_ARGUMENTS;
@@ -73,7 +65,7 @@ struct BasicTestingSetup {
         m_rng.Reseed(GetRandHash());
     }
 
-    explicit BasicTestingSetup(const ChainType chainType = ChainType::MAIN, TestOpts = {});
+    explicit BasicTestingSetup(ChainType chainType = ChainType::MAIN, TestOpts = {});
     ~BasicTestingSetup();
 
     fs::path m_path_root;
@@ -109,7 +101,7 @@ struct ChainTestingSetup : public BasicTestingSetup {
     bool m_block_tree_db_in_memory{true};
     std::function<void()> m_make_chainman{};
 
-    explicit ChainTestingSetup(const ChainType chainType = ChainType::MAIN, TestOpts = {});
+    explicit ChainTestingSetup(ChainType chainType = ChainType::MAIN, TestOpts = {});
     ~ChainTestingSetup();
 
     // Supplies a chainstate, if one is needed
@@ -120,7 +112,7 @@ struct ChainTestingSetup : public BasicTestingSetup {
  */
 struct TestingSetup : public ChainTestingSetup {
     explicit TestingSetup(
-        const ChainType chainType = ChainType::MAIN,
+        ChainType chainType = ChainType::MAIN,
         TestOpts = {});
 };
 
@@ -137,7 +129,6 @@ struct Testnet4Setup : public TestingSetup {
 };
 
 class CBlock;
-struct CMutableTransaction;
 class CScript;
 
 /**
@@ -145,17 +136,15 @@ class CScript;
  */
 struct TestChain100Setup : public TestingSetup {
     TestChain100Setup(
-        const ChainType chain_type = ChainType::REGTEST,
+        ChainType chain_type = ChainType::REGTEST,
         TestOpts = {});
 
     /**
      * Create a new block with just given transactions, coinbase paying to
      * scriptPubKey, and try to add it to the current chain.
-     * If no chainstate is specified, default to the active.
      */
     CBlock CreateAndProcessBlock(const std::vector<CMutableTransaction>& txns,
-                                 const CScript& scriptPubKey,
-                                 Chainstate* chainstate = nullptr);
+                                 const CScript& scriptPubKey);
 
     /**
      * Create a new block with just given transactions, coinbase paying to
@@ -163,8 +152,7 @@ struct TestChain100Setup : public TestingSetup {
      */
     CBlock CreateBlock(
         const std::vector<CMutableTransaction>& txns,
-        const CScript& scriptPubKey,
-        Chainstate& chainstate);
+        const CScript& scriptPubKey);
 
     //! Mine a series of new blocks on the active chain.
     void mineBlocks(int num_blocks);
@@ -238,17 +226,6 @@ struct TestChain100Setup : public TestingSetup {
      */
     std::vector<CTransactionRef> PopulateMempool(FastRandomContext& det_rand, size_t num_transactions, bool submit);
 
-    /** Mock the mempool minimum feerate by adding a transaction and calling TrimToSize(0),
-     * simulating the mempool "reaching capacity" and evicting by descendant feerate.  Note that
-     * this clears the mempool, and the new minimum feerate will depend on the maximum feerate of
-     * transactions removed, so this must be called while the mempool is empty.
-     *
-     * @param target_feerate    The new mempool minimum feerate after this function returns.
-     *                          Must be above max(incremental feerate, min relay feerate),
-     *                          or 1sat/vB with default settings.
-     */
-    void MockMempoolMinFee(const CFeeRate& target_feerate);
-
     std::vector<CTransactionRef> m_coinbase_txns; // For convenience, coinbase transactions
     CKey coinbaseKey; // private/public key needed to spend coinbase transactions
 };
@@ -271,44 +248,5 @@ std::unique_ptr<T> MakeNoLogFileContext(const ChainType chain_type = ChainType::
 }
 
 CBlock getBlock13b8a();
-
-// Make types usable in BOOST_CHECK_* @{
-namespace std {
-template <typename T> requires std::is_enum_v<T>
-inline std::ostream& operator<<(std::ostream& os, const T& e)
-{
-    return os << static_cast<std::underlying_type_t<T>>(e);
-}
-
-template <typename T>
-inline std::ostream& operator<<(std::ostream& os, const std::optional<T>& v)
-{
-    return v ? os << *v
-             : os << "std::nullopt";
-}
-} // namespace std
-
-std::ostream& operator<<(std::ostream& os, const arith_uint256& num);
-std::ostream& operator<<(std::ostream& os, const uint160& num);
-std::ostream& operator<<(std::ostream& os, const uint256& num);
-std::ostream& operator<<(std::ostream& os, const Txid& txid);
-std::ostream& operator<<(std::ostream& os, const Wtxid& wtxid);
-// @}
-
-/**
- * BOOST_CHECK_EXCEPTION predicates to check the specific validation error.
- * Use as
- * BOOST_CHECK_EXCEPTION(code that throws, exception type, HasReason("foo"));
- */
-class HasReason
-{
-public:
-    explicit HasReason(std::string_view reason) : m_reason(reason) {}
-    bool operator()(std::string_view s) const { return s.find(m_reason) != std::string_view::npos; }
-    bool operator()(const std::exception& e) const { return (*this)(e.what()); }
-
-private:
-    const std::string m_reason;
-};
 
 #endif // BITCOIN_TEST_UTIL_SETUP_COMMON_H

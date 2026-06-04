@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2022 The Bitcoin Core developers
+# Copyright (c) 2020-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test datacarrier functionality"""
@@ -99,18 +99,6 @@ class DataCarrierTest(BitcoinTestFramework):
         self.test_null_data_transaction(node=self.nodes[1], data=one_byte, success=False)
         self.test_null_data_transaction(node=self.nodes[2], data=one_byte, success=True)
         self.test_null_data_transaction(node=self.nodes[3], data=one_byte, success=False)
-
-        # Clean shutdown boilerplate due to deprecation
-        self.expected_stderr = [
-            "",  # node 0 has no deprecated options
-            "Warning: Options '-datacarrier' or '-datacarriersize' are set but are marked as deprecated. They will be removed in a future version.",
-            "Warning: Options '-datacarrier' or '-datacarriersize' are set but are marked as deprecated. They will be removed in a future version.",
-            "Warning: Options '-datacarrier' or '-datacarriersize' are set but are marked as deprecated. They will be removed in a future version.",
-        ]
-
-        for i in range(self.num_nodes):
-            self.stop_node(i, expected_stderr=self.expected_stderr[i])
-
 
 if __name__ == '__main__':
     DataCarrierTest(__file__).main()

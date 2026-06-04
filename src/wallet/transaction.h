@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 The Bitcoin Core developers
+// Copyright (c) 2021-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -232,6 +232,8 @@ public:
      * CWallet::ComputeTimeSmart().
      */
     unsigned int nTimeSmart;
+    // Cached value for whether the transaction spends any inputs known to the wallet
+    mutable std::optional<bool> m_cached_from_me{std::nullopt};
     int64_t nOrderPos; //!< position in ordered transaction list
     std::multimap<int64_t, CWalletTx*>::const_iterator m_it_wtxOrdered;
 
@@ -292,9 +294,9 @@ public:
             mapValueCopy["timesmart"] = strprintf("%u", nTimeSmart);
         }
 
-        std::vector<uint8_t> dummy_vector1; //!< Used to be vMerkleBranch
-        std::vector<uint8_t> dummy_vector2; //!< Used to be vtxPrev
-        bool dummy_bool = false; //!< Used to be fFromMe, and fSpent
+        std::vector<uint8_t> dummy_vector1; // Used to be vMerkleBranch
+        std::vector<uint8_t> dummy_vector2; // Used to be vtxPrev
+        bool dummy_bool = false; // Used to be fFromMe, and fSpent
         uint32_t dummy_int = 0; // Used to be fTimeReceivedIsTxTime
         uint256 serializedHash = TxStateSerializedBlockHash(m_state);
         int serializedIndex = TxStateSerializedIndex(m_state);
@@ -306,9 +308,9 @@ public:
     {
         Init();
 
-        std::vector<uint256> dummy_vector1; //!< Used to be vMerkleBranch
-        std::vector<CMerkleTx> dummy_vector2; //!< Used to be vtxPrev
-        bool dummy_bool; //! Used to be fFromMe, and fSpent
+        std::vector<uint256> dummy_vector1; // Used to be vMerkleBranch
+        std::vector<CMerkleTx> dummy_vector2; // Used to be vtxPrev
+        bool dummy_bool; // Used to be fFromMe, and fSpent
         uint32_t dummy_int; // Used to be fTimeReceivedIsTxTime
         uint256 serialized_block_hash;
         int serializedIndex;
@@ -339,6 +341,7 @@ public:
         m_amounts[CREDIT].Reset();
         fChangeCached = false;
         m_is_cache_empty = true;
+        m_cached_from_me = std::nullopt;
     }
 
     /** True if only scriptSigs are different */

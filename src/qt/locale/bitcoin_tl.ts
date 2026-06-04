@@ -14,10 +14,6 @@
         <translation type="unfinished">Panibago</translation>
     </message>
     <message>
-        <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">Gayahin ang pinipiling ♦address♦ sa kasalakuyan sa ♦clipboard♦ ng sistem</translation>
-    </message>
-    <message>
         <source>&amp;Copy</source>
         <translation type="unfinished">Gayahin</translation>
     </message>
@@ -987,10 +983,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">I-disable ang Pribadong mga Susi</translation>
     </message>
     <message>
-        <source>Make a blank wallet. Blank wallets do not initially have private keys or scripts. Private keys and addresses can be imported, or an HD seed can be set, at a later time.</source>
-        <translation type="unfinished">Gumawa ng blankong pitaka. Ang blankong mga pitaka hindi muna nagkakaroon ng pribadong mga susi o mga ♦script♦. Ang pribadong mga susi at mga ♦address♦ ay pwedeng ma-import, o ang ♦HD seed♦ ay pwedeng mai-set, mamaya.</translation>
-    </message>
-    <message>
         <source>Make Blank Wallet</source>
         <translation type="unfinished">Gumawa ng Blankong Pitaka</translation>
     </message>
@@ -1091,7 +1083,25 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
 </context>
 <context>
+    <name>HelpMessageDialog</name>
+    <message>
+        <source>version</source>
+        <translation type="unfinished">bersyon</translation>
+    </message>
+    </context>
+<context>
+    <name>ShutdownWindow</name>
+    <message>
+        <source>Do not shut down the computer until this window disappears.</source>
+        <translation type="unfinished">Huwag Patayin ang inyong kompyuter hanggang mawala ang window na ito.</translation>
+    </message>
+</context>
+<context>
     <name>Intro</name>
+    <message>
+        <source>Welcome</source>
+        <translation type="unfinished">Maligayang Pagdating</translation>
+    </message>
     <message>
         <source>Bitcoin</source>
         <translation type="unfinished">♦Bitcoin♦</translation>
@@ -1132,24 +1142,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Error</source>
         <translation type="unfinished">Nagkamali</translation>
-    </message>
-    <message>
-        <source>Welcome</source>
-        <translation type="unfinished">Maligayang Pagdating</translation>
-    </message>
-    </context>
-<context>
-    <name>HelpMessageDialog</name>
-    <message>
-        <source>version</source>
-        <translation type="unfinished">bersyon</translation>
-    </message>
-    </context>
-<context>
-    <name>ShutdownWindow</name>
-    <message>
-        <source>Do not shut down the computer until this window disappears.</source>
-        <translation type="unfinished">Huwag Patayin ang inyong kompyuter hanggang mawala ang window na ito.</translation>
     </message>
 </context>
 <context>
@@ -1218,6 +1210,23 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Error</source>
         <translation type="unfinished">Nagkamali</translation>
+    </message>
+    </context>
+<context>
+    <name>PSBTOperationsDialog</name>
+    <message numerus="yes">
+        <source>Signed %n input(s), but more signatures are still required.</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Transaction has %n unsigned input(s).</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
     </message>
     </context>
 <context>
@@ -1448,6 +1457,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </context>
 <context>
     <name>bitcoin-core</name>
+    <message>
+        <source>default wallet</source>
+        <translation type="unfinished">pitaka na ♦default♦</translation>
+    </message>
     <message>
         <source>Settings file could not be read</source>
         <translation type="unfinished">Ang mga ♦setting file♦ ay hindi mabasa</translation>

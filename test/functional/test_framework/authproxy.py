@@ -44,21 +44,12 @@ import socket
 import time
 import urllib.parse
 
+from .util import JSONRPCException, assert_equal
+
 HTTP_TIMEOUT = 30
 USER_AGENT = "AuthServiceProxy/0.1"
 
 log = logging.getLogger("BitcoinRPC")
-
-class JSONRPCException(Exception):
-    def __init__(self, rpc_error, http_status=None):
-        try:
-            errmsg = '%(message)s (%(code)i)' % rpc_error
-        except (KeyError, TypeError):
-            errmsg = ''
-        super().__init__(errmsg)
-        self.error = rpc_error
-        self.http_status = http_status
-
 
 def serialization_fallback(o):
     if isinstance(o, decimal.Decimal):
@@ -148,7 +139,7 @@ class AuthServiceProxy():
             else:
                 return response['result']
         else:
-            assert response['jsonrpc'] == '2.0'
+            assert_equal(response['jsonrpc'], '2.0')
             if status != HTTPStatus.OK:
                 raise JSONRPCException({
                     'code': -342, 'message': 'non-200 HTTP status code'}, status)
@@ -195,7 +186,7 @@ class AuthServiceProxy():
         content_type = http_response.getheader('Content-Type')
         if content_type != 'application/json':
             raise JSONRPCException(
-                {'code': -342, 'message': 'non-JSON HTTP response with \'%i %s\' from server' % (http_response.status, http_response.reason)},
+                {'code': -342, 'message': f"non-JSON HTTP response with \'{http_response.status} {http_response.reason}\' from server: {http_response.read().decode()}"},
                 http_response.status)
 
         data = http_response.read()

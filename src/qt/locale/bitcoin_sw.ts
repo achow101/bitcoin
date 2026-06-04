@@ -14,10 +14,6 @@
         <translation type="unfinished">&amp;Mpya</translation>
     </message>
     <message>
-        <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">Nakili anwani iliyochaguliwa kwa sasa kwenye ubao wa kunakili wa mfumo</translation>
-    </message>
-    <message>
         <source>&amp;Copy</source>
         <translation type="unfinished">&amp;nakili</translation>
     </message>
@@ -558,6 +554,10 @@ Kutia sahihi kunawezekana tu kwa anwani za aina ya 'urithi'.</translation>
         <translation type="unfinished">Inakamata...</translation>
     </message>
     <message>
+        <source>Last received block was generated %1 ago.</source>
+        <translation type="unfinished">Kizuizi cha mwisho kilichopokelewa kilitolewa %1awali.</translation>
+    </message>
+    <message>
         <source>Transactions after this will not yet be visible.</source>
         <translation type="unfinished">Shughuli baada ya hii bado hazitaonekana.</translation>
     </message>
@@ -736,14 +736,6 @@ Kutia sahihi kunawezekana tu kwa anwani za aina ya 'urithi'.</translation>
         <translation type="unfinished">Kusawazisha Vichwa vya awali (%1%)...</translation>
     </message>
     <message>
-        <source>Error creating wallet</source>
-        <translation type="unfinished">Hitilafu unapounda pochi</translation>
-    </message>
-    <message>
-        <source>Cannot create new wallet, the software was compiled without sqlite support (required for descriptor wallets)</source>
-        <translation type="unfinished">Haiwezi kuunda pochi mpya, programu iliundwa bila usaidizi wa sqlite (inahitajika kwa pochi za maelezo)</translation>
-    </message>
-    <message>
         <source>Error: %1</source>
         <translation type="unfinished">Kosa: %1</translation>
     </message>
@@ -807,7 +799,7 @@ Kutia sahihi kunawezekana tu kwa anwani za aina ya 'urithi'.</translation>
     </message>
     <message>
         <source>Wallet is &lt;b&gt;encrypted&lt;/b&gt; and currently &lt;b&gt;unlocked&lt;/b&gt;</source>
-        <translation type="unfinished">Wallet &lt;b&gt;imesimbwa kwa njia fiche&lt;/b&gt; na &lt;b&gt;imefunguliwa&lt;/b&gt; kwa sasa</translation>
+        <translation type="unfinished">Pochi &lt;b&gt;imesimbwa kwa njia fiche&lt;/b&gt; na &lt;b&gt;imefunguliwa&lt;/b&gt; kwa sasa</translation>
     </message>
     <message>
         <source>Wallet is &lt;b&gt;encrypted&lt;/b&gt; and currently &lt;b&gt;locked&lt;/b&gt;</source>
@@ -941,7 +933,7 @@ Kutia sahihi kunawezekana tu kwa anwani za aina ya 'urithi'.</translation>
     </message>
     <message>
         <source>(no label)</source>
-        <translation type="unfinished">(hamna chapa)</translation>
+        <translation type="unfinished">(hakuna lebo)</translation>
     </message>
     <message>
         <source>(change)</source>
@@ -1012,6 +1004,11 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
         <translation type="unfinished">Hamisha Pochi</translation>
     </message>
     <message>
+        <source>Restore Wallet</source>
+        <extracomment>Title of progress window which is displayed when wallets are being restored.</extracomment>
+        <translation type="unfinished">Rejesha Pochi</translation>
+    </message>
+    <message>
         <source>Migration failed</source>
         <translation type="unfinished">Uhamiaji haukufaulu</translation>
     </message>
@@ -1063,7 +1060,7 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     <name>WalletController</name>
     <message>
         <source>Close wallet</source>
-        <translation type="unfinished">Funga Pochi</translation>
+        <translation type="unfinished">Funga pochi</translation>
     </message>
     <message>
         <source>Are you sure you wish to close the wallet &lt;i&gt;%1&lt;/i&gt;?</source>
@@ -1111,10 +1108,6 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     <message>
         <source>Disable private keys for this wallet. Wallets with private keys disabled will have no private keys and cannot have an HD seed or imported private keys. This is ideal for watch-only wallets.</source>
         <translation type="unfinished">Zima funguo za siri kwa ajili ya pochi hii. Pochi zenye funguo za siri zilizozimwa hazitakua na funguo za siri na hazitakuwa na mbegu ya HD au funguo za siri zilizoingizwa. Hii inafaa kwa pochi za uangalizi tu.</translation>
-    </message>
-    <message>
-        <source>Make a blank wallet. Blank wallets do not initially have private keys or scripts. Private keys and addresses can be imported, or an HD seed can be set, at a later time.</source>
-        <translation type="unfinished">Tengeneza pochi tupu. Pochi tupu kwa kuanza hazina funguo za siri au hati. Funguo za siri zinaweza kuingizwa, au mbegu ya HD inaweza kuwekwa baadae.</translation>
     </message>
     <message>
         <source>Use an external signing device such as a hardware wallet. Configure the external signer script in wallet preferences first.</source>
@@ -1177,6 +1170,10 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
 </context>
 <context>
     <name>Intro</name>
+    <message>
+        <source>Welcome</source>
+        <translation type="unfinished">Karibu</translation>
+    </message>
     <message numerus="yes">
         <source>%n GB of space available</source>
         <translation type="unfinished">
@@ -1208,13 +1205,9 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">Onyo</translation>
+        <translation type="unfinished">Kosa</translation>
     </message>
-    <message>
-        <source>Welcome</source>
-        <translation type="unfinished">Karibu</translation>
-    </message>
-    </context>
+</context>
 <context>
     <name>OptionsDialog</name>
     <message>
@@ -1231,11 +1224,28 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     </message>
     </context>
 <context>
+    <name>PSBTOperationsDialog</name>
+    <message numerus="yes">
+        <source>Signed %n input(s), but more signatures are still required.</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Transaction has %n unsigned input(s).</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
+    </message>
+    </context>
+<context>
     <name>PeerTableModel</name>
     <message>
         <source>Address</source>
         <extracomment>Title of Peers Table column which contains the IP/Onion/I2P address of the connected peer.</extracomment>
-        <translation type="unfinished">Anwani</translation>
+        <translation type="unfinished">Anuani</translation>
     </message>
     </context>
 <context>
@@ -1311,7 +1321,7 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     </message>
     <message>
         <source>Label</source>
-        <translation type="unfinished">Chapa</translation>
+        <translation type="unfinished">Lebo</translation>
     </message>
     <message>
         <source>(no label)</source>
@@ -1469,15 +1479,15 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     </message>
     <message>
         <source>Label</source>
-        <translation type="unfinished">Chapa</translation>
+        <translation type="unfinished">Lebo</translation>
     </message>
     <message>
         <source>Address</source>
-        <translation type="unfinished">Anwani</translation>
+        <translation type="unfinished">Anuani</translation>
     </message>
     <message>
         <source>Exporting Failed</source>
-        <translation type="unfinished">Kuuza Nje Kushindwa</translation>
+        <translation type="unfinished">Utoaji Haujafanikiwa</translation>
     </message>
     <message>
         <source>Exporting Successful</source>
@@ -1492,7 +1502,7 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">Onyo</translation>
+        <translation type="unfinished">Kosa</translation>
     </message>
     </context>
 <context>
@@ -1523,7 +1533,11 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     </message>
     <message>
         <source>Error: Address book data in wallet cannot be identified to belong to migrated wallets</source>
-        <translation type="unfinished">Hitilafu: Data za kitabu cha anunai katika pochi haziwezi kutambulika kuwa ni ya pochi zilizohamia.</translation>
+        <translation type="unfinished">HITILAFU: Data za kitabu cha anunai katika pochi haziwezi kutambulika kuwa ni ya pochi zilizohamia.</translation>
+    </message>
+    <message>
+        <source>default wallet</source>
+        <translation type="unfinished">mkoba chaguo-msingi</translation>
     </message>
     <message>
         <source>Error: No %s addresses available.</source>
@@ -1532,10 +1546,6 @@ Mchakato wa uhamiaji utaunda nakala rudufu ya pochi kabla ya kuhama. Faili hii y
     <message>
         <source>Error: Unable to remove watchonly address book data</source>
         <translation type="unfinished">Hitilafu: Imeshindwa kuondoa data katika kitabu cha anuani ya kutazama tu</translation>
-    </message>
-    <message>
-        <source>Importing…</source>
-        <translation type="unfinished">Inaingizwa...</translation>
     </message>
     <message>
         <source>Invalid -i2psam address or hostname: '%s'</source>

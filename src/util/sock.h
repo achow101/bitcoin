@@ -6,19 +6,27 @@
 #define BITCOIN_UTIL_SOCK_H
 
 #include <compat/compat.h>
-#include <util/threadinterrupt.h>
 #include <util/time.h>
 
-#include <chrono>
+#include <cstdint>
+#include <limits>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
+
+class CThreadInterrupt;
 
 /**
  * Maximum time to wait for I/O readiness.
  * It will take up until this time to break off in case of an interruption.
  */
 static constexpr auto MAX_WAIT_FOR_IO = 1s;
+
+inline bool IOErrorIsPermanent(int err)
+{
+    return err != WSAEAGAIN && err != WSAEINTR && err != WSAEWOULDBLOCK && err != WSAEINPROGRESS;
+}
 
 /**
  * RAII helper class that manages a socket and closes it automatically when it goes out of scope.

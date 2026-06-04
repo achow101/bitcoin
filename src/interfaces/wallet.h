@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 The Bitcoin Core developers
+// Copyright (c) 2018-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,7 @@
 
 #include <addresstype.h>
 #include <common/signmessage.h>
+#include <common/types.h>
 #include <consensus/amount.h>
 #include <interfaces/chain.h>
 #include <primitives/transaction_identifier.h>
@@ -31,7 +32,7 @@ class CFeeRate;
 class CKey;
 enum class FeeReason;
 enum class OutputType;
-struct PartiallySignedTransaction;
+class PartiallySignedTransaction;
 struct bilingual_str;
 namespace common {
 enum class PSBTError;
@@ -40,6 +41,7 @@ namespace node {
 enum class TransactionError;
 } // namespace node
 namespace wallet {
+struct CreatedTransactionResult;
 class CCoinControl;
 class CWallet;
 enum class AddressPurpose;
@@ -95,7 +97,7 @@ public:
     virtual std::string getWalletName() = 0;
 
     // Get a new address.
-    virtual util::Result<CTxDestination> getNewDestination(const OutputType type, const std::string& label) = 0;
+    virtual util::Result<CTxDestination> getNewDestination(OutputType type, const std::string& label) = 0;
 
     //! Get public key.
     virtual bool getPubKey(const CScript& script, const CKeyID& address, CPubKey& pub_key) = 0;
@@ -130,7 +132,7 @@ public:
     virtual util::Result<void> displayAddress(const CTxDestination& dest) = 0;
 
     //! Lock coin.
-    virtual bool lockCoin(const COutPoint& output, const bool write_to_db) = 0;
+    virtual bool lockCoin(const COutPoint& output, bool write_to_db) = 0;
 
     //! Unlock coin.
     virtual bool unlockCoin(const COutPoint& output) = 0;
@@ -142,11 +144,10 @@ public:
     virtual void listLockedCoins(std::vector<COutPoint>& outputs) = 0;
 
     //! Create transaction.
-    virtual util::Result<CTransactionRef> createTransaction(const std::vector<wallet::CRecipient>& recipients,
+    virtual util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>& recipients,
         const wallet::CCoinControl& coin_control,
         bool sign,
-        int& change_pos,
-        CAmount& fee) = 0;
+        std::optional<unsigned int> change_pos) = 0;
 
     //! Commit transaction.
     virtual void commitTransaction(CTransactionRef tx,
@@ -202,9 +203,7 @@ public:
         int& num_blocks) = 0;
 
     //! Fill PSBT.
-    virtual std::optional<common::PSBTError> fillPSBT(std::optional<int> sighash_type,
-        bool sign,
-        bool bip32derivs,
+    virtual std::optional<common::PSBTError> fillPSBT(const common::PSBTFillOptions& options,
         size_t* n_signed,
         PartiallySignedTransaction& psbtx,
         bool& complete) = 0;
@@ -325,7 +324,7 @@ public:
     virtual std::string getWalletDir() = 0;
 
     //! Restore backup wallet
-    virtual util::Result<std::unique_ptr<Wallet>> restoreWallet(const fs::path& backup_file, const std::string& wallet_name, std::vector<bilingual_str>& warnings) = 0;
+    virtual util::Result<std::unique_ptr<Wallet>> restoreWallet(const fs::path& backup_file, const std::string& wallet_name, std::vector<bilingual_str>& warnings, bool load_after_restore) = 0;
 
     //! Migrate a wallet
     virtual util::Result<WalletMigrationResult> migrateWallet(const std::string& name, const SecureString& passphrase) = 0;
@@ -369,11 +368,14 @@ struct WalletBalances
     CAmount balance = 0;
     CAmount unconfirmed_balance = 0;
     CAmount immature_balance = 0;
+    CAmount used_balance = 0;
+    CAmount nonmempool_balance = 0;
 
     bool balanceChanged(const WalletBalances& prev) const
     {
         return balance != prev.balance || unconfirmed_balance != prev.unconfirmed_balance ||
-               immature_balance != prev.immature_balance;
+               immature_balance != prev.immature_balance ||
+               used_balance != prev.used_balance || nonmempool_balance != prev.nonmempool_balance;
     }
 };
 

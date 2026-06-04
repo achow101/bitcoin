@@ -11,6 +11,7 @@
 #include <uint256.h>
 #include <util/hash_type.h>
 
+#include <compare>
 #include <string>
 
 CScriptID::CScriptID(const CScript& in) : BaseHash(Hash160(in)) {}
@@ -151,9 +152,8 @@ std::string GetOpName(opcodetype opcode)
 
     case OP_INVALIDOPCODE          : return "OP_INVALIDOPCODE";
 
-    default:
-        return "OP_UNKNOWN";
-    }
+    } // no default case, so the compiler can warn about missing cases
+    return "OP_UNKNOWN";
 }
 
 unsigned int CScript::GetSigOpCount(bool fAccurate) const

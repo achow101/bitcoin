@@ -14,10 +14,6 @@
         <translation type="unfinished">&amp;amp;नयाँ</translation>
     </message>
     <message>
-        <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">भर्खरै चयन गरेको ठेगाना प्रणाली क्लिपबोर्डमा कपी गर्नुहोस्</translation>
-    </message>
-    <message>
         <source>&amp;Copy</source>
         <translation type="unfinished">&amp;amp;कपी गर्नुहोस्</translation>
     </message>
@@ -599,6 +595,14 @@ Signing is only possible with addresses of the type 'legacy'.</source>
 <context>
     <name>Intro</name>
     <message>
+        <source>Welcome</source>
+        <translation type="unfinished">स्वागत छ</translation>
+    </message>
+    <message>
+        <source>Welcome to %1.</source>
+        <translation type="unfinished">स्वागत छ %1 .</translation>
+    </message>
+    <message>
         <source>Bitcoin</source>
         <translation type="unfinished">बिटकोइन</translation>
     </message>
@@ -630,14 +634,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
             <numerusform />
             <numerusform />
         </translation>
-    </message>
-    <message>
-        <source>Welcome</source>
-        <translation type="unfinished">स्वागत छ</translation>
-    </message>
-    <message>
-        <source>Welcome to %1.</source>
-        <translation type="unfinished">स्वागत छ %1 .</translation>
     </message>
     </context>
 <context>
@@ -713,10 +709,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">देखाइएको सूचना पूरानो हुन सक्छ । कनेक्सन स्थापित भएपछि, तपाईंको वालेट बिटकोइन नेटवर्कमा स्वचालित रूपमा समिकरण हुन्छ , तर यो प्रक्रिया अहिले सम्म पूरा भएको छैन ।</translation>
     </message>
     <message>
-        <source>Watch-only:</source>
-        <translation type="unfinished">हेर्ने-मात्र:</translation>
-    </message>
-    <message>
         <source>Available:</source>
         <translation type="unfinished">उपलब्ध:</translation>
     </message>
@@ -753,20 +745,8 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">तपाईंको हालको सम्पूर्ण ब्यालेन्स</translation>
     </message>
     <message>
-        <source>Spendable:</source>
-        <translation type="unfinished">खर्च उपलब्ध:</translation>
-    </message>
-    <message>
         <source>Recent transactions</source>
         <translation type="unfinished">भर्खरको ट्राजेक्शनहरू</translation>
-    </message>
-    <message>
-        <source>Mined balance in watch-only addresses that has not yet matured</source>
-        <translation type="unfinished">अहिलेसम्म परिपक्व नभएको खनन गरिएको, हेर्ने-मात्र ठेगानामा रहेको ब्यालेन्स</translation>
-    </message>
-    <message>
-        <source>Current total balance in watch-only addresses</source>
-        <translation type="unfinished">हेर्ने-मात्र ठेगानामा रहेको हालको जम्मा ब्यालेन्स</translation>
     </message>
     </context>
 <context>
@@ -779,9 +759,23 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <source>Close</source>
         <translation type="unfinished">बन्द गर्नुहोस्</translation>
     </message>
+    <message numerus="yes">
+        <source>Signed %n input(s), but more signatures are still required.</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
+    </message>
     <message>
         <source>Transaction broadcast successfully! Transaction ID: %1</source>
         <translation type="unfinished">कारोबार सफलतापूर्वक प्रसारण गरियो! कारोबारआईडी: %1</translation>
+    </message>
+    <message numerus="yes">
+        <source>Transaction has %n unsigned input(s).</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
     </message>
     </context>
 <context>
@@ -920,10 +914,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">पहिला प्रयोग गरिएको ठेगाना प्रयोग गर्नुहोस्</translation>
     </message>
     <message>
-        <source>Copy the current signature to the system clipboard</source>
-        <translation type="unfinished">वर्तमान हस्ताक्षरलाई प्रणाली क्लिपबोर्डमा कपी गर्नुहोस्</translation>
-    </message>
-    <message>
         <source>Enter the receiver's address, message (ensure you copy line breaks, spaces, tabs, etc. exactly) and signature below to verify the message. Be careful not to read more into the signature than what is in the signed message itself, to avoid being tricked by a man-in-the-middle attack. Note that this only proves the signing party receives with the address, it cannot prove sendership of any transaction!</source>
         <translation type="unfinished">सन्देश प्रमाणित गर्न, तल दिइएको स्थानमा प्राप्तकर्ता ठेगाना, सन्देश (लाइन ब्रेक, स्पेस, ट्याब, आदि उस्तै गरी कपी गर्ने कुरा सुनिश्चित गर्नुहोस्) र हस्ताक्षर &amp;apos;s प्रविष्ट गर्नुहोस् । बीचमा-मानिसको-आक्रमणबाट बच्न हस्ताक्षर पढ्दा हस्ताक्षर गरिएको सन्देशमा जे छ त्यो भन्दा धेरै कुरामा ध्यान नदिनुहोस् । यो कार्यले हस्ताक्षर गर्ने पक्षले मात्र यो ठेगानाले प्राप्त गर्छ भन्ने कुरा प्रमाणित गर्छ, यसले कुनै पनि कारोबारको प्रेषककर्तालाई प्रमाणित गर्न सक्दैन भन्ने कुरा याद गर्नुहोस्!</translation>
     </message>
@@ -1032,10 +1022,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>This is a pre-release test build - use at your own risk - do not use for mining or merchant applications</source>
         <translation type="unfinished">यो जारी गर्नु पूर्वको परीक्षण संस्करण हो - आफ्नै जोखिममा प्रयोग गर्नुहोस् - खनन वा व्यापारीक प्रयोगको लागि प्रयोग नगर्नुहोस</translation>
-    </message>
-    <message>
-        <source>Warning: We do not appear to fully agree with our peers! You may need to upgrade, or other nodes may need to upgrade.</source>
-        <translation type="unfinished">चेतावनी: हामी हाम्रा सहकर्मीहरूसँग पूर्णतया सहमत छैनौं जस्तो देखिन्छ! तपाईंले अपग्रेड गर्नु पर्ने हुनसक्छ वा अरू नोडहरूले अपग्रेड गर्नु पर्ने हुनसक्छ ।</translation>
     </message>
     <message>
         <source>You need to rebuild the database using -reindex to go back to unpruned mode.  This will redownload the entire blockchain</source>

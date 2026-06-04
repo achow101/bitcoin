@@ -1,27 +1,51 @@
-// Copyright (c) 2023 The Bitcoin Core developers
+// Copyright (c) 2023-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chain.h>
+#include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <consensus/validation.h>
-#include <node/context.h>
-#include <node/mempool_args.h>
-#include <node/miner.h>
+#include <node/mining_types.h>
+#include <policy/feerate.h>
+#include <policy/packages.h>
+#include <policy/policy.h>
+#include <policy/settings.h>
 #include <policy/truc_policy.h>
+#include <primitives/transaction.h>
+#include <script/script.h>
+#include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/fuzz/util/mempool.h>
 #include <test/util/mining.h>
+#include <test/util/random.h>
 #include <test/util/script.h>
 #include <test/util/setup_common.h>
 #include <test/util/txmempool.h>
+#include <txmempool.h>
 #include <util/check.h>
-#include <util/rbf.h>
+#include <util/hasher.h>
+#include <util/time.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
 
-using node::BlockAssembler;
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <iterator>
+#include <limits>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
+#include <span>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 using node::NodeContext;
 
 namespace {
@@ -44,11 +68,10 @@ void initialize_tx_pool()
     g_setup = testing_setup.get();
     SetMockTime(WITH_LOCK(g_setup->m_node.chainman->GetMutex(), return g_setup->m_node.chainman->ActiveTip()->Time()));
 
-    BlockAssembler::Options options;
-    options.coinbase_output_script = P2WSH_EMPTY;
-
     for (int i = 0; i < 2 * COINBASE_MATURITY; ++i) {
-        COutPoint prevout{MineBlock(g_setup->m_node, options)};
+        COutPoint prevout{MineBlock(g_setup->m_node, {
+            .coinbase_output_script = P2WSH_EMPTY,
+        })};
         if (i < COINBASE_MATURITY) {
             // Remember the txids to avoid expensive disk access later on
             g_outpoints_coinbase_init_mature.push_back(prevout);
@@ -122,9 +145,7 @@ std::unique_ptr<CTxMemPool> MakeMempool(FuzzedDataProvider& fuzzed_data_provider
 
     // ...override specific options for this specific fuzz suite
     mempool_opts.limits.ancestor_count = fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 50);
-    mempool_opts.limits.ancestor_size_vbytes = fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 202) * 1'000;
     mempool_opts.limits.descendant_count = fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 50);
-    mempool_opts.limits.descendant_size_vbytes = fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 202) * 1'000;
     mempool_opts.max_size_bytes = fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 200) * 1'000'000;
     mempool_opts.expiry = std::chrono::hours{fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 999)};
     // Only interested in 2 cases: sigop cost 0 or when single legacy sigop cost is >> 1KvB
@@ -174,7 +195,7 @@ std::optional<COutPoint> GetChildEvictingPrevout(const CTxMemPool& tx_pool)
         const auto& entry = *Assert(tx_pool.GetEntry(tx_info.tx->GetHash()));
         std::vector<uint32_t> dust_indexes{GetDust(*tx_info.tx, tx_pool.m_opts.dust_relay_feerate)};
         if (!dust_indexes.empty()) {
-            const auto& children = entry.GetMemPoolChildrenConst();
+            const auto& children = tx_pool.GetChildren(entry);
             if (!children.empty()) {
                 Assert(children.size() == 1);
                 // Find an input that doesn't spend from parent's txid
@@ -325,7 +346,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                                     return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{}));
 
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
-                                   /*bypass_limits=*/fuzzed_data_provider.ConsumeBool(), /*test_accept=*/!single_submit));
+                                   /*bypass_limits=*/false, /*test_accept=*/!single_submit));
 
         if (!single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
             // We don't know anything about the validity since transactions were randomly generated, so

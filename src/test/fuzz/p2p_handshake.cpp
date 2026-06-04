@@ -2,36 +2,32 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <addrman.h>
-#include <consensus/consensus.h>
+#include <banman.h>
 #include <net.h>
 #include <net_processing.h>
-#include <node/warnings.h>
 #include <protocol.h>
-#include <script/script.h>
 #include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/fuzz/util/net.h>
-#include <test/util/mining.h>
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
+#include <test/util/time.h>
 #include <test/util/validation.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
 #include <ios>
-#include <string>
 #include <utility>
 #include <vector>
 
 namespace {
-const TestingSetup* g_setup;
+TestingSetup* g_setup;
 
 void initialize()
 {
-    static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>(
+    static const auto testing_setup = MakeNoLogFileContext<TestingSetup>(
         /*chain_type=*/ChainType::REGTEST);
     g_setup = testing_setup.get();
 }
@@ -42,22 +38,26 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
-    auto& connman = static_cast<ConnmanTestMsg&>(*g_setup->m_node.connman);
-    auto& chainman = static_cast<TestChainstateManager&>(*g_setup->m_node.chainman);
-    SetMockTime(1610000000); // any time to successfully reset ibd
+    auto& node{g_setup->m_node};
+    auto& connman{static_cast<ConnmanTestMsg&>(*node.connman)};
+    auto& chainman{static_cast<TestChainstateManager&>(*node.chainman)};
+    NodeClockContext clock_ctx{1610000000s}; // any time to successfully reset ibd
     chainman.ResetIbd();
 
-    node::Warnings warnings{};
-    NetGroupManager netgroupman{{}};
-    AddrMan addrman{netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0};
-    auto peerman = PeerManager::make(connman, addrman,
+    node.banman.reset();
+    node.addrman.reset();
+    node.peerman.reset();
+    node.addrman = std::make_unique<AddrMan>(
+        *node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0);
+    node.peerman = PeerManager::make(connman, *node.addrman,
                                      /*banman=*/nullptr, chainman,
-                                     *g_setup->m_node.mempool, warnings,
+                                     *node.mempool, *node.warnings,
                                      PeerManager::Options{
                                          .reconcile_txs = true,
                                          .deterministic_rng = true,
                                      });
-    connman.SetMsgProc(peerman.get());
+    connman.SetMsgProc(node.peerman.get());
+    connman.SetAddrman(*node.addrman);
 
     LOCK(NetEventsInterface::g_msgproc_mutex);
 
@@ -66,7 +66,7 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
     for (int i = 0; i < num_peers_to_add; ++i) {
         peers.push_back(ConsumeNodeAsUniquePtr(fuzzed_data_provider, i).release());
         connman.AddTestNode(*peers.back());
-        peerman->InitializeNode(
+        node.peerman->InitializeNode(
             *peers.back(),
             static_cast<ServiceFlags>(fuzzed_data_provider.ConsumeIntegral<uint64_t>()));
     }
@@ -80,10 +80,11 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
             continue;
         }
 
-        SetMockTime(GetTime() +
+        clock_ctx += std::chrono::seconds{
                     fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(
                         -std::chrono::seconds{10min}.count(), // Allow mocktime to go backwards slightly
-                        std::chrono::seconds{TIMEOUT_INTERVAL}.count()));
+                        std::chrono::seconds{TIMEOUT_INTERVAL}.count()),
+        };
 
         CSerializedNetMsg net_msg;
         net_msg.m_type = PickValue(fuzzed_data_provider, ALL_NET_MESSAGE_TYPES);
@@ -100,9 +101,9 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
                 more_work = connman.ProcessMessagesOnce(connection);
             } catch (const std::ios_base::failure&) {
             }
-            peerman->SendMessages(&connection);
+            node.peerman->SendMessages(connection);
         }
     }
 
-    g_setup->m_node.connman->StopNodes();
+    node.connman->StopNodes();
 }

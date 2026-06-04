@@ -8,9 +8,15 @@
 #include <chainparamsbase.h>
 #include <clientversion.h>
 #include <common/args.h>
+#include <common/license_info.h>
 #include <common/system.h>
+#include <common/url.h>
 #include <compat/compat.h>
 #include <compat/stdin.h>
+#include <interfaces/init.h>
+#include <interfaces/ipc.h>
+#include <interfaces/rpc.h>
+#include <netbase.h>
 #include <policy/feerate.h>
 #include <rpc/client.h>
 #include <rpc/mining.h>
@@ -20,7 +26,9 @@
 #include <univalue.h>
 #include <util/chaintype.h>
 #include <util/exception.h>
+#include <util/sock.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 #include <util/time.h>
 #include <util/translation.h>
 
@@ -29,18 +37,18 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
+#include <thread>
 #include <tuple>
 
 #ifndef WIN32
 #include <unistd.h>
 #endif
-
-#include <event2/buffer.h>
-#include <event2/keyvalq_struct.h>
-#include <support/events.h>
 
 using util::Join;
 using util::ToString;
@@ -53,6 +61,7 @@ using CliClock = std::chrono::system_clock;
 const TranslateFn G_TRANSLATION_FUN{nullptr};
 
 static const char DEFAULT_RPCCONNECT[] = "127.0.0.1";
+static constexpr const char* DEFAULT_RPC_REQ_ID{"1"};
 static const int DEFAULT_HTTP_CLIENT_TIMEOUT=900;
 static constexpr int DEFAULT_WAIT_CLIENT_TIMEOUT = 0;
 static const bool DEFAULT_NAMED=false;
@@ -69,6 +78,65 @@ static const std::string DEFAULT_NBLOCKS = "1";
 
 /** Default -color setting. */
 static const std::string DEFAULT_COLOR_SETTING{"auto"};
+
+struct HTTPError : std::runtime_error {
+    explicit inline HTTPError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+/** Parses the headers of an HTTP response.
+ *
+ * May be replaced by the corresponding methods in HTTPHeaders from
+ * https://github.com/bitcoin/bitcoin/pull/35182 once that class is in a
+ * shared location.
+ */
+class HTTPResponseHeaders
+{
+    std::vector<std::pair<std::string, std::string>> m_headers;
+
+public:
+    void Read(util::LineReader& reader);
+    std::optional<std::string> FindFirst(std::string_view key) const;
+};
+
+// Named Read() in HTTPHeaders (see PR #35182).
+void HTTPResponseHeaders::Read(util::LineReader& reader)
+{
+    // Headers https://httpwg.org/specs/rfc9110.html#rfc.section.6.3
+    // A sequence of Field Lines https://httpwg.org/specs/rfc9110.html#rfc.section.5.2
+    while (auto maybe_line = reader.ReadLine()) {
+        const std::string& line = *maybe_line;
+
+        // An empty line indicates end of the headers section https://www.rfc-editor.org/rfc/rfc2616#section-4
+        if (line.empty()) return;
+
+        // Header line must have at least one ":"
+        // keys are not allowed to have delimiters like ":" but values are
+        // https://httpwg.org/specs/rfc9110.html#rfc.section.5.6.2
+        const size_t pos{line.find(':')};
+        if (pos == std::string::npos) throw HTTPError{"Header missing colon (:)"};
+
+        // Whitespace is optional
+        std::string key = util::TrimString(std::string_view(line).substr(0, pos));
+        std::string value = util::TrimString(std::string_view(line).substr(pos + 1));
+
+        // Header keys are Field Names: https://httpwg.org/specs/rfc9110.html#fields.names
+        // which consist of "tokens": https://httpwg.org/specs/rfc9110.html#rfc.section.5.6.2
+        // that can not be empty.
+        if (key.empty()) throw HTTPError{"Empty header name"};
+
+        m_headers.emplace_back(std::move(key), std::move(value));
+    }
+}
+
+std::optional<std::string> HTTPResponseHeaders::FindFirst(std::string_view key) const
+{
+    for (const auto& item : m_headers) {
+        if (CaseInsensitiveEqual(key, item.first)) {
+            return item.second;
+        }
+    }
+    return std::nullopt;
+}
 
 static void SetupCliArgs(ArgsManager& argsman)
 {
@@ -89,14 +157,15 @@ static void SetupCliArgs(ArgsManager& argsman)
                              "RPC generatetoaddress nblocks and maxtries arguments. Example: bitcoin-cli -generate 4 1000",
                              DEFAULT_NBLOCKS, DEFAULT_MAX_TRIES),
                    ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
-    argsman.AddArg("-addrinfo", "Get the number of addresses known to the node, per network and total, after filtering for quality and recency. The total number of addresses known to the node may be higher.", ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
+    argsman.AddArg("-addrinfo", "Get the number of addresses known to the node, per network and total.", ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
     argsman.AddArg("-getinfo", "Get general information from the remote server. Note that unlike server-side RPC calls, the output of -getinfo is the result of multiple non-atomic requests. Some entries in the output may represent results from different states (e.g. wallet balance may be as of a different block from the chain state reported)", ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
     argsman.AddArg("-netinfo", strprintf("Get network peer connection information from the remote server. An optional argument from 0 to %d can be passed for different peers listings (default: 0). If a non-zero value is passed, an additional \"outonly\" (or \"o\") argument can be passed to see outbound peers only. Pass \"help\" (or \"h\") for detailed help documentation.", NETINFO_MAX_LEVEL), ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
 
     SetupChainParamsBaseOptions(argsman);
     argsman.AddArg("-color=<when>", strprintf("Color setting for CLI output (default: %s). Valid values: always, auto (add color codes when standard output is connected to a terminal and OS is not WIN32), never. Only applies to the output of -getinfo.", DEFAULT_COLOR_SETTING), ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION, OptionsCategory::OPTIONS);
     argsman.AddArg("-named", strprintf("Pass named instead of positional arguments (default: %s)", DEFAULT_NAMED), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-rpcclienttimeout=<n>", strprintf("Timeout in seconds during HTTP requests, or 0 for no timeout. (default: %d)", DEFAULT_HTTP_CLIENT_TIMEOUT), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-rpcid=<id>", strprintf("Set a custom JSON-RPC request ID string (default: %s)", DEFAULT_RPC_REQ_ID), ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION | ArgsManager::DISALLOW_ELISION, OptionsCategory::OPTIONS);
+    argsman.AddArg("-rpcclienttimeout=<n>", strprintf("Timeout in seconds during HTTP requests, or 0 for no timeout. Not implemented for IPC connections (see -ipcconnect). (default: %d)", DEFAULT_HTTP_CLIENT_TIMEOUT), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpcconnect=<ip>", strprintf("Send commands to node running on <ip> (default: %s)", DEFAULT_RPCCONNECT), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpccookiefile=<loc>", "Location of the auth cookie. Relative paths will be prefixed by a net-specific datadir location. (default: data dir)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-rpcpassword=<pw>", "Password for JSON-RPC connections", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -108,6 +177,7 @@ static void SetupCliArgs(ArgsManager& argsman)
     argsman.AddArg("-stdin", "Read extra arguments from standard input, one per line until EOF/Ctrl-D (recommended for sensitive information such as passphrases). When combined with -stdinrpcpass, the first line from standard input is used for the RPC password.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-stdinrpcpass", "Read RPC password from standard input as a single line. When combined with -stdin, the first line from standard input is used for the RPC password. When combined with -stdinwalletpassphrase, -stdinrpcpass consumes the first line, and -stdinwalletpassphrase consumes the second.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-stdinwalletpassphrase", "Read wallet passphrase from standard input as a single line. When combined with -stdin, the first line from standard input is used for the wallet passphrase.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-ipcconnect=<address>", "Connect to bitcoin-node through IPC socket instead of TCP socket to execute requests. Valid <address> values are 'auto' to try to connect to default socket path at <datadir>/node.sock but fall back to TCP if it is not available, 'unix' to connect to the default socket and fail if it isn't available, or 'unix:<socket path>' to connect to a socket at a nonstandard path. -noipcconnect can be specified to avoid attempting to use IPC at all. Default value: auto", ArgsManager::ALLOW_ANY, OptionsCategory::IPC);
 }
 
 std::optional<std::string> RpcWalletName(const ArgsManager& args)
@@ -115,15 +185,6 @@ std::optional<std::string> RpcWalletName(const ArgsManager& args)
     // Check IsArgNegated to return nullopt instead of "0" if -norpcwallet is specified
     if (args.IsArgNegated("-rpcwallet")) return std::nullopt;
     return args.GetArg("-rpcwallet");
-}
-
-/** libevent event log callback */
-static void libevent_log_cb(int severity, const char *msg)
-{
-    // Ignore everything other than errors
-    if (severity >= EVENT_LOG_ERR) {
-        throw std::runtime_error(strprintf("libevent error: %s", msg));
-    }
 }
 
 //
@@ -193,67 +254,11 @@ static int AppInitRPC(int argc, char* argv[])
     return CONTINUE_EXECUTION;
 }
 
-
-/** Reply structure for request_done to fill in */
-struct HTTPReply
+struct HTTPResponse
 {
-    HTTPReply() = default;
-
     int status{0};
-    int error{-1};
     std::string body;
 };
-
-static std::string http_errorstring(int code)
-{
-    switch(code) {
-    case EVREQ_HTTP_TIMEOUT:
-        return "timeout reached";
-    case EVREQ_HTTP_EOF:
-        return "EOF reached";
-    case EVREQ_HTTP_INVALID_HEADER:
-        return "error while reading header, or invalid header";
-    case EVREQ_HTTP_BUFFER_ERROR:
-        return "error encountered while reading or writing";
-    case EVREQ_HTTP_REQUEST_CANCEL:
-        return "request was canceled";
-    case EVREQ_HTTP_DATA_TOO_LONG:
-        return "response body is larger than allowed";
-    default:
-        return "unknown";
-    }
-}
-
-static void http_request_done(struct evhttp_request *req, void *ctx)
-{
-    HTTPReply *reply = static_cast<HTTPReply*>(ctx);
-
-    if (req == nullptr) {
-        /* If req is nullptr, it means an error occurred while connecting: the
-         * error code will have been passed to http_error_cb.
-         */
-        reply->status = 0;
-        return;
-    }
-
-    reply->status = evhttp_request_get_response_code(req);
-
-    struct evbuffer *buf = evhttp_request_get_input_buffer(req);
-    if (buf)
-    {
-        size_t size = evbuffer_get_length(buf);
-        const char *data = (const char*)evbuffer_pullup(buf, size);
-        if (data)
-            reply->body = std::string(data, size);
-        evbuffer_drain(buf, size);
-    }
-}
-
-static void http_error_cb(enum evhttp_request_error err, void *ctx)
-{
-    HTTPReply *reply = static_cast<HTTPReply*>(ctx);
-    reply->error = err;
-}
 
 static int8_t NetworkStringToId(const std::string& str)
 {
@@ -279,33 +284,32 @@ struct AddrinfoRequestHandler : BaseRequestHandler {
         if (!args.empty()) {
             throw std::runtime_error("-addrinfo takes no arguments");
         }
-        UniValue params{RPCConvertValues("getnodeaddresses", std::vector<std::string>{{"0"}})};
-        return JSONRPCRequestObj("getnodeaddresses", params, 1);
+        return JSONRPCRequestObj("getaddrmaninfo", NullUniValue, 1);
     }
 
     UniValue ProcessReply(const UniValue& reply) override
     {
-        if (!reply["error"].isNull()) return reply;
-        const std::vector<UniValue>& nodes{reply["result"].getValues()};
-        if (!nodes.empty() && nodes.at(0)["network"].isNull()) {
-            throw std::runtime_error("-addrinfo requires bitcoind server to be running v22.0 and up");
+        if (!reply["error"].isNull()) {
+            if (reply["error"]["code"].getInt<int>() == RPC_METHOD_NOT_FOUND) {
+                throw std::runtime_error("-addrinfo requires bitcoind v26.0 or later which supports getaddrmaninfo RPC. Please upgrade your node or use bitcoin-cli from the same version.");
+            }
+            return reply;
         }
-        // Count the number of peers known to our node, by network.
-        std::array<uint64_t, NETWORKS.size()> counts{{}};
-        for (const UniValue& node : nodes) {
-            std::string network_name{node["network"].get_str()};
-            const int8_t network_id{NetworkStringToId(network_name)};
-            if (network_id == UNKNOWN_NETWORK) continue;
-            ++counts.at(network_id);
-        }
+        // Process getaddrmaninfo reply
+        const std::vector<std::string>& network_types{reply["result"].getKeys()};
+        const std::vector<UniValue>& addrman_counts{reply["result"].getValues()};
+
         // Prepare result to return to user.
         UniValue result{UniValue::VOBJ}, addresses{UniValue::VOBJ};
-        uint64_t total{0}; // Total address count
-        for (size_t i = 1; i < NETWORKS.size() - 1; ++i) {
-            addresses.pushKV(NETWORKS[i], counts.at(i));
-            total += counts.at(i);
+
+        for (size_t i = 0; i < network_types.size(); ++i) {
+            int addr_count = addrman_counts[i]["total"].getInt<int>();
+            if (network_types[i] == "all_networks") {
+                addresses.pushKV("total", addr_count);
+            } else {
+                addresses.pushKV(network_types[i], addr_count);
+            }
         }
-        addresses.pushKV("total", total);
         result.pushKV("addresses_known", std::move(addresses));
         return JSONRPCReplyObj(std::move(result), NullUniValue, /*id=*/1, JSONRPCVersion::V2);
     }
@@ -367,7 +371,6 @@ struct GetinfoRequestHandler : BaseRequestHandler {
             if (!batch[ID_WALLETINFO]["result"]["unlocked_until"].isNull()) {
                 result.pushKV("unlocked_until", batch[ID_WALLETINFO]["result"]["unlocked_until"]);
             }
-            result.pushKV("paytxfee", batch[ID_WALLETINFO]["result"]["paytxfee"]);
         }
         if (!batch[ID_BALANCES]["result"].isNull()) {
             result.pushKV("balance", batch[ID_BALANCES]["result"]["mine"]["trusted"]);
@@ -452,6 +455,7 @@ private:
         if (conn_type == "block-relay-only") return "block";
         if (conn_type == "manual" || conn_type == "feeler") return conn_type;
         if (conn_type == "addr-fetch") return "addr";
+        if (conn_type == "private-broadcast") return "priv";
         return "";
     }
     std::string FormatServices(const UniValue& services)
@@ -703,6 +707,7 @@ public:
         "           \"manual\" - peer we manually added using RPC addnode or the -addnode/-connect config options\n"
         "           \"feeler\" - short-lived connection for testing addresses\n"
         "           \"addr\"   - address fetch; short-lived connection for requesting addresses\n"
+        "           \"priv\"   - private broadcast; short-lived connection for broadcasting our transactions\n"
         "  net      Network the peer connected through (\"ipv4\", \"ipv6\", \"onion\", \"i2p\", \"cjdns\", or \"npr\" (not publicly routable))\n"
         "  serv     Services offered by the peer\n"
         "           \"n\" - NETWORK: peer can serve the full block chain\n"
@@ -782,7 +787,8 @@ struct DefaultRequestHandler : BaseRequestHandler {
         } else {
             params = RPCConvertValues(method, args);
         }
-        return JSONRPCRequestObj(method, params, 1);
+        UniValue id{UniValue::VSTR, gArgs.GetArg("-rpcid", DEFAULT_RPC_REQ_ID)};
+        return JSONRPCRequestObj(method, params, id);
     }
 
     UniValue ProcessReply(const UniValue &reply) override
@@ -791,7 +797,362 @@ struct DefaultRequestHandler : BaseRequestHandler {
     }
 };
 
-static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, const std::vector<std::string>& args, const std::optional<std::string>& rpcwallet = {})
+static std::optional<UniValue> CallIPC(BaseRequestHandler* rh, const std::string& strMethod, const std::vector<std::string>& args, const std::string& endpoint, const std::string& username)
+{
+    auto ipcconnect{gArgs.GetArg("-ipcconnect", "auto")};
+    if (ipcconnect == "0") return {}; // Do not attempt IPC if -ipcconnect is disabled.
+    if (gArgs.IsArgSet("-rpcconnect") && !gArgs.IsArgNegated("-rpcconnect")) {
+        if (ipcconnect == "auto") return {}; // Use HTTP if -ipcconnect=auto is set and -rpcconnect is enabled.
+        throw std::runtime_error("-rpcconnect and -ipcconnect options cannot both be enabled");
+    }
+
+    std::unique_ptr<interfaces::Init> local_init{interfaces::MakeBasicInit("bitcoin-cli")};
+    if (!local_init || !local_init->ipc()) {
+        if (ipcconnect == "auto") return {}; // Use HTTP if -ipcconnect=auto is set and there is no IPC support.
+        throw std::runtime_error("bitcoin-cli was not built with IPC support");
+    }
+
+    std::unique_ptr<interfaces::Init> node_init;
+    try {
+        node_init = local_init->ipc()->connectAddress(ipcconnect);
+        if (!node_init) return {}; // Fall back to HTTP if -ipcconnect=auto connect failed.
+    } catch (const std::exception& e) {
+        // Catch connect error if -ipcconnect=unix was specified
+        throw CConnectionFailed{strprintf("%s\n\n"
+            "Probably bitcoin-node is not running or not listening on a unix socket. Can be started with:\n\n"
+            "    bitcoin-node -chain=%s -ipcbind=unix", e.what(), gArgs.GetChainTypeString())};
+    }
+
+    std::unique_ptr<interfaces::Rpc> rpc{node_init->makeRpc()};
+    assert(rpc);
+    UniValue request{rh->PrepareRequest(strMethod, args)};
+    UniValue reply{rpc->executeRpc(std::move(request), endpoint, username)};
+    return rh->ProcessReply(reply);
+}
+
+/**
+ * Simple synchronous HTTP client using Sock class.
+ */
+class HTTPClient
+{
+public:
+    static HTTPClient Connect(const std::string& host, uint16_t port, std::chrono::seconds timeout);
+
+    HTTPResponse Post(const std::string& endpoint,
+                      std::span<const std::pair<std::string, std::string>> headers,
+                      const std::string& body);
+
+private:
+    // Signal that the peer closed the connection cleanly. Used in the read-until-close fallback.
+    struct RecvEOF : CConnectionFailed { using CConnectionFailed::CConnectionFailed; };
+
+    std::unique_ptr<Sock> m_socket;
+    std::string m_host;
+    std::chrono::seconds m_timeout;
+
+    HTTPClient(std::unique_ptr<Sock>&& socket, const std::string& host, std::chrono::seconds timeout)
+        : m_socket(std::move(socket)), m_host(host), m_timeout(timeout) {}
+    bool SendRequest(std::string_view request);
+    HTTPResponse ReadResponse();
+    std::optional<std::string> Recv(std::chrono::time_point<std::chrono::steady_clock> deadline);
+};
+
+HTTPClient HTTPClient::Connect(const std::string& host, uint16_t port, std::chrono::seconds timeout)
+{
+    std::vector<CService> services = Lookup(host, port, /*fAllowLookup=*/true, /*nMaxSolutions=*/256);
+    if (services.empty()) {
+        throw CConnectionFailed(strprintf("Could not resolve host: %s", host));
+    }
+
+    const auto deadline{std::chrono::steady_clock::now() + timeout};
+    for (const CService& service : services) {
+        const auto time_left{std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now())};
+        if (time_left.count() <= 0) break;
+
+        auto sock = ConnectDirectly(service, /*manual_connection=*/true, time_left);
+        if (sock) return HTTPClient{std::move(sock), host, timeout};
+    }
+
+    throw CConnectionFailed{"Could not connect to the server"};
+}
+
+HTTPResponse HTTPClient::Post(const std::string& endpoint,
+                              std::span<const std::pair<std::string, std::string>> headers,
+                              const std::string& body)
+{
+    try {
+        // Build HTTP request
+        std::string request = strprintf("POST %s HTTP/1.1\r\n"
+                                        "Host: %s\r\n"
+                                        "Connection: close\r\n"
+                                        "Content-Length: %d\r\n",
+                                        endpoint, m_host, body.size());
+
+        for (const auto& [name, value] : headers) {
+            request += strprintf("%s: %s\r\n", name, value);
+        }
+        request += "\r\n";
+        request += body;
+
+        if (!SendRequest(request)) {
+            throw CConnectionFailed("Failed to send HTTP request");
+        }
+
+        return ReadResponse();
+    } catch (const HTTPError& e) {
+        throw CConnectionFailed(strprintf("HTTP error: %s", e.what()));
+    }
+}
+
+bool HTTPClient::SendRequest(std::string_view request)
+{
+    const auto deadline{std::chrono::steady_clock::now() + m_timeout};
+
+    while (!request.empty()) {
+        Sock::Event event{0};
+        auto time_left = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now());
+        if (time_left.count() <= 0 || !m_socket->Wait(time_left, Sock::SEND, &event)) {
+            return false;
+        }
+
+        if (!(event & Sock::SEND)) {
+            continue;
+        }
+
+        ssize_t sent = m_socket->Send(request.data(), request.size(), MSG_NOSIGNAL);
+        if (sent < 0) {
+            int err = WSAGetLastError();
+            if (!IOErrorIsPermanent(err)) {
+                std::this_thread::yield();
+                continue;
+            }
+            return false;
+        }
+        request.remove_prefix(sent);
+    }
+    return true;
+}
+
+HTTPResponse HTTPClient::ReadResponse()
+{
+    HTTPResponse response;
+    std::string buffer;
+    const auto deadline{std::chrono::steady_clock::now() + m_timeout};
+
+    // Read data until we have complete headers
+    size_t headers_end = 0;
+
+    while (headers_end == 0) {
+        if (auto result{Recv(deadline)}) {
+            buffer.append(*result);
+        } else {
+            std::this_thread::yield();
+            continue;
+        }
+
+        // Check for header terminator
+        size_t pos = buffer.find("\r\n\r\n");
+        if (pos != std::string::npos) {
+            headers_end = pos + 4;
+        }
+    }
+
+    // Parse http status
+    util::LineReader reader(std::string_view{buffer.data(), headers_end}, headers_end);
+    auto status_line = reader.ReadLine();
+    if (!status_line) {
+        throw HTTPError{"Failed to read status line"};
+    }
+
+    const std::string& status_str = *status_line;
+    // Minimum status line is "HTTP/X.Y NNN" (e.g. "HTTP/1.1 200"), 12 characters.
+    if (status_str.size() < 12 || !status_str.starts_with("HTTP/")) {
+        throw HTTPError{"Invalid status line"};
+    }
+
+    size_t space1 = status_str.find(' ');
+    if (space1 == std::string::npos || space1 + 4 > status_str.size()) {
+        throw HTTPError{"Invalid status line format"};
+    }
+
+    std::string status_code_str = status_str.substr(space1 + 1, 3);
+    auto status_code = ToIntegral<int>(status_code_str);
+    if (!status_code) {
+        throw HTTPError{"Invalid status code"};
+    }
+    response.status = *status_code;
+
+    HTTPResponseHeaders headers;
+    headers.Read(reader);
+
+    // Determine body length
+    size_t content_length = 0;
+    bool chunked = false;
+
+    // RFC 9112 §6.3 says responses with both Transfer-Encoding and Content-Length
+    // must be rejected. We are more lenient: Transfer-Encoding takes precedence
+    // and Content-Length is ignored.
+    auto transfer_encoding = headers.FindFirst("transfer-encoding");
+    if (transfer_encoding && ToLower(*transfer_encoding).find("chunked") != std::string::npos) {
+        chunked = true;
+    } else {
+        auto content_length_header = headers.FindFirst("content-length");
+        if (content_length_header) {
+            auto maybe_len = ToIntegral<size_t>(*content_length_header);
+            if (!maybe_len) {
+                throw HTTPError{"Invalid Content-Length"};
+            }
+            content_length = *maybe_len;
+        }
+    }
+
+    // Remove headers data from buffer, so only initial body data remains
+    buffer.erase(0, headers_end);
+
+    // Read remaining body
+    if (chunked) {
+        // Handle chunked transfer encoding
+        std::string body;
+
+        while (true) {
+            // Try to parse a chunk from current buffer
+            std::string_view chunk_data{buffer};
+            size_t line_end = chunk_data.find("\r\n");
+
+            if (line_end != std::string::npos) {
+                // Parse chunk size
+                std::string_view size_str = chunk_data.substr(0, line_end);
+                // Ignore chunk extensions
+                size_t semi = size_str.find(';');
+                if (semi != std::string::npos) {
+                    size_str = size_str.substr(0, semi);
+                }
+
+                const auto chunk_size{ToIntegral<uint64_t>(util::TrimStringView(size_str), /*base=*/16)};
+                if (!chunk_size) {
+                    throw HTTPError{"Invalid chunk size"};
+                }
+
+                if (*chunk_size == 0) {
+                    // Allow (but ignore) Chunked Trailer section, by
+                    // reading CRLF-terminated lines until we read an empty line,
+                    // which indicates the end of this response.
+                    // See https://httpwg.org/specs/rfc9112.html#rfc.section.7.1.2
+                    buffer.erase(0, line_end + 2);
+                    while (true) {
+                        size_t crlf_pos = buffer.find("\r\n");
+                        if (crlf_pos == std::string::npos) {
+                            // Need more data
+                            if (auto result{Recv(deadline)}) {
+                                buffer.append(*result);
+                            } else {
+                                std::this_thread::yield();
+                            }
+                            continue;
+                        }
+                        buffer.erase(0, crlf_pos + 2);
+                        if (crlf_pos == 0) break;
+                    }
+                    break;
+                }
+
+                // Check if we have the full chunk
+                size_t chunk_start = line_end + 2;
+                if (*chunk_size > std::numeric_limits<size_t>::max() - chunk_start - 2) {
+                    throw HTTPError{"Chunk size too large"};
+                }
+                size_t chunk_end = chunk_start + *chunk_size + 2; // +2 for trailing CRLF
+
+                if (buffer.size() >= chunk_end) {
+                    // Extract chunk data
+                    body.append(buffer, chunk_start, *chunk_size);
+
+                    // Remove processed data
+                    buffer.erase(0, chunk_end);
+                    continue;
+                }
+            }
+
+            // Need more data
+            while (true) {
+                if (auto result{Recv(deadline)}) {
+                    buffer.append(*result);
+                    break;
+                } else {
+                    std::this_thread::yield();
+                }
+            }
+        }
+
+        response.body = std::move(body);
+    } else if (content_length > 0) {
+        // Fixed content length
+        while (buffer.size() < content_length) {
+            if (auto result{Recv(deadline)}) {
+                buffer.append(*result);
+            } else {
+                std::this_thread::yield();
+            }
+        }
+
+        // Possibly shrink buffer in case we got a larger response than
+        // originally specified.
+        buffer.resize(content_length);
+        response.body = std::move(buffer);
+    } else {
+        // No Content-Length and not chunked: read until the peer closes the
+        // connection (RFC 9112 §6.3, HTTP/1.0 fallback).
+        try {
+            while (true) {
+                if (auto result{Recv(deadline)}) {
+                    buffer.append(*result);
+                } else {
+                    std::this_thread::yield();
+                }
+            }
+        } catch (const RecvEOF&) {}
+        response.body = std::move(buffer);
+    }
+
+    return response;
+}
+
+std::optional<std::string> HTTPClient::Recv(const std::chrono::time_point<std::chrono::steady_clock> deadline)
+{
+    auto wait_for_readable{[this](std::chrono::milliseconds timeout) -> bool {
+        Sock::Event event{0};
+        if (!m_socket->Wait(timeout, Sock::RECV, &event)) {
+            return false;
+        }
+        return (event & Sock::RECV) != 0;
+    }};
+
+    auto time_left = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::steady_clock::now());
+    if (time_left.count() <= 0 || !wait_for_readable(time_left)) {
+        throw CConnectionFailed{"timeout"};
+    }
+
+    char recv_buf[4096];
+    ssize_t nrecv = m_socket->Recv(recv_buf, sizeof(recv_buf), /*flags=*/0);
+
+    if (nrecv < 0) {
+        int err = WSAGetLastError();
+        if (!IOErrorIsPermanent(err)) {
+            return std::nullopt;
+        }
+        throw CConnectionFailed{strprintf("Read error: %s", NetworkErrorString(err))};
+    }
+
+    if (nrecv == 0) {
+        throw RecvEOF{"EOF"};
+    }
+
+    return std::string{recv_buf, static_cast<size_t>(nrecv)};
+}
+
+static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, const std::vector<std::string>& args, const std::string& endpoint, const std::string& username)
 {
     std::string host;
     // In preference order, we choose the following for the port:
@@ -835,95 +1196,63 @@ static UniValue CallRPC(BaseRequestHandler* rh, const std::string& strMethod, co
         }
     }
 
-    // Obtain event base
-    raii_event_base base = obtain_event_base();
-
-    // Synchronously look up hostname
-    raii_evhttp_connection evcon = obtain_evhttp_connection_base(base.get(), host, port);
-
     // Set connection timeout
-    {
-        const int timeout = gArgs.GetIntArg("-rpcclienttimeout", DEFAULT_HTTP_CLIENT_TIMEOUT);
-        if (timeout > 0) {
-            evhttp_connection_set_timeout(evcon.get(), timeout);
-        } else {
-            // Indefinite request timeouts are not possible in libevent-http, so we
-            // set the timeout to a very long time period instead.
-
-            constexpr int YEAR_IN_SECONDS = 31556952; // Average length of year in Gregorian calendar
-            evhttp_connection_set_timeout(evcon.get(), 5 * YEAR_IN_SECONDS);
-        }
+    const int timeout = gArgs.GetIntArg("-rpcclienttimeout", DEFAULT_HTTP_CLIENT_TIMEOUT);
+    std::chrono::seconds timeout_duration;
+    if (timeout > 0) {
+        timeout_duration = std::chrono::seconds(timeout);
+    } else {
+        // Use 5 year timeout for "indefinite"
+        timeout_duration = std::chrono::years(5);
     }
-
-    HTTPReply response;
-    raii_evhttp_request req = obtain_evhttp_request(http_request_done, (void*)&response);
-    if (req == nullptr) {
-        throw std::runtime_error("create http request failed");
-    }
-
-    evhttp_request_set_error_cb(req.get(), http_error_cb);
 
     // Get credentials
-    std::string strRPCUserColonPass;
-    bool failedToGetAuthCookie = false;
+    std::string rpc_credentials;
+    std::optional<AuthCookieResult> auth_cookie_result;
     if (gArgs.GetArg("-rpcpassword", "") == "") {
         // Try fall back to cookie-based authentication if no password is provided
-        if (!GetAuthCookie(&strRPCUserColonPass)) {
-            failedToGetAuthCookie = true;
-        }
+        auth_cookie_result = GetAuthCookie(rpc_credentials);
     } else {
-        strRPCUserColonPass = gArgs.GetArg("-rpcuser", "") + ":" + gArgs.GetArg("-rpcpassword", "");
+        rpc_credentials = username + ":" + gArgs.GetArg("-rpcpassword", "");
     }
 
-    struct evkeyvalq* output_headers = evhttp_request_get_output_headers(req.get());
-    assert(output_headers);
-    evhttp_add_header(output_headers, "Host", host.c_str());
-    evhttp_add_header(output_headers, "Connection", "close");
-    evhttp_add_header(output_headers, "Content-Type", "application/json");
-    evhttp_add_header(output_headers, "Authorization", (std::string("Basic ") + EncodeBase64(strRPCUserColonPass)).c_str());
-
-    // Attach request data
+    const std::pair<std::string, std::string> headers[]{
+        {"Content-Type", "application/json"},
+        {"Authorization", "Basic " + EncodeBase64(rpc_credentials)},
+    };
     std::string strRequest = rh->PrepareRequest(strMethod, args).write() + "\n";
-    struct evbuffer* output_buffer = evhttp_request_get_output_buffer(req.get());
-    assert(output_buffer);
-    evbuffer_add(output_buffer, strRequest.data(), strRequest.size());
 
-    // check if we should use a special wallet endpoint
-    std::string endpoint = "/";
-    if (rpcwallet) {
-        char* encodedURI = evhttp_uriencode(rpcwallet->data(), rpcwallet->size(), false);
-        if (encodedURI) {
-            endpoint = "/wallet/" + std::string(encodedURI);
-            free(encodedURI);
-        } else {
-            throw CConnectionFailed("uri-encode failed");
-        }
-    }
-    int r = evhttp_make_request(evcon.get(), req.get(), EVHTTP_REQ_POST, endpoint.c_str());
-    req.release(); // ownership moved to evcon in above call
-    if (r != 0) {
-        throw CConnectionFailed("send http request failed");
-    }
-
-    event_base_dispatch(base.get());
-
-    if (response.status == 0) {
-        std::string responseErrorMessage;
-        if (response.error != -1) {
-            responseErrorMessage = strprintf(" (error code %d - \"%s\")", response.error, http_errorstring(response.error));
-        }
-        throw CConnectionFailed(strprintf("Could not connect to the server %s:%d%s\n\n"
+    HTTPResponse response;
+    try {
+        HTTPClient client{HTTPClient::Connect(host, port, timeout_duration)};
+        response = client.Post(endpoint, headers, strRequest);
+    } catch (const CConnectionFailed& e) {
+        const std::string formatted_error{*e.what() ? strprintf(" (%s)", e.what()) : ""};
+        throw CConnectionFailed(strprintf("Error while attempting to communicate with server %s:%d%s\n\n"
                     "Make sure the bitcoind server is running and that you are connecting to the correct RPC port.\n"
                     "Use \"bitcoin-cli -help\" for more info.",
-                    host, port, responseErrorMessage));
-    } else if (response.status == HTTP_UNAUTHORIZED) {
-        if (failedToGetAuthCookie) {
-            throw std::runtime_error(strprintf(
-                "Could not locate RPC credentials. No authentication cookie could be found, and RPC password is not set.  See -rpcpassword and -stdinrpcpass.  Configuration file: (%s)",
-                fs::PathToString(gArgs.GetConfigFilePath())));
+                    host, port, formatted_error));
+    }
+
+    if (response.status == HTTP_UNAUTHORIZED) {
+        std::string error{"Authorization failed: "};
+        if (auth_cookie_result.has_value()) {
+            switch (*auth_cookie_result) {
+            case AuthCookieResult::Error:
+                error += "Failed to read cookie file and no rpcpassword was specified.";
+                break;
+            case AuthCookieResult::Disabled:
+                error += "Cookie file was disabled via -norpccookiefile and no rpcpassword was specified.";
+                break;
+            case AuthCookieResult::Ok:
+                error += "Cookie file credentials were invalid and no rpcpassword was specified.";
+                break;
+            }
         } else {
-            throw std::runtime_error("Authorization failed: Incorrect rpcuser or rpcpassword");
+            error += "Incorrect rpcuser or rpcpassword were specified.";
         }
+        error += strprintf(" Configuration file: (%s)", fs::PathToString(gArgs.GetConfigFilePath()));
+        throw std::runtime_error(error);
     } else if (response.status == HTTP_SERVICE_UNAVAILABLE) {
         throw std::runtime_error(strprintf("Server response: %s", response.body));
     } else if (response.status >= 400 && response.status != HTTP_BAD_REQUEST && response.status != HTTP_NOT_FOUND && response.status != HTTP_INTERNAL_SERVER_ERROR)
@@ -959,9 +1288,20 @@ static UniValue ConnectAndCallRPC(BaseRequestHandler* rh, const std::string& str
     const int timeout = gArgs.GetIntArg("-rpcwaittimeout", DEFAULT_WAIT_CLIENT_TIMEOUT);
     const auto deadline{std::chrono::steady_clock::now() + 1s * timeout};
 
+    // check if we should use a special wallet endpoint
+    std::string endpoint = "/";
+    if (rpcwallet) {
+        endpoint = "/wallet/" + UrlEncode(*rpcwallet);
+    }
+
+    std::string username{gArgs.GetArg("-rpcuser", "")};
     do {
         try {
-            response = CallRPC(rh, strMethod, args, rpcwallet);
+            if (auto ipc_response{CallIPC(rh, strMethod, args, endpoint, username)}) {
+                response = std::move(*ipc_response);
+            } else {
+                response = CallRPC(rh, strMethod, args, endpoint, username);
+            }
             if (fWait) {
                 const UniValue& error = response.find_value("error");
                 if (!error.isNull() && error["code"].getInt<int>() == RPC_IN_WARMUP) {
@@ -972,8 +1312,10 @@ static UniValue ConnectAndCallRPC(BaseRequestHandler* rh, const std::string& str
         } catch (const CConnectionFailed& e) {
             if (fWait && (timeout <= 0 || std::chrono::steady_clock::now() < deadline)) {
                 UninterruptibleSleep(1s);
-            } else {
+            } else if (fWait) {
                 throw CConnectionFailed(strprintf("timeout on transient error: %s", e.what()));
+            } else {
+                throw;
             }
         }
     } while (fWait);
@@ -1129,7 +1471,7 @@ static void ParseGetInfoResult(UniValue& result)
         const std::string proxy = network["proxy"].getValStr();
         if (proxy.empty()) continue;
         // Add proxy to ordered_proxy if has not been processed
-        if (proxy_networks.find(proxy) == proxy_networks.end()) ordered_proxies.push_back(proxy);
+        if (!proxy_networks.contains(proxy)) ordered_proxies.push_back(proxy);
 
         proxy_networks[proxy].push_back(network["name"].getValStr());
     }
@@ -1151,7 +1493,6 @@ static void ParseGetInfoResult(UniValue& result)
         if (!result["unlocked_until"].isNull()) {
             result_string += strprintf("Unlocked until: %s\n", result["unlocked_until"].getValStr());
         }
-        result_string += strprintf("Transaction fee rate (-paytxfee) (%s/kvB): %s\n\n", CURRENCY_UNIT, result["paytxfee"].getValStr());
     }
     if (!result["balance"].isNull()) {
         result_string += strprintf("%sBalance:%s %s\n\n", CYAN, RESET, result["balance"].getValStr());
@@ -1328,16 +1669,11 @@ static int CommandLineRPC(int argc, char *argv[])
 
 MAIN_FUNCTION
 {
-#ifdef WIN32
-    common::WinCmdLineArgs winArgs;
-    std::tie(argc, argv) = winArgs.get();
-#endif
     SetupEnvironment();
     if (!SetupNetworking()) {
         tfm::format(std::cerr, "Error: Initializing networking failed\n");
         return EXIT_FAILURE;
     }
-    event_set_log_callback(&libevent_log_cb);
 
     try {
         int ret = AppInitRPC(argc, argv);

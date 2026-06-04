@@ -1,17 +1,19 @@
-// Copyright (c) 2017-2022 The Bitcoin Core developers
+// Copyright (c) 2017-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <wallet/feebumper.h>
+
+#include <coins.h>
 #include <common/system.h>
 #include <consensus/validation.h>
 #include <interfaces/chain.h>
-#include <policy/fees.h>
+#include <policy/fees/block_policy_estimator.h>
 #include <policy/policy.h>
 #include <util/moneystr.h>
 #include <util/rbf.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
-#include <wallet/feebumper.h>
 #include <wallet/fees.h>
 #include <wallet/receive.h>
 #include <wallet/spend.h>
@@ -39,7 +41,7 @@ static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWallet
         return feebumper::Result::WALLET_ERROR;
     }
 
-    if (wtx.mapValue.count("replaced_by_txid")) {
+    if (wtx.mapValue.contains("replaced_by_txid")) {
         errors.push_back(Untranslated(strprintf("Cannot bump transaction %s which was already bumped by transaction %s", wtx.GetHash().ToString(), wtx.mapValue.at("replaced_by_txid"))));
         return feebumper::Result::WALLET_ERROR;
     }
@@ -61,7 +63,7 @@ static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTrans
 {
     // check that fee rate is higher than mempool's minimum fee
     // (no point in bumping fee if we know that the new tx won't be accepted to the mempool)
-    // This may occur if the user set fee_rate or paytxfee too low, if fallbackfee is too low, or, perhaps,
+    // This may occur if fallbackfee is too low, or, perhaps,
     // in a rare situation where the mempool minimum fee increased significantly since the fee estimation just a
     // moment earlier. In this case, we report an error to the user, who may adjust the fee.
     CFeeRate minMempoolFeeRate = wallet.chain().mempoolMinFee();
@@ -80,9 +82,10 @@ static feebumper::Result CheckFeeRate(const CWallet& wallet, const CMutableTrans
         reused_inputs.push_back(txin.prevout);
     }
 
-    std::optional<CAmount> combined_bump_fee = wallet.chain().calculateCombinedBumpFee(reused_inputs, newFeerate);
+    const std::optional<CAmount> combined_bump_fee = wallet.chain().calculateCombinedBumpFee(reused_inputs, newFeerate);
     if (!combined_bump_fee.has_value()) {
         errors.push_back(Untranslated(strprintf("Failed to calculate bump fees, because unconfirmed UTXOs depend on an enormous cluster of unconfirmed transactions.")));
+        return feebumper::Result::WALLET_ERROR;
     }
     CAmount new_total_fee = newFeerate.GetFee(maxTxSize) + combined_bump_fee.value();
 
@@ -336,8 +339,8 @@ bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx) {
         // First fill transaction with our data without signing,
         // so external signers are not asked to sign more than once.
         bool complete;
-        wallet.FillPSBT(psbtx, complete, std::nullopt, /*sign=*/false, /*bip32derivs=*/true);
-        auto err{wallet.FillPSBT(psbtx, complete, std::nullopt, /*sign=*/true, /*bip32derivs=*/false)};
+        wallet.FillPSBT(psbtx, {.sign = false, .bip32_derivs = true}, complete);
+        auto err{wallet.FillPSBT(psbtx, {.sign = true, .bip32_derivs = false}, complete)};
         if (err) return false;
         complete = FinalizeAndExtractPSBT(psbtx, mtx);
         return complete;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mining RPCs
@@ -122,7 +122,8 @@ class MiningTest(BitcoinTestFramework):
         tx_d = self.wallet.send_self_transfer(from_node=node,
                                               fee_rate=Decimal("0.00100"))
 
-        block_template_txs = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['transactions']
+        block_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        block_template_txs = block_template['transactions']
 
         block_template_fees = [tx['fee'] for tx in block_template_txs]
         assert_equal(block_template_fees, [
@@ -131,6 +132,10 @@ class MiningTest(BitcoinTestFramework):
             tx_b["fee"] * COIN,
             tx_c["fee"] * COIN
         ])
+        # verify that coinbasevalue field is set to claim full block reward (subsidy + fees)
+        expected_block_reward = create_coinbase(
+            height=int(block_template["height"]), fees=sum(block_template_fees)).vout[0].nValue
+        assert_equal(block_template["coinbasevalue"], expected_block_reward)
 
         block_template_sigops = [tx['sigops'] for tx in block_template_txs]
         assert_equal(block_template_sigops, [0, 4, 4, 4])
@@ -152,18 +157,20 @@ class MiningTest(BitcoinTestFramework):
                 blockmintxfee_parameter = f"-blockmintxfee={blockmintxfee_btc_kvb:.8f}"
                 self.log.info(f"-> Test {blockmintxfee_parameter} ({blockmintxfee_sat_kvb} sat/kvB)...")
                 self.restart_node(0, extra_args=[blockmintxfee_parameter, '-minrelaytxfee=0', '-persistmempool=0'])
-                self.wallet.rescan_utxos()  # to avoid spending outputs of txs that are not in mempool anymore after restart
+            assert_equal(node.getmininginfo()['blockmintxfee'], blockmintxfee_btc_kvb)
 
             # submit one tx with exactly the blockmintxfee rate, and one slightly below
             tx_with_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_btc_kvb, confirmed_only=True)
             assert_equal(tx_with_min_feerate["fee"], get_fee(tx_with_min_feerate["tx"].get_vsize(), blockmintxfee_btc_kvb))
-            if blockmintxfee_sat_kvb > 5:
+            if blockmintxfee_sat_kvb >= 10:
                 lowerfee_btc_kvb = blockmintxfee_btc_kvb - Decimal(10)/COIN  # 0.01 sat/vbyte lower
+                assert_greater_than(blockmintxfee_btc_kvb, lowerfee_btc_kvb)
+                assert_greater_than_or_equal(lowerfee_btc_kvb, 0)
                 tx_below_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=lowerfee_btc_kvb, confirmed_only=True)
                 assert_equal(tx_below_min_feerate["fee"], get_fee(tx_below_min_feerate["tx"].get_vsize(), lowerfee_btc_kvb))
             else:  # go below zero fee by using modified fees
                 tx_below_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_btc_kvb, confirmed_only=True)
-                node.prioritisetransaction(tx_below_min_feerate["txid"], 0, -1)
+                node.prioritisetransaction(tx_below_min_feerate["txid"], 0, -11)
 
             # check that tx below specified fee-rate is neither in template nor in the actual block
             block_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
@@ -228,7 +235,7 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(node.getblocktemplate(template_request={
             'data': block.serialize().hex(),
             'mode': 'proposal',
-            'rules': ['segwit'],
+            **NORMAL_GBT_REQUEST_PARAMS,
         }), None)
 
         bad_block = copy.deepcopy(block)
@@ -350,21 +357,28 @@ class MiningTest(BitcoinTestFramework):
         self.stop_node(0)
         self.nodes[0].assert_start_raises_init_error(
             extra_args=[f"-blockreservedweight={MAX_BLOCK_WEIGHT + 1}"],
-            expected_msg=f"Error: Specified -blockreservedweight ({MAX_BLOCK_WEIGHT + 1}) exceeds consensus maximum block weight ({MAX_BLOCK_WEIGHT})",
+            expected_msg=f"Error: -blockreservedweight ({MAX_BLOCK_WEIGHT + 1}) exceeds consensus maximum block weight ({MAX_BLOCK_WEIGHT})",
         )
 
         self.log.info(f"Test that node will fail to start when user provide -blockreservedweight below {MINIMUM_BLOCK_RESERVED_WEIGHT}")
         self.stop_node(0)
         self.nodes[0].assert_start_raises_init_error(
             extra_args=[f"-blockreservedweight={MINIMUM_BLOCK_RESERVED_WEIGHT - 1}"],
-            expected_msg=f"Error: Specified -blockreservedweight ({MINIMUM_BLOCK_RESERVED_WEIGHT - 1}) is lower than minimum safety value of ({MINIMUM_BLOCK_RESERVED_WEIGHT})",
+            expected_msg=f"Error: -blockreservedweight ({MINIMUM_BLOCK_RESERVED_WEIGHT - 1}) is lower than minimum safety value of ({MINIMUM_BLOCK_RESERVED_WEIGHT})",
         )
 
         self.log.info("Test that node will fail to start when user provide invalid -blockmaxweight")
         self.stop_node(0)
         self.nodes[0].assert_start_raises_init_error(
             extra_args=[f"-blockmaxweight={MAX_BLOCK_WEIGHT + 1}"],
-            expected_msg=f"Error: Specified -blockmaxweight ({MAX_BLOCK_WEIGHT + 1}) exceeds consensus maximum block weight ({MAX_BLOCK_WEIGHT})",
+            expected_msg=f"Error: -blockmaxweight ({MAX_BLOCK_WEIGHT + 1}) exceeds consensus maximum block weight ({MAX_BLOCK_WEIGHT})",
+        )
+
+        self.log.info("Test that node will fail to start when -blockmaxweight is lower than -blockreservedweight")
+        self.stop_node(0)
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=[f"-blockmaxweight={DEFAULT_BLOCK_RESERVED_WEIGHT - 1}"],
+            expected_msg=f"Error: -blockreservedweight ({DEFAULT_BLOCK_RESERVED_WEIGHT}) exceeds -blockmaxweight ({DEFAULT_BLOCK_RESERVED_WEIGHT - 1})",
         )
 
     def test_height_in_locktime(self):
@@ -433,6 +447,9 @@ class MiningTest(BitcoinTestFramework):
 
         self.log.info("getblocktemplate: segwit rule must be set")
         assert_raises_rpc_error(-8, "getblocktemplate must be called with the segwit rule set", node.getblocktemplate, {})
+
+        self.log.info("getblocktemplate: result should set the right rules")
+        assert_equal(['csv', '!segwit', 'taproot'], self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['rules'])
 
         self.log.info("submitblock: Test block decode failure")
         assert_raises_rpc_error(-22, "Block decode failed", node.submitblock, block.serialize()[:-15].hex())

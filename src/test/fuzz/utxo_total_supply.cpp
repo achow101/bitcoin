@@ -1,30 +1,41 @@
-// Copyright (c) 2020 The Bitcoin Core developers
+// Copyright (c) 2020-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
-#include <consensus/consensus.h>
+#include <consensus/amount.h>
 #include <consensus/merkle.h>
 #include <kernel/coinstats.h>
 #include <node/miner.h>
-#include <script/interpreter.h>
-#include <streams.h>
+#include <primitives/block.h>
+#include <primitives/transaction.h>
+#include <script/script.h>
+#include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/mining.h>
+#include <test/util/random.h>
 #include <test/util/setup_common.h>
-#include <util/chaintype.h>
-#include <util/time.h>
+#include <test/util/time.h>
+#include <txdb.h>
+#include <uint256.h>
+#include <util/check.h>
 #include <validation.h>
 
-using node::BlockAssembler;
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 FUZZ_TARGET(utxo_total_supply)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
-    SetMockTime(ConsumeTime(fuzzed_data_provider, /*min=*/1296688602)); // regtest genesis block timestamp
+    NodeClockContext clock_ctx{ConsumeTime(fuzzed_data_provider, /*min=*/1296688602)}; // regtest genesis block timestamp
     /** The testing setup that creates a chainman only (no chainstate) */
     ChainTestingSetup test_setup{
         ChainType::REGTEST,
@@ -43,11 +54,11 @@ FUZZ_TARGET(utxo_total_supply)
         LOCK(chainman.GetMutex());
         return chainman.ActiveHeight();
     };
-    BlockAssembler::Options options;
-    options.coinbase_output_script = CScript() << OP_FALSE;
     const auto PrepareNextBlock = [&]() {
         // Use OP_FALSE to avoid BIP30 check from hitting early
-        auto block = PrepareBlock(node, options);
+        auto block = PrepareBlock(node, {
+            .coinbase_output_script = CScript() << OP_FALSE,
+        });
         // Replace OP_FALSE with OP_TRUE
         {
             CMutableTransaction tx{*block->vtx.back()};
@@ -87,9 +98,9 @@ FUZZ_TARGET(utxo_total_supply)
         tx.vin.emplace_back(txo.first);
         tx.vout.emplace_back(txo.second.nValue, txo.second.scriptPubKey); // "Forward" coin with no fee
     };
-    const auto UpdateUtxoStats = [&]() {
+    const auto UpdateUtxoStats = [&](bool wipe_cache) {
         LOCK(chainman.GetMutex());
-        chainman.ActiveChainstate().ForceFlushStateToDisk();
+        chainman.ActiveChainstate().ForceFlushStateToDisk(wipe_cache);
         utxo_stats = std::move(
             *Assert(kernel::ComputeUTXOStats(kernel::CoinStatsHashType::NONE, &chainman.ActiveChainstate().CoinsDB(), chainman.m_blockman, {})));
         // Check that miner can't print more money than they are allowed to
@@ -99,14 +110,18 @@ FUZZ_TARGET(utxo_total_supply)
 
     // Update internal state to chain tip
     StoreLastTxo();
-    UpdateUtxoStats();
+    UpdateUtxoStats(/*wipe_cache=*/fuzzed_data_provider.ConsumeBool());
     assert(ActiveHeight() == 0);
     // Get at which height we duplicate the coinbase
     // Assuming that the fuzzer will mine relatively short chains (less than 200 blocks), we want the duplicate coinbase to be not too high.
     // Up to 300 seems reasonable.
     int64_t duplicate_coinbase_height = fuzzed_data_provider.ConsumeIntegralInRange(0, 300);
-    // Always pad with OP_0 at the end to avoid bad-cb-length error
-    const CScript duplicate_coinbase_script = CScript() << duplicate_coinbase_height << OP_0;
+    // Avoid bad-cb-length error at heights <= 16. Pad the BIP34-encoded height
+    // with OP_0 to satisfy the minimum 2-byte coinbase scriptSig length.
+    CScript duplicate_coinbase_script = CScript() << duplicate_coinbase_height;
+    if (duplicate_coinbase_height <= 16) {
+        duplicate_coinbase_script << OP_0;
+    }
     // Mine the first block with this duplicate
     current_block = PrepareNextBlock();
     StoreLastTxo();
@@ -124,7 +139,7 @@ FUZZ_TARGET(utxo_total_supply)
     circulation += GetBlockSubsidy(ActiveHeight(), Params().GetConsensus());
 
     assert(ActiveHeight() == 1);
-    UpdateUtxoStats();
+    UpdateUtxoStats(/*wipe_cache=*/fuzzed_data_provider.ConsumeBool());
     current_block = PrepareNextBlock();
     StoreLastTxo();
 
@@ -153,7 +168,7 @@ FUZZ_TARGET(utxo_total_supply)
                 node::RegenerateCommitments(*current_block, chainman);
                 const bool was_valid = !MineBlock(node, current_block).IsNull();
 
-                const auto prev_utxo_stats = utxo_stats;
+                const uint256 prev_hash_serialized{utxo_stats.hashSerialized};
                 if (was_valid) {
                     if (duplicate_coinbase_height == ActiveHeight()) {
                         // we mined the duplicate coinbase
@@ -163,11 +178,11 @@ FUZZ_TARGET(utxo_total_supply)
                     circulation += GetBlockSubsidy(ActiveHeight(), Params().GetConsensus());
                 }
 
-                UpdateUtxoStats();
+                UpdateUtxoStats(/*wipe_cache=*/fuzzed_data_provider.ConsumeBool());
 
                 if (!was_valid) {
                     // utxo stats must not change
-                    assert(prev_utxo_stats.hashSerialized == utxo_stats.hashSerialized);
+                    assert(prev_hash_serialized == utxo_stats.hashSerialized);
                 }
 
                 current_block = PrepareNextBlock();

@@ -14,10 +14,6 @@
         <translation type="unfinished">പുതിയത്</translation>
     </message>
     <message>
-        <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">നിലവിൽ തിരഞ്ഞെടുത്ത വിലാസം സിസ്റ്റം ക്ലിപ്പ്ബോർഡിലേക്ക് പകർത്തുക</translation>
-    </message>
-    <message>
         <source>&amp;Copy</source>
         <translation type="unfinished">&amp;പകർത്തുക</translation>
     </message>
@@ -277,7 +273,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">ആന്തരിക പിശക്
  </translation>
     </message>
-    </context>
+    <message>
+        <source>An internal error occurred. %1 will attempt to continue safely. This is an unexpected bug which can be reported as described below.</source>
+        <translation type="unfinished">ഒരു ആന്തരിക പിശക് സംഭവിച്ചു. %1 സുരക്ഷിതമായി തുടരാൻ ശ്രമിക്കും. ഇത് ഒരു അപ്രതീക്ഷിത ബഗ് ആണ്, ഇത് ചുവടെ വിവരിച്ചിരിക്കുന്നതുപോലെ റിപ്പോർട്ട് ചെയ്യാവുന്നതാണ്.</translation>
+    </message>
+</context>
 <context>
     <name>QObject</name>
     <message>
@@ -293,6 +293,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Error: %1</source>
         <translation type="unfinished">തെറ്റ് : %1 </translation>
+    </message>
+    <message>
+        <source>%1 didn't yet exit safely…</source>
+        <translation type="unfinished">%1 ഇതുവരെ സുരക്ഷിതമായി പുറത്തുകടന്നിട്ടില്ല…</translation>
     </message>
     <message>
         <source>Amount</source>
@@ -520,7 +524,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>Connecting to peers…</source>
-        <translation type="unfinished">സമപ്രായക്കാരുമായി ബന്ധിപ്പിക്കുന്നു...</translation>
+        <translation type="unfinished">നിങ്ങളെപ്പോലുള്ള ഉപയോക്താക്കളുമായി കണക്റ്റുചെയ്യുന്നു....</translation>
     </message>
     <message>
         <source>Request payments (generates QR codes and bitcoin: URIs)</source>
@@ -681,11 +685,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
             <numerusform />
             <numerusform />
         </translation>
-    </message>
-    <message>
-        <source>Cannot create new wallet, the software was compiled without sqlite support (required for descriptor wallets)</source>
-        <translation type="unfinished">പുതിയ വാലറ്റ് സൃഷ്ടിക്കാൻ കഴിയില്ല, സ്‌ക്ലൈറ്റ്
-പിന്തുണയില്ലാതെ സോഫ്‌റ്റ്‌വെയർ കംപൈൽ ചെയ്‌തു (ഡിസ്‌ക്രിപ്‌റ്റർ വാലറ്റുകൾക്ക് ആവശ്യമാണ്)</translation>
     </message>
     <message>
         <source>Error: %1</source>
@@ -897,6 +896,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <source>Migrate Wallet</source>
         <translation type="unfinished">വാലറ്റ് മൈഗ്രേറ്റ് ചെയ്യുക</translation>
     </message>
+    <message>
+        <source>Restore Wallet</source>
+        <extracomment>Title of progress window which is displayed when wallets are being restored.</extracomment>
+        <translation type="unfinished">വാലറ്റ് പുനഃസ്ഥാപിക്കുക</translation>
+    </message>
     </context>
 <context>
     <name>OpenWalletActivity</name>
@@ -1002,6 +1006,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">നാമധേയം / പേര് </translation>
     </message>
     <message>
+        <source>Directory already exists. Add %1 if you intend to create a new directory here.</source>
+        <translation type="unfinished">ഡയറക്ടറി ഇതിനകം നിലവിലുണ്ട്. നിങ്ങൾ ഇവിടെ ഒരു പുതിയ ഡയറക്ടറി സൃഷ്ടിക്കാൻ ആഗ്രഹിക്കുന്നുവെങ്കിൽ %1 ചേർക്കുക.</translation>
+    </message>
+    <message>
         <source>Path already exists, and is not a directory.</source>
         <translation type="unfinished">പാത്ത് ഇതിനകം നിലവിലുണ്ട്, അത് ഒരു ഡയറക്ടറിയല്ല.</translation>
     </message>
@@ -1011,7 +1019,33 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
 </context>
 <context>
+    <name>HelpMessageDialog</name>
+    <message>
+        <source>version</source>
+        <translation type="unfinished">പതിപ്പ്</translation>
+    </message>
+    <message>
+        <source>Command-line options</source>
+        <translation type="unfinished">കമാൻഡ്-ലൈൻ ഓപ്ഷനുകൾ</translation>
+    </message>
+</context>
+<context>
+    <name>ShutdownWindow</name>
+    <message>
+        <source>%1 is shutting down…</source>
+        <translation type="unfinished">%1 നിർത്തുകയാണ്...</translation>
+    </message>
+    </context>
+<context>
     <name>Intro</name>
+    <message>
+        <source>Welcome</source>
+        <translation type="unfinished">സ്വാഗതം</translation>
+    </message>
+    <message>
+        <source>Welcome to %1.</source>
+        <translation type="unfinished">%1 ലേക്ക് സ്വാഗതം.</translation>
+    </message>
     <message>
         <source>Bitcoin</source>
         <translation type="unfinished">ബിറ്റ്കോയിൻ</translation>
@@ -1049,29 +1083,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <source>Error</source>
         <translation type="unfinished">പിശക് </translation>
     </message>
-    <message>
-        <source>Welcome</source>
-        <translation type="unfinished">സ്വാഗതം</translation>
-    </message>
-    </context>
-<context>
-    <name>HelpMessageDialog</name>
-    <message>
-        <source>version</source>
-        <translation type="unfinished">പതിപ്പ്</translation>
-    </message>
-    <message>
-        <source>Command-line options</source>
-        <translation type="unfinished">കമാൻഡ്-ലൈൻ ഓപ്ഷനുകൾ</translation>
-    </message>
 </context>
-<context>
-    <name>ShutdownWindow</name>
-    <message>
-        <source>%1 is shutting down…</source>
-        <translation type="unfinished">%1 നിർത്തുകയാണ്...</translation>
-    </message>
-    </context>
 <context>
     <name>ModalOverlay</name>
     <message>
@@ -1153,10 +1165,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">നിങ്ങളുടെ നിലവിൽ ഉള്ള മുഴുവൻ തുക </translation>
     </message>
     <message>
-        <source>Spendable:</source>
-        <translation type="unfinished">വിനിയോഗിക്കാവുന്നത് / ചെലവാക്കാവുന്നത് </translation>
-    </message>
-    <message>
         <source>Recent transactions</source>
         <translation type="unfinished">സമീപ കാല ഇടപാടുകൾ</translation>
     </message>
@@ -1171,6 +1179,13 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <source>Close</source>
         <translation type="unfinished">അവസാനിപ്പിക്കുക</translation>
     </message>
+    <message numerus="yes">
+        <source>Signed %n input(s), but more signatures are still required.</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
+    </message>
     <message>
         <source>Signed transaction successfully. Transaction is ready to broadcast.</source>
         <translation type="unfinished">ഇടപാട് വിജയകരമായി ഒപ്പിട്ടു.  ഇടപാട് പ്രക്ഷേപണത്തിന് തയ്യാറാണ്</translation>
@@ -1178,6 +1193,13 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Total Amount</source>
         <translation type="unfinished">മുഴുവന്‍ തുക </translation>
+    </message>
+    <message numerus="yes">
+        <source>Transaction has %n unsigned input(s).</source>
+        <translation type="unfinished">
+            <numerusform />
+            <numerusform />
+        </translation>
     </message>
     </context>
 <context>
@@ -1543,6 +1565,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">പ്രതിഫലം മൂല്യനിർണയം ലഭ്യമാകാത്ത പക്ഷം നിങ്ങൾ നല്കേണ്ടിവരുന്ന ഇടപാട് പ്രതിഫലം ഇതാണ്.</translation>
     </message>
     <message>
+        <source>default wallet</source>
+        <translation type="unfinished">സ്ഥിരം ആയ വാലറ്റ്</translation>
+    </message>
+    <message>
         <source>Error reading from database, shutting down.</source>
         <translation type="unfinished">ഡാറ്റാബേസിൽ നിന്നും വായിച്ചെടുക്കുന്നതിനു തടസം നേരിട്ടു, പ്രവർത്തനം അവസാനിപ്പിക്കുന്നു.</translation>
     </message>
@@ -1613,10 +1639,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     <message>
         <source>Unable to create the PID file '%s': %s</source>
         <translation type="unfinished">PID ഫയൽ '%s': %s നിർമിക്കാൻ സാധിക്കുന്നില്ല </translation>
-    </message>
-    <message>
-        <source>Unable to generate initial keys</source>
-        <translation type="unfinished">പ്രാഥമിക കീ നിർമ്മിക്കാൻ സാധിക്കുന്നില്ല</translation>
     </message>
     <message>
         <source>Unknown -blockfilterindex value %s.</source>

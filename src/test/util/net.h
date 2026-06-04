@@ -5,6 +5,7 @@
 #ifndef BITCOIN_TEST_UTIL_NET_H
 #define BITCOIN_TEST_UTIL_NET_H
 
+#include <attributes.h>
 #include <compat/compat.h>
 #include <netmessagemaker.h>
 #include <net.h>
@@ -40,6 +41,8 @@ struct ConnmanTestMsg : public CConnman {
         m_msgproc = msgproc;
     }
 
+    void SetAddrman(AddrMan& in) { addrman = in; }
+
     void SetPeerConnectTimeout(std::chrono::seconds timeout)
     {
         m_peer_connect_timeout = timeout;
@@ -47,6 +50,8 @@ struct ConnmanTestMsg : public CConnman {
 
     void ResetAddrCache();
     void ResetMaxOutboundCycle();
+    /// Reset the internal state.
+    void Reset();
 
     std::vector<CNode*> TestNodes()
     {
@@ -71,6 +76,24 @@ struct ConnmanTestMsg : public CConnman {
         m_nodes.clear();
     }
 
+    void CreateNodeFromAcceptedSocketPublic(std::unique_ptr<Sock> sock,
+                                            NetPermissionFlags permissions,
+                                            const CAddress& addr_bind,
+                                            const CAddress& addr_peer)
+    {
+        CreateNodeFromAcceptedSocket(std::move(sock), permissions, addr_bind, addr_peer);
+    }
+
+    bool InitBindsPublic(const CConnman::Options& options)
+    {
+        return InitBinds(options);
+    }
+
+    void SocketHandlerPublic()
+    {
+        SocketHandler();
+    }
+
     void Handshake(CNode& node,
                    bool successfully_connected,
                    ServiceFlags remote_services,
@@ -81,7 +104,7 @@ struct ConnmanTestMsg : public CConnman {
 
     bool ProcessMessagesOnce(CNode& node) EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex)
     {
-        return m_msgproc->ProcessMessages(&node, flagInterruptMsgProc);
+        return m_msgproc->ProcessMessages(node, flagInterruptMsgProc);
     }
 
     void NodeReceiveMsgBytes(CNode& node, std::span<const uint8_t> msg_bytes, bool& complete) const;
@@ -89,7 +112,7 @@ struct ConnmanTestMsg : public CConnman {
     bool ReceiveMsgFrom(CNode& node, CSerializedNetMsg&& ser_msg) const;
     void FlushSendBuffer(CNode& node) const;
 
-    bool AlreadyConnectedPublic(const CAddress& addr) { return AlreadyConnectedToAddress(addr); };
+    bool AlreadyConnectedToAddressPublic(const CNetAddr& addr) { return AlreadyConnectedToAddress(addr); };
 
     CNode* ConnectNodePublic(PeerManager& peerman, const char* pszDest, ConnectionType conn_type)
         EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
@@ -125,6 +148,7 @@ constexpr ConnectionType ALL_CONNECTION_TYPES[]{
     ConnectionType::FEELER,
     ConnectionType::BLOCK_RELAY,
     ConnectionType::ADDR_FETCH,
+    ConnectionType::PRIVATE_BROADCAST,
 };
 
 constexpr auto ALL_NETWORKS = std::array{
@@ -313,7 +337,15 @@ public:
      * @param[in] pipes Send/recv pipes used by the Send() and Recv() methods.
      * @param[in] accept_sockets Sockets to return by the Accept() method.
      */
-    explicit DynSock(std::shared_ptr<Pipes> pipes, std::shared_ptr<Queue> accept_sockets);
+    explicit DynSock(std::shared_ptr<Pipes> pipes, Queue* accept_sockets LIFETIMEBOUND);
+
+    /**
+     * Create a new mocked sock that represents a connected socket. It has pipes
+     * for data transport but there is no queue because connected sockets do
+     * not introduce new connected sockets.
+     * @param[in] pipes Send/recv pipes used by the Send() and Recv() methods.
+     */
+    explicit DynSock(std::shared_ptr<Pipes> pipes);
 
     ~DynSock();
 
@@ -333,7 +365,7 @@ private:
     DynSock& operator=(Sock&&) override;
 
     std::shared_ptr<Pipes> m_pipes;
-    std::shared_ptr<Queue> m_accept_sockets;
+    Queue* const m_accept_sockets;
 };
 
 template <typename... Args>

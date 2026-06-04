@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2021 The Bitcoin Core developers
+# Copyright (c) 2017-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test loadblock option
@@ -25,7 +25,6 @@ class LoadblockTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
-        self.supports_cli = False
 
     def run_test(self):
         self.nodes[1].setnetworkactive(state=False)
@@ -41,10 +40,10 @@ class LoadblockTest(BitcoinTestFramework):
         hash_list = tempfile.NamedTemporaryFile(dir=data_dir,
                                                 mode='w',
                                                 delete=False,
-                                                encoding="utf-8")
+        )
 
         self.log.info("Create linearization config file")
-        with open(cfg_file, "a", encoding="utf-8") as cfg:
+        with open(cfg_file, "a") as cfg:
             cfg.write(f"datadir={data_dir}\n")
             cfg.write(f"rpcuser={node_url.username}\n")
             cfg.write(f"rpcpassword={node_url.password}\n")

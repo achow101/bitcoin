@@ -1,17 +1,30 @@
-// Copyright (c) 2025 The Bitcoin Core developers
+// Copyright (c) 2025-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <addresstype.h>
 #include <bench/bench.h>
-#include <interfaces/chain.h>
-#include <kernel/cs_main.h>
-#include <script/interpreter.h>
+#include <chain.h>
+#include <coins.h>
+#include <consensus/amount.h>
+#include <consensus/validation.h>
+#include <key.h>
+#include <node/blockstorage.h>
+#include <policy/feerate.h>
+#include <primitives/block.h>
+#include <primitives/transaction.h>
+#include <pubkey.h>
+#include <script/script.h>
 #include <sync.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 
 #include <cassert>
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 /*
@@ -39,7 +52,7 @@ CBlock CreateTestBlock(
         {COutPoint(coinbase_to_spend->GetHash(), 0)},
         chainstate.m_chain.Height() + 1, keys, outputs, {}, {})};
     const CScript coinbase_spk{GetScriptForDestination(coinbase_taproot)};
-    test_setup.CreateAndProcessBlock({first_tx}, coinbase_spk, &chainstate);
+    test_setup.CreateAndProcessBlock({first_tx}, coinbase_spk);
 
     std::vector<CMutableTransaction> txs;
     txs.reserve(num_txs);
@@ -59,7 +72,7 @@ CBlock CreateTestBlock(
     }
 
     // Coinbase output can use any output type as it is not spent and will not change the benchmark
-    return test_setup.CreateBlock(txs, coinbase_spk, chainstate);
+    return test_setup.CreateBlock(txs, coinbase_spk);
 }
 
 /*
@@ -126,6 +139,6 @@ static void ConnectBlockAllEcdsa(benchmark::Bench& bench)
     BenchmarkConnectBlock(bench, keys, outputs, *test_setup);
 }
 
-BENCHMARK(ConnectBlockAllSchnorr, benchmark::PriorityLevel::HIGH);
-BENCHMARK(ConnectBlockMixedEcdsaSchnorr, benchmark::PriorityLevel::HIGH);
-BENCHMARK(ConnectBlockAllEcdsa, benchmark::PriorityLevel::HIGH);
+BENCHMARK(ConnectBlockAllSchnorr);
+BENCHMARK(ConnectBlockMixedEcdsaSchnorr);
+BENCHMARK(ConnectBlockAllEcdsa);

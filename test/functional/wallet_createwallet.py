@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-# Copyright (c) 2018-2022 The Bitcoin Core developers
+# Copyright (c) 2018-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test createwallet arguments.
 """
+import os
+import stat
 
 from test_framework.descriptors import descsum_create
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
+    is_dir_writable,
     wallet_importprivkey,
 )
 from test_framework.wallet_util import generate_keypair, WalletUnlock
@@ -25,13 +28,32 @@ class CreateWalletTest(BitcoinTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
+    def test_bad_dir_permissions(self, node):
+        self.log.info("Test wallet creation failure due to non-writable directory")
+        wallet_name = "bad_permissions"
+        dir_path = node.wallets_path / wallet_name
+        dir_path.mkdir(parents=True)
+        original_dir_perms = dir_path.stat().st_mode
+        os.chmod(dir_path, original_dir_perms & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+        if is_dir_writable(dir_path):
+            self.log.warning("Skipping non-writable directory test: unable to enforce read-only permissions")
+        else:
+            # Run actual test
+            assert_raises_rpc_error(-4, f"SQLiteDatabase: Failed to open database in directory '{str(dir_path)}': directory is not writable", node.createwallet, wallet_name=wallet_name)
+        # Reset directory permissions for cleanup
+        dir_path.chmod(original_dir_perms)
+
+
     def run_test(self):
         node = self.nodes[0]
+
+        self.test_bad_dir_permissions(node)
 
         self.log.info("Run createwallet with invalid parameters.")
         # Run createwallet with invalid parameters. This must not prevent a new wallet with the same name from being created with the correct parameters.
         assert_raises_rpc_error(-4, "Passphrase provided but private keys are disabled. A passphrase is only used to encrypt private keys, so cannot be used for wallets with private keys disabled.",
             self.nodes[0].createwallet, wallet_name='w0', disable_private_keys=True, passphrase="passphrase")
+        assert_raises_rpc_error(-8, "Wallet name cannot be empty", self.nodes[0].createwallet, "")
 
         self.nodes[0].createwallet(wallet_name='w0')
         w0 = node.get_wallet_rpc('w0')
@@ -167,14 +189,17 @@ class CreateWalletTest(BitcoinTestFramework):
         assert_raises_rpc_error(-4, 'descriptors argument must be set to "true"; it is no longer possible to create a legacy wallet.', self.nodes[0].createwallet, wallet_name="legacy", descriptors=False)
 
         self.log.info("Check that the version number is being logged correctly")
-        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=["Last client version = "]):
-            node.createwallet("version_check")
-        wallet = node.get_wallet_rpc("version_check")
+
+        # Craft the expected version message.
         client_version = node.getnetworkinfo()["version"]
-        wallet.unloadwallet()
-        with node.assert_debug_log(
-            expected_msgs=[f"Last client version = {client_version}"]
-        ):
+        version_message = f"Last client version = {client_version}"
+
+        # Should not be logged when creating.
+        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=[version_message]):
+            node.createwallet("version_check")
+            node.unloadwallet("version_check")
+        # Should be logged when loading.
+        with node.assert_debug_log(expected_msgs=[version_message]):
             node.loadwallet("version_check")
 
 

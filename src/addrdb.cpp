@@ -14,7 +14,6 @@
 #include <common/settings.h>
 #include <cstdint>
 #include <hash.h>
-#include <logging.h>
 #include <logging/timer.h>
 #include <netbase.h>
 #include <netgroup.h>
@@ -24,6 +23,7 @@
 #include <univalue.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/log.h>
 #include <util/syserror.h>
 #include <util/translation.h>
 
@@ -204,7 +204,7 @@ util::Result<std::unique_ptr<AddrMan>> LoadAddrman(const NetGroupManager& netgro
     const auto path_addr{args.GetDataDirNet() / "peers.dat"};
     try {
         DeserializeFileDB(path_addr, *addrman);
-        LogInfo("Loaded %i addresses from peers.dat  %dms", addrman->Size(), Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
+        LogInfo("Loaded %i addresses from peers.dat %dms", addrman->Size(), Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
     } catch (const DbNotFoundError&) {
         // Addrman can be in an inconsistent state after failure, reset it
         addrman = std::make_unique<AddrMan>(netgroupman, deterministic, /*consistency_check_ratio=*/check_addrman);

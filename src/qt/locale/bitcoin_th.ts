@@ -14,10 +14,6 @@
         <translation type="unfinished">&amp;ใหม่</translation>
     </message>
     <message>
-        <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">คัดลอกที่อยู่ที่เลือกปัจจุบันไปยังคลิปบอร์ดของระบบ</translation>
-    </message>
-    <message>
         <source>&amp;Copy</source>
         <translation type="unfinished">&amp;คัดลอก</translation>
     </message>
@@ -330,6 +326,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">กรอกที่อยู่ Bitcoin (เช่น %1)</translation>
     </message>
     <message>
+        <source>Ctrl+W</source>
+        <translation type="unfinished">คีย์ลัด Ctrl+W (pronounced "kee lat Ctrl+W")</translation>
+    </message>
+    <message>
         <source>Unroutable</source>
         <translation type="unfinished">ไม่สามารถกำหนดเส้นทางได้ (Mai Samart Kamnot Sen Thang Dai)</translation>
     </message>
@@ -411,10 +411,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>None</source>
-        <translation type="unfinished">ไม่มี (Mai mee)</translation>
-    </message>
-    <message>
-        <source>N/A</source>
         <translation type="unfinished">ไม่มี</translation>
     </message>
     <message>
@@ -463,7 +459,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>%1 B</source>
-        <translation type="unfinished">%1 บ</translation>
+        <translation type="unfinished">%1 ไบต์</translation>
     </message>
     <message>
         <source>%1 kB</source>
@@ -475,7 +471,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>%1 GB</source>
-        <translation type="unfinished">%1 กิกะไบต์</translation>
+        <translation type="unfinished">%1 จิกะไบต์</translation>
     </message>
     <message>
         <source>default wallet</source>
@@ -658,24 +654,20 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">กำลังประมวลผลบล็อกบนดิสก์...</translation>
     </message>
     <message>
-        <source>Connecting to peers…</source>
-        <translation type="unfinished">กำลังเชื่อมต่อกับเพื่อนร่วมงาน...</translation>
-    </message>
-    <message>
         <source>Request payments (generates QR codes and bitcoin: URIs)</source>
-        <translation type="unfinished">ขอการชำระเงิน (สร้างรหัส QR และ URI ของบิตคอยน์)</translation>
+        <translation type="unfinished">เรียกเก็บ การชำระเงิน (สร้าง QR codes และ bitcoin: URIs)</translation>
     </message>
     <message>
         <source>Show the list of used sending addresses and labels</source>
-        <translation type="unfinished">แสดงรายการที่อยู่ที่ใช้ส่งและป้ายกำกับ</translation>
+        <translation type="unfinished">แสดงรายการ ที่เก็บเงินที่จะส่ง bitcoin ออก และป้ายชื่อ ที่ใช้ไปแล้ว</translation>
     </message>
     <message>
         <source>Show the list of used receiving addresses and labels</source>
-        <translation type="unfinished">แสดงรายการที่อยู่รับและป้ายที่ใช้แล้ว</translation>
+        <translation type="unfinished">แสดงรายการ ที่เก็บเงินที่จะรับ bitcoin เข้า และป้ายชื่อ ที่ใช้ไปแล้ว</translation>
     </message>
     <message>
         <source>&amp;Command-line options</source>
-        <translation type="unfinished">&amp;ตัวเลือกคำสั่งในบรรทัดคำสั่ง</translation>
+        <translation type="unfinished">&amp;ตัวเลือก Command-line</translation>
     </message>
     <message numerus="yes">
         <source>Processed %n block(s) of transaction history.</source>
@@ -688,16 +680,12 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">%1 ตามหลัง</translation>
     </message>
     <message>
-        <source>Catching up…</source>
-        <translation type="unfinished">ตามทัน...</translation>
-    </message>
-    <message>
         <source>Last received block was generated %1 ago.</source>
-        <translation type="unfinished">บล็อกที่ได้รับล่าสุดถูกสร้างขึ้นเมื่อ %1 ที่แล้ว.</translation>
+        <translation type="unfinished">บล็อกสุดท้ายที่ได้รับ สร้างขึ้นเมื่อ %1 มาแล้ว</translation>
     </message>
     <message>
         <source>Transactions after this will not yet be visible.</source>
-        <translation type="unfinished">ธุรกรรมหลังจากนี้จะยังไม่สามารถมองเห็นได้.</translation>
+        <translation type="unfinished">ธุรกรรมหลังจากนี้จะยังไม่สามารถมองเห็น</translation>
     </message>
     <message>
         <source>Error</source>
@@ -794,28 +782,14 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">ปิดบังค่าในแท็บภาพรวม</translation>
     </message>
     <message>
-        <source>No wallets available</source>
-        <translation type="unfinished">ไม่มีกระเป๋าสตางค์วางจำหน่าย</translation>
-    </message>
-    <message>
-        <source>Wallet Data</source>
-        <extracomment>Name of the wallet data file format.</extracomment>
-        <translation type="unfinished">ข้อมูลกระเป๋าเงิน</translation>
-    </message>
-    <message>
         <source>Load Wallet Backup</source>
         <extracomment>The title for Restore Wallet File Windows</extracomment>
-        <translation type="unfinished">โหลดสำรองกระเป๋าเงิน</translation>
+        <translation type="unfinished">โหลดสำรองข้อมูลวอลเล็ต</translation>
     </message>
     <message>
         <source>Restore Wallet</source>
         <extracomment>Title of pop-up window shown when the user is attempting to restore a wallet.</extracomment>
-        <translation type="unfinished">กู้กระเป๋าเงิน</translation>
-    </message>
-    <message>
-        <source>Wallet Name</source>
-        <extracomment>Label of the input field where the name of the wallet is entered.</extracomment>
-        <translation type="unfinished">ชื่อกระเป๋าเงิน</translation>
+        <translation type="unfinished">กู้คืนวอลเล็ต</translation>
     </message>
     <message>
         <source>&amp;Window</source>
@@ -877,14 +851,6 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">กำลังซิงค์หัวเรื่องล่วงหน้า (%1%)…</translation>
     </message>
     <message>
-        <source>Error creating wallet</source>
-        <translation type="unfinished">เกิดข้อผิดพลาดในการสร้างกระเป๋าเงิน</translation>
-    </message>
-    <message>
-        <source>Cannot create new wallet, the software was compiled without sqlite support (required for descriptor wallets)</source>
-        <translation type="unfinished">ไม่สามารถสร้างกระเป๋าใหม่ได้, ซอฟต์แวร์ถูกคอมไพล์โดยไม่มีการสนับสนุน sqlite (ซึ่งจำเป็นสำหรับกระเป๋า descriptor)</translation>
-    </message>
-    <message>
         <source>Error: %1</source>
         <translation type="unfinished">ข้อผิดพลาด: %1</translation>
     </message>
@@ -893,66 +859,8 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">คำเตือน: %1</translation>
     </message>
     <message>
-        <source>Date: %1
-</source>
-        <translation type="unfinished">วันที่: %1</translation>
-    </message>
-    <message>
-        <source>Amount: %1
-</source>
-        <translation type="unfinished">จำนวน: %1</translation>
-    </message>
-    <message>
-        <source>Wallet: %1
-</source>
-        <translation type="unfinished">กระเป๋าเงิน: %1 
-</translation>
-    </message>
-    <message>
-        <source>Type: %1
-</source>
-        <translation type="unfinished">ประเภท: %1
-</translation>
-    </message>
-    <message>
-        <source>Label: %1
-</source>
-        <translation type="unfinished">ป้ายกำกับ: %1
-</translation>
-    </message>
-    <message>
-        <source>Address: %1
-</source>
-        <translation type="unfinished">ที่อยู่: %1
-</translation>
-    </message>
-    <message>
-        <source>Sent transaction</source>
-        <translation type="unfinished">การทำธุรกรรมที่ส่งออก</translation>
-    </message>
-    <message>
-        <source>Incoming transaction</source>
-        <translation type="unfinished">การทำธุรกรรมที่เข้ามา</translation>
-    </message>
-    <message>
-        <source>HD key generation is &lt;b&gt;enabled&lt;/b&gt;</source>
-        <translation type="unfinished">การสร้างคีย์ HD ถูกเปิดใช้งาน</translation>
-    </message>
-    <message>
-        <source>HD key generation is &lt;b&gt;disabled&lt;/b&gt;</source>
-        <translation type="unfinished"> การสร้างคีย์ HD คือ&lt;b&gt;พิการ&lt;/b&gt;</translation>
-    </message>
-    <message>
         <source>Private key &lt;b&gt;disabled&lt;/b&gt;</source>
         <translation type="unfinished">กุญแจส่วนตัว &lt;b&gt;พิการ&lt;/b&gt;</translation>
-    </message>
-    <message>
-        <source>Wallet is &lt;b&gt;encrypted&lt;/b&gt; and currently &lt;b&gt;unlocked&lt;/b&gt;</source>
-        <translation type="unfinished">กระเป๋าเงินคือ &lt;b&gt;เข้ารหัส&lt;/b&gt; และปัจจุบัน &lt;b&gt;ปลดล็อก&lt;/b&gt;</translation>
-    </message>
-    <message>
-        <source>Wallet is &lt;b&gt;encrypted&lt;/b&gt; and currently &lt;b&gt;locked&lt;/b&gt;</source>
-        <translation type="unfinished">กระเป๋าสตางค์คือ &lt;b&gt;เข้ารหัส&lt;/b&gt; และปัจจุบัน &lt;b&gt;ล็อค&lt;/b&gt;</translation>
     </message>
     <message>
         <source>Original message:</source>
@@ -994,27 +902,31 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>Change:</source>
-        <translation type="unfinished">การเปลี่ยนแปลง</translation>
+        <translation type="unfinished">เปลี่ยน:</translation>
     </message>
     <message>
         <source>(un)select all</source>
-        <translation type="unfinished">เลือกทั้งหมด (ยกเลิก)</translation>
+        <translation type="unfinished">(un)เลือกทั้งหมด</translation>
+    </message>
+    <message>
+        <source>Tree mode</source>
+        <translation type="unfinished">โหมด แบบTree</translation>
     </message>
     <message>
         <source>List mode</source>
-        <translation type="unfinished">โหมดรายการ</translation>
+        <translation type="unfinished">โหมด แบบรายการ</translation>
     </message>
     <message>
         <source>Amount</source>
-        <translation type="unfinished">จำนวน:</translation>
+        <translation type="unfinished">จำนวน</translation>
     </message>
     <message>
         <source>Received with label</source>
-        <translation type="unfinished">ได้รับพร้อมป้าย</translation>
+        <translation type="unfinished">รับ ด้วย เลเบล</translation>
     </message>
     <message>
         <source>Received with address</source>
-        <translation type="unfinished">รับพร้อมที่อยู่</translation>
+        <translation type="unfinished">รับ ด้วย แอดเดรส</translation>
     </message>
     <message>
         <source>Date</source>
@@ -1022,43 +934,19 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>Confirmations</source>
-        <translation type="unfinished">การยืนยัน</translation>
+        <translation type="unfinished">ทำการยืนยัน</translation>
     </message>
     <message>
         <source>Confirmed</source>
-        <translation type="unfinished">ยืนยัน</translation>
+        <translation type="unfinished">ยืนยันแล้ว</translation>
     </message>
     <message>
         <source>Copy amount</source>
-        <translation type="unfinished">จำนวนคัดลอก</translation>
+        <translation type="unfinished">คัดลอก จำนวน</translation>
     </message>
     <message>
-        <source>&amp;Copy address</source>
-        <translation type="unfinished">ที่อยู่ &amp;Copy</translation>
-    </message>
-    <message>
-        <source>Copy &amp;label</source>
-        <translation type="unfinished">คัดลอก &amp; ป้าย</translation>
-    </message>
-    <message>
-        <source>Copy &amp;amount</source>
-        <translation type="unfinished">คัดลอก &amp;จำนวน</translation>
-    </message>
-    <message>
-        <source>Copy transaction &amp;ID and output index</source>
-        <translation type="unfinished">คัดลอกธุรกรรม &amp;ID และดัชนีผลลัพธ์</translation>
-    </message>
-    <message>
-        <source>L&amp;ock unspent</source>
-        <translation type="unfinished">ปิดการใช้ที่ยังไม่ถูกใช้</translation>
-    </message>
-    <message>
-        <source>&amp;Unlock unspent</source>
-        <translation type="unfinished">&amp;ปลดล็อกที่ยังไม่ได้ใช้</translation>
-    </message>
-    <message>
-        <source>Copy quantity</source>
-        <translation type="unfinished">จำนวนสำเนา</translation>
+        <source>Copy fee</source>
+        <translation type="unfinished">คัดลอก ค่าธรรมเนียม</translation>
     </message>
     <message>
         <source>Copy after fee</source>
@@ -1066,15 +954,15 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>Copy bytes</source>
-        <translation type="unfinished">คัดลอกไบต์</translation>
+        <translation type="unfinished">คัดลอก bytes</translation>
     </message>
     <message>
         <source>Copy change</source>
-        <translation type="unfinished">การเปลี่ยนแปลงข้อความ</translation>
+        <translation type="unfinished">คัดลอก change</translation>
     </message>
     <message>
         <source>(%1 locked)</source>
-        <translation type="unfinished">(*%1 ถูกล็อค)</translation>
+        <translation type="unfinished">(%1 ล็อคแล้ว)</translation>
     </message>
     <message>
         <source>Can vary +/- %1 satoshi(s) per input.</source>
@@ -1142,26 +1030,12 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">ย้ายกระเป๋าเงิน</translation>
     </message>
     <message>
-        <source>Are you sure you wish to migrate the wallet &lt;i&gt;%1&lt;/i&gt;?</source>
-        <translation type="unfinished">คุณแน่ใจไหมว่าคุณต้องการย้ายกระเป๋า %1?</translation>
-    </message>
-    <message>
-        <source>Migrating the wallet will convert this wallet to one or more descriptor wallets. A new wallet backup will need to be made.
-If this wallet contains any watchonly scripts, a new wallet will be created which contains those watchonly scripts.
-If this wallet contains any solvable but not watched scripts, a different and new wallet will be created which contains those scripts.
-
-The migration process will create a backup of the wallet before migrating. This backup file will be named &lt;wallet name&gt;-&lt;timestamp&gt;.legacy.bak and can be found in the directory for this wallet. In the event of an incorrect migration, the backup can be restored with the "Restore Wallet" functionality.</source>
-        <translation type="unfinished">การย้ายกระเป๋าจะทำให้กระเป๋านี้กลายเป็นกระเป๋าหรือหลายๆ กระเป๋าที่มีคำอธิบาย (descriptor wallets) กระเป๋าสำรองใหม่จะต้องถูกสร้างขึ้น
-หากกระเป๋านี้มีสคริปต์ที่ดูได้เท่านั้น (watchonly scripts) จะมีกระเป๋าใหม่ที่สร้างขึ้นซึ่งมีสคริปต์เหล่านั้น
-หากกระเป๋านี้มีสคริปต์ที่แก้ไขได้แต่ไม่ได้ติดตาม (solvable but not watched scripts) จะมีกระเป๋าใหม่ที่แตกต่างออกไปซึ่งมีสคริปต์เหล่านั้น</translation>
-    </message>
-    <message>
         <source>Migrate Wallet</source>
         <translation type="unfinished">ย้ายกระเป๋าเงิน</translation>
     </message>
     <message>
         <source>Migrating Wallet &lt;b&gt;%1&lt;/b&gt;…</source>
-        <translation type="unfinished">กำลังย้ายกระเป๋าเงิน %1…</translation>
+        <translation type="unfinished">กำลังย้ายกระเป๋าเงิน &lt;b&gt;%1&lt;/b&gt;…</translation>
     </message>
     <message>
         <source>The wallet '%1' was migrated successfully.</source>
@@ -1174,6 +1048,11 @@ The migration process will create a backup of the wallet before migrating. This 
     <message>
         <source>Solvable but not watched scripts have been migrated to a new wallet named '%1'.</source>
         <translation type="unfinished">สคริปต์ที่สามารถแก้ไขได้แต่ไม่ได้ติดตามได้ถูกย้ายไปยังกระเป๋าใหม่ที่ชื่อว่า '%1'</translation>
+    </message>
+    <message>
+        <source>Restore Wallet</source>
+        <extracomment>Title of progress window which is displayed when wallets are being restored.</extracomment>
+        <translation type="unfinished">กู้กระเป๋าเงิน</translation>
     </message>
     <message>
         <source>Migration failed</source>
@@ -1285,10 +1164,6 @@ The migration process will create a backup of the wallet before migrating. This 
         <translation type="unfinished">ปิดกุญแจส่วนตัว</translation>
     </message>
     <message>
-        <source>Make a blank wallet. Blank wallets do not initially have private keys or scripts. Private keys and addresses can be imported, or an HD seed can be set, at a later time.</source>
-        <translation type="unfinished">สร้างกระเป๋าเปล่า กระเป๋าเปล่าเริ่มต้นจะไม่มีคีย์ส่วนตัวหรือสคริปต์ คีย์ส่วนตัวและที่อยู่สามารถนำเข้าได้ หรือสามารถตั้งค่า HD seed ในภายหลัง</translation>
-    </message>
-    <message>
         <source>Make Blank Wallet</source>
         <translation type="unfinished">ทำกระเป๋าว่าง</translation>
     </message>
@@ -1304,67 +1179,7 @@ The migration process will create a backup of the wallet before migrating. This 
         <source>Create</source>
         <translation type="unfinished">สร้าง</translation>
     </message>
-    <message>
-        <source>Compiled without external signing support (required for external signing)</source>
-        <extracomment>"External signing" means using devices such as hardware wallets.</extracomment>
-        <translation type="unfinished">คอมไพล์โดยไม่มีการสนับสนุนการลงชื่อภายนอก (ซึ่งจำเป็นสำหรับการลงชื่อภายนอก)</translation>
-    </message>
-</context>
-<context>
-    <name>EditAddressDialog</name>
-    <message>
-        <source>Edit Address</source>
-        <translation type="unfinished">แก้ไขที่อยู่</translation>
-    </message>
-    <message>
-        <source>&amp;Label</source>
-        <translation type="unfinished">ป้าย</translation>
-    </message>
-    <message>
-        <source>The label associated with this address list entry</source>
-        <translation type="unfinished">ป้ายกำกับที่เกี่ยวข้องกับรายการที่อยู่ในรายการนี้</translation>
-    </message>
-    <message>
-        <source>The address associated with this address list entry. This can only be modified for sending addresses.</source>
-        <translation type="unfinished">ที่อยู่ที่เชื่อมโยงกับรายการที่อยู่ในลิสต์นี้ นี้สามารถแก้ไขได้เฉพาะสำหรับที่อยู่ในการส่ง</translation>
-    </message>
-    <message>
-        <source>&amp;Address</source>
-        <translation type="unfinished">ที่อยู่</translation>
-    </message>
-    <message>
-        <source>New sending address</source>
-        <translation type="unfinished">ที่อยู่สำหรับการส่งใหม่</translation>
-    </message>
-    <message>
-        <source>Edit receiving address</source>
-        <translation type="unfinished">แก้ไขที่อยู่สำหรับการรับ</translation>
-    </message>
-    <message>
-        <source>Edit sending address</source>
-        <translation type="unfinished">แก้ไขที่อยู่การส่ง</translation>
-    </message>
-    <message>
-        <source>The entered address "%1" is not a valid Bitcoin address.</source>
-        <translation type="unfinished">อยู่ที่ป้อน "%1" ไม่ใช่ที่อยู่ Bitcoin ที่ถูกต้อง</translation>
-    </message>
-    <message>
-        <source>Address "%1" already exists as a receiving address with label "%2" and so cannot be added as a sending address.</source>
-        <translation type="unfinished">ที่อยู่ "%1" มีอยู่แล้วในฐานะที่อยู่รับที่มีป้ายชื่อ "%2" และดังนั้นจึงไม่สามารถเพิ่มเป็นที่อยู่ส่งได้</translation>
-    </message>
-    <message>
-        <source>The entered address "%1" is already in the address book with label "%2".</source>
-        <translation type="unfinished">ที่อยู่ "%1" ที่ป้อนเข้าไปมีอยู่ในสมุดที่อยู่แล้วพร้อมป้ายกำกับ "%2"</translation>
-    </message>
-    <message>
-        <source>Could not unlock wallet.</source>
-        <translation type="unfinished">ไม่สามารถปลดล็อกกระเป๋าเงินได้</translation>
-    </message>
-    <message>
-        <source>New key generation failed.</source>
-        <translation type="unfinished">การสร้างคีย์ใหม่ล้มเหลว</translation>
-    </message>
-</context>
+    </context>
 <context>
     <name>FreespaceChecker</name>
     <message>
@@ -1389,7 +1204,77 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
 </context>
 <context>
+    <name>HelpMessageDialog</name>
+    <message>
+        <source>version</source>
+        <translation type="unfinished">เวอร์ชัน</translation>
+    </message>
+    <message>
+        <source>About %1</source>
+        <translation type="unfinished">เกี่ยวกับ %1</translation>
+    </message>
+    <message>
+        <source>Command-line options</source>
+        <translation type="unfinished">ตัวเลือกบรรทัดคำสั่ง</translation>
+    </message>
+</context>
+<context>
+    <name>ShutdownWindow</name>
+    <message>
+        <source>%1 is shutting down…</source>
+        <translation type="unfinished">%1 กำลังปิดการทำงาน…</translation>
+    </message>
+    <message>
+        <source>Do not shut down the computer until this window disappears.</source>
+        <translation type="unfinished">อย่าปิดเครื่องคอมพิวเตอร์จนกว่าหน้าต่างนี้จะหายไป</translation>
+    </message>
+</context>
+<context>
     <name>Intro</name>
+    <message>
+        <source>Welcome</source>
+        <translation type="unfinished">ยินดีต้อนรับ</translation>
+    </message>
+    <message>
+        <source>Welcome to %1.</source>
+        <translation type="unfinished">ยินดีต้อนรับสู่ %1</translation>
+    </message>
+    <message>
+        <source>As this is the first time the program is launched, you can choose where %1 will store its data.</source>
+        <translation type="unfinished">เนื่องจากนี่เป็นครั้งแรกที่โปรแกรมถูกเปิดใช้งาน, คุณสามารถเลือกที่ที่ %1 จะเก็บข้อมูลของมัน</translation>
+    </message>
+    <message>
+        <source>Limit block chain storage to</source>
+        <translation type="unfinished">จำกัดการจัดเก็บบล็อกเชนถึง</translation>
+    </message>
+    <message>
+        <source>Reverting this setting requires re-downloading the entire blockchain. It is faster to download the full chain first and prune it later. Disables some advanced features.</source>
+        <translation type="unfinished">การย้อนกลับการตั้งค่านี้ต้องการการดาวน์โหลดบล็อกเชนทั้งหมดใหม่ การดาวน์โหลดทั้งชุดเชนก่อนแล้วค่อยตัดทอนภายหลังจะเร็วกว่า ปิดการใช้งานคุณสมบัติขั้นสูงบางอย่าง</translation>
+    </message>
+    <message>
+        <source> GB</source>
+        <translation type="unfinished">กิกะไบต์</translation>
+    </message>
+    <message>
+        <source>This initial synchronisation is very demanding, and may expose hardware problems with your computer that had previously gone unnoticed. Each time you run %1, it will continue downloading where it left off.</source>
+        <translation type="unfinished">การซิงโครไนซ์เริ่มต้นนี้ต้องการทรัพยากรมาก และอาจเปิดเผยปัญหาฮาร์ดแวร์ที่เกิดขึ้นกับคอมพิวเตอร์ของคุณซึ่งก่อนหน้านี้อาจไม่ถูกสังเกตเห็น ทุกครั้งที่คุณเรียกใช้ %1 มันจะดำเนินการดาวน์โหลดต่อจากจุดที่มันหยุดไว้</translation>
+    </message>
+    <message>
+        <source>When you click OK, %1 will begin to download and process the full %4 block chain (%2 GB) starting with the earliest transactions in %3 when %4 initially launched.</source>
+        <translation type="unfinished">"เมื่อคุณคลิกตกลง, %1 จะเริ่มดาวน์โหลดและประมวลผลบล็อกเชน %4 ทั้งหมด (%2 GB) โดยเริ่มจากธุรกรรมแรกสุดใน %3 เมื่อ %4 เริ่มต้นเปิดตัว"</translation>
+    </message>
+    <message>
+        <source>If you have chosen to limit block chain storage (pruning), the historical data must still be downloaded and processed, but will be deleted afterward to keep your disk usage low.</source>
+        <translation type="unfinished">"ถ้าคุณได้เลือกที่จะจำกัดการจัดเก็บบล็อกเชน (การตัดทอน), ข้อมูลประวัติยังคงต้องถูกดาวน์โหลดและประมวลผล, แต่จะถูกลบหลังจากนั้นเพื่อรักษาการใช้งานดิสก์ของคุณให้ต่ำ."</translation>
+    </message>
+    <message>
+        <source>Use the default data directory</source>
+        <translation type="unfinished">ใช้ไดเร็กทอรีข้อมูลเริ่มต้น</translation>
+    </message>
+    <message>
+        <source>Use a custom data directory:</source>
+        <translation type="unfinished">ใช้ไดเรกทอรีข้อมูลที่กำหนดเอง:</translation>
+    </message>
     <message>
         <source>Bitcoin</source>
         <translation type="unfinished">บิตคอยน์</translation>
@@ -1443,81 +1328,7 @@ The migration process will create a backup of the wallet before migrating. This 
         <source>Error: Specified data directory "%1" cannot be created.</source>
         <translation type="unfinished">ข้อผิดพลาด: ไม่สามารถสร้างไดเรกทอรีข้อมูลที่ระบุ "%1" ได้</translation>
     </message>
-    <message>
-        <source>Error</source>
-        <translation type="unfinished">ข้อผิดพลาด</translation>
-    </message>
-    <message>
-        <source>Welcome</source>
-        <translation type="unfinished">ยินดีต้อนรับ</translation>
-    </message>
-    <message>
-        <source>Welcome to %1.</source>
-        <translation type="unfinished">ยินดีต้อนรับสู่ %1</translation>
-    </message>
-    <message>
-        <source>As this is the first time the program is launched, you can choose where %1 will store its data.</source>
-        <translation type="unfinished">เนื่องจากนี่เป็นครั้งแรกที่โปรแกรมถูกเปิดใช้งาน, คุณสามารถเลือกที่ที่ %1 จะเก็บข้อมูลของมัน</translation>
-    </message>
-    <message>
-        <source>Limit block chain storage to</source>
-        <translation type="unfinished">จำกัดการจัดเก็บบล็อกเชนถึง</translation>
-    </message>
-    <message>
-        <source>Reverting this setting requires re-downloading the entire blockchain. It is faster to download the full chain first and prune it later. Disables some advanced features.</source>
-        <translation type="unfinished">การย้อนกลับการตั้งค่านี้ต้องการการดาวน์โหลดบล็อกเชนทั้งหมดใหม่ การดาวน์โหลดทั้งชุดเชนก่อนแล้วค่อยตัดทอนภายหลังจะเร็วกว่า ปิดการใช้งานคุณสมบัติขั้นสูงบางอย่าง</translation>
-    </message>
-    <message>
-        <source> GB</source>
-        <translation type="unfinished">กิกะไบต์</translation>
-    </message>
-    <message>
-        <source>This initial synchronisation is very demanding, and may expose hardware problems with your computer that had previously gone unnoticed. Each time you run %1, it will continue downloading where it left off.</source>
-        <translation type="unfinished">การซิงโครไนซ์เริ่มต้นนี้ต้องการทรัพยากรมาก และอาจเปิดเผยปัญหาฮาร์ดแวร์ที่เกิดขึ้นกับคอมพิวเตอร์ของคุณซึ่งก่อนหน้านี้อาจไม่ถูกสังเกตเห็น ทุกครั้งที่คุณเรียกใช้ %1 มันจะดำเนินการดาวน์โหลดต่อจากจุดที่มันหยุดไว้</translation>
-    </message>
-    <message>
-        <source>When you click OK, %1 will begin to download and process the full %4 block chain (%2 GB) starting with the earliest transactions in %3 when %4 initially launched.</source>
-        <translation type="unfinished">"เมื่อคุณคลิกตกลง, %1 จะเริ่มดาวน์โหลดและประมวลผลบล็อกเชน %4 ทั้งหมด (%2 GB) โดยเริ่มจากธุรกรรมแรกสุดใน %3 เมื่อ %4 เริ่มต้นเปิดตัว"</translation>
-    </message>
-    <message>
-        <source>If you have chosen to limit block chain storage (pruning), the historical data must still be downloaded and processed, but will be deleted afterward to keep your disk usage low.</source>
-        <translation type="unfinished">"ถ้าคุณได้เลือกที่จะจำกัดการจัดเก็บบล็อกเชน (การตัดทอน), ข้อมูลประวัติยังคงต้องถูกดาวน์โหลดและประมวลผล, แต่จะถูกลบหลังจากนั้นเพื่อรักษาการใช้งานดิสก์ของคุณให้ต่ำ."</translation>
-    </message>
-    <message>
-        <source>Use the default data directory</source>
-        <translation type="unfinished">ใช้ไดเร็กทอรีข้อมูลเริ่มต้น</translation>
-    </message>
-    <message>
-        <source>Use a custom data directory:</source>
-        <translation type="unfinished">ใช้ไดเรกทอรีข้อมูลที่กำหนดเอง:</translation>
-    </message>
-</context>
-<context>
-    <name>HelpMessageDialog</name>
-    <message>
-        <source>version</source>
-        <translation type="unfinished">เวอร์ชัน</translation>
-    </message>
-    <message>
-        <source>About %1</source>
-        <translation type="unfinished">เกี่ยวกับ %1</translation>
-    </message>
-    <message>
-        <source>Command-line options</source>
-        <translation type="unfinished">ตัวเลือกบรรทัดคำสั่ง</translation>
-    </message>
-</context>
-<context>
-    <name>ShutdownWindow</name>
-    <message>
-        <source>%1 is shutting down…</source>
-        <translation type="unfinished">%1 กำลังปิดการทำงาน…</translation>
-    </message>
-    <message>
-        <source>Do not shut down the computer until this window disappears.</source>
-        <translation type="unfinished">อย่าปิดเครื่องคอมพิวเตอร์จนกว่าหน้าต่างนี้จะหายไป</translation>
-    </message>
-</context>
+    </context>
 <context>
     <name>ModalOverlay</name>
     <message>
@@ -1676,8 +1487,91 @@ The migration process will create a backup of the wallet before migrating. This 
         <translation type="unfinished">ตัดทอนและบล็อกที่เก็บข้อมูลไปที่</translation>
     </message>
     <message>
+        <source>GB</source>
+        <translation type="unfinished">กิกะไบต์ (gí-ga-bàyt)</translation>
+    </message>
+    <message>
         <source>Reverting this setting requires re-downloading the entire blockchain.</source>
         <translation type="unfinished">การคืนค่านี้ต้องการการดาวน์โหลดบล็อกเชนทั้งหมดอีกครั้ง</translation>
+    </message>
+    <message>
+        <source>MiB</source>
+        <translation type="unfinished">MiB (เมบิบายต์)</translation>
+    </message>
+    <message>
+        <source>Set the number of script verification threads. Negative values correspond to the number of cores you want to leave free to the system.</source>
+        <extracomment>Tooltip text for Options window setting that sets the number of script verification threads. Explains that negative values mean to leave these many cores free to the system.</extracomment>
+        <translation type="unfinished">ตั้งค่าจำนวนเธรดการตรวจสอบสคริปต์ ค่าเชิงลบจะตรงกับจำนวนของคอร์ที่คุณต้องการให้ระบบเว้นไว้</translation>
+    </message>
+    <message>
+        <source>(0 = auto, &lt;0 = leave that many cores free)</source>
+        <translation type="unfinished">(0 = อัตโนมัติ, &lt;0 = ทิ้งคอร์จำนวนดังกล่าวว่างไว้)</translation>
+    </message>
+    <message>
+        <source>This allows you or a third party tool to communicate with the node through command-line and JSON-RPC commands.</source>
+        <extracomment>Tooltip text for Options window setting that enables the RPC server.</extracomment>
+        <translation type="unfinished">นี่ช่วยให้คุณหรือเครื่องมือจากบุคคลที่สามสามารถติดต่อกับโหนดผ่านคำสั่งในบรรทัดคำสั่งและคำสั่ง JSON-RPC</translation>
+    </message>
+    <message>
+        <source>Enable R&amp;PC server</source>
+        <extracomment>An Options window setting to enable the RPC server.</extracomment>
+        <translation type="unfinished">เปิดใช้งานเซิร์ฟเวอร์ R&amp;PC</translation>
+    </message>
+    <message>
+        <source>W&amp;allet</source>
+        <translation type="unfinished">วอลเล็ท (Wol-let)</translation>
+    </message>
+    <message>
+        <source>Whether to set subtract fee from amount as default or not.</source>
+        <extracomment>Tooltip text for Options window setting that sets subtracting the fee from a sending amount as default.</extracomment>
+        <translation type="unfinished">ควรกำหนดให้การหักค่าธรรมเนียมจากจำนวนเงินเป็นค่าเริ่มต้นหรือไม่</translation>
+    </message>
+    <message>
+        <source>Subtract &amp;fee from amount by default</source>
+        <extracomment>An Options window setting to set subtracting the fee from a sending amount as default.</extracomment>
+        <translation type="unfinished">หัก &amp;ค่าธรรมเนียมจากจำนวนเงินโดยค่าเริ่มต้น</translation>
+    </message>
+    <message>
+        <source>Expert</source>
+        <translation type="unfinished">ผู้เชี่ยวชาญ (phoo-chiao-chaan)</translation>
+    </message>
+    <message>
+        <source>Enable coin &amp;control features</source>
+        <translation type="unfinished">เปิดใช้งานคุณสมบัติการควบคุมเหรียญ</translation>
+    </message>
+    <message>
+        <source>If you disable the spending of unconfirmed change, the change from a transaction cannot be used until that transaction has at least one confirmation. This also affects how your balance is computed.</source>
+        <translation type="unfinished">หากคุณปิดการใช้จ่ายเงินทอนที่ยังไม่ได้รับการยืนยัน เงินทอนจากธุรกรรมจะไม่สามารถใช้ได้จนกว่าธุรกรรมนั้นจะได้รับการยืนยันอย่างน้อยหนึ่งครั้ง ซึ่งจะส่งผลต่อการคำนวณยอดคงเหลือของคุณด้วย</translation>
+    </message>
+    <message>
+        <source>&amp;Spend unconfirmed change</source>
+        <translation type="unfinished">ใช้จ่ายเงินทอนที่ยังไม่ได้ยืนยัน</translation>
+    </message>
+    <message>
+        <source>Enable &amp;PSBT controls</source>
+        <extracomment>An options window setting to enable PSBT controls.</extracomment>
+        <translation type="unfinished">เปิดใช้งานการควบคุม &amp;PSBT</translation>
+    </message>
+    <message>
+        <source>Whether to show PSBT controls.</source>
+        <extracomment>Tooltip text for options window setting that enables PSBT controls.</extracomment>
+        <translation type="unfinished">ว่าจะให้แสดงการควบคุม PSBT หรือไม่</translation>
+    </message>
+    <message>
+        <source>External Signer (e.g. hardware wallet)</source>
+        <translation type="unfinished">ผู้ลงนามภายนอก (เช่น กระเป๋าเงินฮาร์ดแวร์)</translation>
+    </message>
+    <message>
+        <source>&amp;External signer script path</source>
+        <translation type="unfinished">เส้นทางสคริปต์เซ็นชื่อภายนอก</translation>
+    </message>
+    <message>
+        <source>Accept connections from outside.</source>
+        <translation type="unfinished">ยอมรับการเชื่อมต่อจากภายนอก (Yom rap kan cheuam tor chak phai nok)</translation>
+    </message>
+    <message>
+        <source>Allow incomin&amp;g connections</source>
+        <translation type="unfinished">อนุญาตการเชื่อมต่อที่เข้ามา (Anuyat kan cheuamto thi khaoma)</translation>
     </message>
     <message>
         <source>Connect to the Bitcoin network through a SOCKS5 proxy.</source>
@@ -1690,6 +1584,16 @@ The migration process will create a backup of the wallet before migrating. This 
     <message>
         <source>Proxy &amp;IP:</source>
         <translation type="unfinished">พร็อกซี &amp; ไอพี</translation>
+    </message>
+    <message>
+        <source>&amp;Port:</source>
+        <translation type="unfinished">ท่าเรือ (thaa ruea)</translation>
+    </message>
+    <message>
+        <source>Port of the proxy (e.g. 9050)</source>
+        <translation type="unfinished">พอร์ตของพร็อกซี (เช่น 9050)
+ 
+4o mini</translation>
     </message>
     <message>
         <source>Used for reaching peers via:</source>
@@ -1726,6 +1630,10 @@ The migration process will create a backup of the wallet before migrating. This 
     <message>
         <source>&amp;Minimize to the tray instead of the taskbar</source>
         <translation type="unfinished">ย่อไปที่ถาดแทนที่จะเป็นแถบงาน</translation>
+    </message>
+    <message>
+        <source>M&amp;inimize on close</source>
+        <translation type="unfinished">ลดขนาดเมื่อปิด (Lòt khānāt muea pìd)</translation>
     </message>
     <message>
         <source>&amp;Display</source>
@@ -1774,11 +1682,6 @@ The migration process will create a backup of the wallet before migrating. This 
     <message>
         <source>&amp;Cancel</source>
         <translation type="unfinished">ยกเลิก</translation>
-    </message>
-    <message>
-        <source>Compiled without external signing support (required for external signing)</source>
-        <extracomment>"External signing" means using devices such as hardware wallets.</extracomment>
-        <translation type="unfinished">คอมไพล์โดยไม่มีการสนับสนุนการลงชื่อภายนอก (ซึ่งจำเป็นสำหรับการลงชื่อภายนอก)</translation>
     </message>
     <message>
         <source>default</source>
@@ -1861,10 +1764,6 @@ The migration process will create a backup of the wallet before migrating. This 
         <translation type="unfinished">ข้อมูลที่แสดงอาจจะล้าสมัย กระเป๋าของคุณจะทำการซิงค์อัตโนมัติกับเครือข่าย Bitcoin หลังจากที่เชื่อมต่อเสร็จสิ้นแล้ว แต่กระบวนการนี้ยังไม่เสร็จสมบูรณ์</translation>
     </message>
     <message>
-        <source>Watch-only:</source>
-        <translation type="unfinished">ดูอย่างเดียว</translation>
-    </message>
-    <message>
         <source>Available:</source>
         <translation type="unfinished">พร้อมใช้งาน</translation>
     </message>
@@ -1901,24 +1800,8 @@ The migration process will create a backup of the wallet before migrating. This 
         <translation type="unfinished"> ยอดคงเหลือทั้งหมดของคุณในปัจจุบัน</translation>
     </message>
     <message>
-        <source>Your current balance in watch-only addresses</source>
-        <translation type="unfinished">ยอดคงเหลือปัจจุบันของคุณในที่อยู่สำหรับดูอย่างเดียว</translation>
-    </message>
-    <message>
-        <source>Spendable:</source>
-        <translation type="unfinished">ใช้จ่ายได้</translation>
-    </message>
-    <message>
         <source>Recent transactions</source>
         <translation type="unfinished">การทำธุรกรรมล่าสุด</translation>
-    </message>
-    <message>
-        <source>Mined balance in watch-only addresses that has not yet matured</source>
-        <translation type="unfinished">ยอดคงเหลือที่ถูกขุดในที่อยู่ที่ดูได้เท่านั้นซึ่งยังไม่ครบกำหนด</translation>
-    </message>
-    <message>
-        <source>Current total balance in watch-only addresses</source>
-        <translation type="unfinished">ยอดคงเหลือทั้งหมดปัจจุบันในที่อยู่ที่ดูได้อย่างเดียว</translation>
     </message>
     <message>
         <source>Privacy mode activated for the Overview tab. To unmask the values, uncheck Settings-&gt;Mask values.</source>
@@ -1967,9 +1850,11 @@ The migration process will create a backup of the wallet before migrating. This 
         <source>Could not sign any more inputs.</source>
         <translation type="unfinished">ไม่สามารถลงนามการป้อนข้อมูลเพิ่มเติมได้ (Mai samart long nam kan phon khomooht permum dai).</translation>
     </message>
-    <message>
-        <source>Signed %1 inputs, but more signatures are still required.</source>
-        <translation type="unfinished">ลงชื่อ %1 ข้อมูลเข้าแล้ว แต่ยังต้องการลายเซ็นเพิ่มเติม</translation>
+    <message numerus="yes">
+        <source>Signed %n input(s), but more signatures are still required.</source>
+        <translation type="unfinished">
+            <numerusform />
+        </translation>
     </message>
     <message>
         <source>Signed transaction successfully. Transaction is ready to broadcast.</source>
@@ -2024,9 +1909,11 @@ The migration process will create a backup of the wallet before migrating. This 
         <source>or</source>
         <translation type="unfinished">หรือ</translation>
     </message>
-    <message>
-        <source>Transaction has %1 unsigned inputs.</source>
-        <translation type="unfinished">ธุรกรรมมีอินพุตที่ไม่ได้เซ็น %1 รายการ</translation>
+    <message numerus="yes">
+        <source>Transaction has %n unsigned input(s).</source>
+        <translation type="unfinished">
+            <numerusform />
+        </translation>
     </message>
     <message>
         <source>Transaction is missing some information about inputs.</source>
@@ -2095,6 +1982,17 @@ If you are receiving this error you should request the merchant provide a BIP21 
 <context>
     <name>PeerTableModel</name>
     <message>
+        <source>User Agent</source>
+        <extracomment>Title of Peers Table column which contains the peer's User Agent string.</extracomment>
+        <translation type="unfinished">ตัวแทนผู้ใช้
+(Pronounced: Dtua-Thaen Phu-Chai)</translation>
+    </message>
+    <message>
+        <source>Ping</source>
+        <extracomment>Title of Peers Table column which indicates the current latency of the connection with the peer.</extracomment>
+        <translation type="unfinished">พิง (pronounced ping)</translation>
+    </message>
+    <message>
         <source>Peer</source>
         <extracomment>Title of Peers Table column which contains a unique number used to identify a connection.</extracomment>
         <translation type="unfinished">เพื่อน (Phûuean)</translation>
@@ -2128,6 +2026,11 @@ If you are receiving this error you should request the merchant provide a BIP21 
         <source>Type</source>
         <extracomment>Title of Peers Table column which describes the type of peer connection. The "type" describes why the connection exists.</extracomment>
         <translation type="unfinished">ประเภท</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <extracomment>Title of Peers Table column which states the network the peer connected through.</extracomment>
+        <translation type="unfinished">เครือข่าย (pronounced "kruea-khai")</translation>
     </message>
     <message>
         <source>Inbound</source>
@@ -2176,6 +2079,10 @@ If you are receiving this error you should request the merchant provide a BIP21 
         <translation type="unfinished">(ไม่มี)</translation>
     </message>
     <message>
+        <source>&amp;Reset</source>
+        <translation type="unfinished">รีเซ็ต</translation>
+    </message>
+    <message>
         <source>Received</source>
         <translation type="unfinished">ได้รับ</translation>
     </message>
@@ -2189,7 +2096,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Banned peers</source>
-        <translation type="unfinished">เพื่อนที่ถูกแบน (Phuean thi thuk baen)</translation>
+        <translation type="unfinished">เพื่อนที่ถูกแบน</translation>
     </message>
     <message>
         <source>Select a peer to view detailed information.</source>
@@ -2201,15 +2108,23 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Ctrl+X</source>
-        <translation type="unfinished">ตัด (Tàd)</translation>
+        <translation type="unfinished">ตัด</translation>
     </message>
     <message>
         <source>The transport layer version: %1</source>
         <translation type="unfinished">เวอร์ชันของชั้นการขนส่ง: %1</translation>
     </message>
     <message>
+        <source>Transport</source>
+        <translation type="unfinished">ขนส่ง</translation>
+    </message>
+    <message>
         <source>Session ID</source>
-        <translation type="unfinished">รหัสเซสชัน (Rát sét-chân)</translation>
+        <translation type="unfinished">รหัสเซสชัน</translation>
+    </message>
+    <message>
+        <source>Version</source>
+        <translation type="unfinished">เวอร์ชัน</translation>
     </message>
     <message>
         <source>Whether we relay transactions to this peer.</source>
@@ -2217,11 +2132,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Transaction Relay</source>
-        <translation type="unfinished">การส่งต่อธุรกรรม (Kan song tor thurakham)</translation>
-    </message>
-    <message>
-        <source>Starting Block</source>
-        <translation type="unfinished">บล็อกเริ่มต้น (Blók Rêrm Tôn)</translation>
+        <translation type="unfinished">การส่งต่อธุรกรรม</translation>
     </message>
     <message>
         <source>Synced Headers</source>
@@ -2238,6 +2149,10 @@ If you are receiving this error you should request the merchant provide a BIP21 
     <message>
         <source>The mapped Autonomous System used for diversifying peer selection.</source>
         <translation type="unfinished">ระบบอัตโนมัติที่ทำการแมปเพื่อใช้ในการกระจายการเลือกเพื่อน</translation>
+    </message>
+    <message>
+        <source>Mapped AS</source>
+        <translation type="unfinished">แมปป์เป็น (pronounced: máp bpen)</translation>
     </message>
     <message>
         <source>Whether we relay addresses to this peer.</source>
@@ -2268,6 +2183,11 @@ If you are receiving this error you should request the merchant provide a BIP21 
         <source>Addresses Rate-Limited</source>
         <extracomment>Text title for the Addresses Rate-Limited field in the peer details area, which displays the total number of addresses received from this peer that were dropped (not processed) due to rate-limiting.</extracomment>
         <translation type="unfinished">ที่อยู่ถูกจำกัดอัตรา</translation>
+    </message>
+    <message>
+        <source>User Agent</source>
+        <translation type="unfinished">ตัวแทนผู้ใช้
+(Pronounced: Dtua-Thaen Phu-Chai)</translation>
     </message>
     <message>
         <source>Node window</source>
@@ -2316,6 +2236,10 @@ If you are receiving this error you should request the merchant provide a BIP21 
     <message>
         <source>High bandwidth BIP152 compact block relay: %1</source>
         <translation type="unfinished">การส่งข้อมูลบล็อกแบบคอมแพค BIP152 ความกว้างแบนด์วิธสูง: %1</translation>
+    </message>
+    <message>
+        <source>High Bandwidth</source>
+        <translation type="unfinished">แบนด์วิธสูง (pronounced: baen-wit soong)</translation>
     </message>
     <message>
         <source>Connection Time</source>
@@ -2420,7 +2344,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>None</source>
-        <translation type="unfinished">ไม่มี (Mai mee)</translation>
+        <translation type="unfinished">ไม่มี</translation>
     </message>
     </context>
 <context>
@@ -2431,7 +2355,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Copy &amp;label</source>
-        <translation type="unfinished">คัดลอก &amp; ป้าย</translation>
+        <translation type="unfinished">คัดลอก &amp;เลเบล</translation>
     </message>
     <message>
         <source>Copy &amp;amount</source>
@@ -2451,10 +2375,6 @@ If you are receiving this error you should request the merchant provide a BIP21 
     <message>
         <source>Wallet:</source>
         <translation type="unfinished">กระเป๋าสตางค์</translation>
-    </message>
-    <message>
-        <source>&amp;Save Image…</source>
-        <translation type="unfinished">บันทึกรูปภาพ...</translation>
     </message>
     </context>
 <context>
@@ -2496,7 +2416,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Change:</source>
-        <translation type="unfinished">การเปลี่ยนแปลง</translation>
+        <translation type="unfinished">เปลี่ยน:</translation>
     </message>
     <message>
         <source>Hide</source>
@@ -2508,11 +2428,11 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Copy amount</source>
-        <translation type="unfinished">จำนวนคัดลอก</translation>
+        <translation type="unfinished">คัดลอก จำนวน</translation>
     </message>
     <message>
         <source>Copy fee</source>
-        <translation type="unfinished">ค่าลอกสำเนา (kâa lók sàm-náo)</translation>
+        <translation type="unfinished">คัดลอก ค่าธรรมเนียม</translation>
     </message>
     <message>
         <source>Copy after fee</source>
@@ -2520,20 +2440,11 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <source>Copy bytes</source>
-        <translation type="unfinished">คัดลอกไบต์</translation>
+        <translation type="unfinished">คัดลอก bytes</translation>
     </message>
     <message>
         <source>Copy change</source>
-        <translation type="unfinished">การเปลี่ยนแปลงข้อความ</translation>
-    </message>
-    <message>
-        <source>Save Transaction Data</source>
-        <translation type="unfinished">บันทึกข้อมูลธุรกรรม</translation>
-    </message>
-    <message>
-        <source>Partially Signed Transaction (Binary)</source>
-        <extracomment>Expanded name of the binary PSBT file format. See: BIP 174.</extracomment>
-        <translation type="unfinished">ธุรกรรมที่ลงนามบางส่วน (ไบนารี)</translation>
+        <translation type="unfinished">คัดลอก change</translation>
     </message>
     <message>
         <source>or</source>
@@ -2566,10 +2477,6 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </context>
 <context>
     <name>TransactionDesc</name>
-    <message>
-        <source>Date</source>
-        <translation type="unfinished">วันที่</translation>
-    </message>
     <message>
         <source>unknown</source>
         <translation type="unfinished">ไม่ทราบ (mai saap)</translation>
@@ -2611,56 +2518,12 @@ If you are receiving this error you should request the merchant provide a BIP21 
 <context>
     <name>TransactionView</name>
     <message>
-        <source>&amp;Copy address</source>
-        <translation type="unfinished">ที่อยู่ &amp;Copy</translation>
-    </message>
-    <message>
-        <source>Copy &amp;label</source>
-        <translation type="unfinished">คัดลอก &amp; ป้าย</translation>
-    </message>
-    <message>
-        <source>Copy &amp;amount</source>
-        <translation type="unfinished">คัดลอก &amp;จำนวน</translation>
-    </message>
-    <message>
-        <source>Comma separated file</source>
-        <extracomment>Expanded name of the CSV file format. See: https://en.wikipedia.org/wiki/Comma-separated_values.</extracomment>
-        <translation type="unfinished">ไฟล์ที่แยกด้วยเครื่องหมายจุลภาค</translation>
-    </message>
-    <message>
-        <source>Confirmed</source>
-        <translation type="unfinished">ยืนยัน</translation>
-    </message>
-    <message>
-        <source>Date</source>
-        <translation type="unfinished">วันที่</translation>
-    </message>
-    <message>
-        <source>Type</source>
-        <translation type="unfinished">ประเภท</translation>
-    </message>
-    <message>
         <source>Label</source>
         <translation type="unfinished">การส่งออกล้มเหลว</translation>
     </message>
     <message>
         <source>Address</source>
         <translation type="unfinished">ที่อยู่</translation>
-    </message>
-    <message>
-        <source>Exporting Failed</source>
-        <translation type="unfinished">การส่งออกล้มเหลว</translation>
-    </message>
-    </context>
-<context>
-    <name>WalletFrame</name>
-    <message>
-        <source>Create a new wallet</source>
-        <translation type="unfinished">สร้างกระเป๋าใหม่</translation>
-    </message>
-    <message>
-        <source>Error</source>
-        <translation type="unfinished">ข้อผิดพลาด</translation>
     </message>
     </context>
 <context>
@@ -2683,4 +2546,11 @@ If you are receiving this error you should request the merchant provide a BIP21 
         <translation type="unfinished">ยกเลิก</translation>
     </message>
 </context>
+<context>
+    <name>bitcoin-core</name>
+    <message>
+        <source>default wallet</source>
+        <translation type="unfinished">กระเป๋าเงินเริ่มต้น</translation>
+    </message>
+    </context>
 </TS>

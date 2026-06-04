@@ -6,7 +6,7 @@
 
 export LC_ALL=C.UTF-8
 
-set -ex
+set -o errexit -o nounset -o pipefail -o xtrace
 
 # The source root dir, usually from git, usually read-only.
 # The ci system copies this folder.
@@ -20,24 +20,18 @@ export BASE_ROOT_DIR="${BASE_ROOT_DIR:-/ci_container_base}"
 # This folder exists only on the ci guest, and on the ci host as a volume.
 export DEPENDS_DIR=${DEPENDS_DIR:-$BASE_ROOT_DIR/depends}
 # A folder for the ci system to put temporary files (build result, datadirs for tests, ...)
+# The name contains a space and a non-ASCII symbol to confirm the build and
+# tests handle word-splitting and UTF8 correctly.
 # This folder only exists on the ci guest.
-export BASE_SCRATCH_DIR=${BASE_SCRATCH_DIR:-$BASE_ROOT_DIR/ci/scratch}
-# A folder for the ci system to put executables.
-# This folder only exists on the ci guest.
-export BINS_SCRATCH_DIR="${BASE_SCRATCH_DIR}/bins/"
+export BASE_SCRATCH_DIR=${BASE_SCRATCH_DIR:-$BASE_ROOT_DIR/ci/scratch_ ₿🧪_}
 
 echo "Setting specific values in env"
-if [ -n "${FILE_ENV}" ]; then
-  set -o errexit;
-  # shellcheck disable=SC1090
-  source "${FILE_ENV}"
-fi
+# shellcheck disable=SC1090
+source "${FILE_ENV}"
 
 echo "Fallback to default values in env (if not yet set)"
 # The number of parallel jobs to pass down to make and test_runner.py
-export MAKEJOBS=${MAKEJOBS:--j4}
-# Whether to prefer BusyBox over GNU utilities
-export USE_BUSY_BOX=${USE_BUSY_BOX:-false}
+export MAKEJOBS=${MAKEJOBS:--j$(if command -v nproc > /dev/null 2>&1; then nproc; else sysctl -n hw.logicalcpu; fi)}
 
 export RUN_UNIT_TESTS=${RUN_UNIT_TESTS:-true}
 export RUN_FUNCTIONAL_TESTS=${RUN_FUNCTIONAL_TESTS:-true}
@@ -53,7 +47,7 @@ export RUN_FUZZ_TESTS=${RUN_FUZZ_TESTS:-false}
 export BOOST_TEST_RANDOM=${BOOST_TEST_RANDOM:-1}
 # See man 7 debconf
 export DEBIAN_FRONTEND=noninteractive
-export CCACHE_MAXSIZE=${CCACHE_MAXSIZE:-500M}
+export CCACHE_MAXSIZE=${CCACHE_MAXSIZE:-2G}
 export CCACHE_TEMPDIR=${CCACHE_TEMPDIR:-/tmp/.ccache-temp}
 export CCACHE_COMPRESS=${CCACHE_COMPRESS:-1}
 # The cache dir.
@@ -64,10 +58,10 @@ export BASE_OUTDIR=${BASE_OUTDIR:-$BASE_SCRATCH_DIR/out}
 # The folder for previous release binaries.
 # This folder exists only on the ci guest, and on the ci host as a volume.
 export PREVIOUS_RELEASES_DIR=${PREVIOUS_RELEASES_DIR:-$BASE_ROOT_DIR/prev_releases}
-export CI_BASE_PACKAGES=${CI_BASE_PACKAGES:-build-essential pkgconf curl ca-certificates ccache python3 rsync git procps bison e2fsprogs cmake ninja-build}
+export CI_BASE_PACKAGES=${CI_BASE_PACKAGES:-build-essential pkgconf curl ca-certificates ccache python3-dev rsync git procps bison e2fsprogs cmake ninja-build}
 export GOAL=${GOAL:-install}
 export DIR_QA_ASSETS=${DIR_QA_ASSETS:-${BASE_SCRATCH_DIR}/qa-assets}
-export CI_RETRY_EXE=${CI_RETRY_EXE:-"retry --"}
+export CI_RETRY_EXE=${CI_RETRY_EXE:-"retry"}
 
 # The --platform argument used with `docker build` and `docker run`.
 export CI_IMAGE_PLATFORM=${CI_IMAGE_PLATFORM:-"linux"} # Force linux, but use native arch by default

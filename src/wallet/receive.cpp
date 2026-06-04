@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 The Bitcoin Core developers
+// Copyright (c) 2021-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -195,7 +195,10 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
 
 bool CachedTxIsFromMe(const CWallet& wallet, const CWalletTx& wtx)
 {
-    return (CachedTxGetDebit(wallet, wtx, /*avoid_reuse=*/false) > 0);
+    if (!wtx.m_cached_from_me.has_value()) {
+        wtx.m_cached_from_me = wallet.IsFromMe(*wtx.tx);
+    }
+    return wtx.m_cached_from_me.value();
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -224,7 +227,7 @@ bool CachedTxIsTrusted(const CWallet& wallet, const CWalletTx& wtx, std::set<Txi
         // Check that this specific input being spent is trusted
         if (!wallet.IsMine(parentOut)) return false;
         // If we've already trusted this parent, continue
-        if (trusted_parents.count(parent->GetHash())) continue;
+        if (trusted_parents.contains(parent->GetHash())) continue;
         // Recurse to check that the parent is also trusted
         if (!CachedTxIsTrusted(wallet, *parent, trusted_parents)) return false;
         trusted_parents.insert(parent->GetHash());
@@ -239,7 +242,7 @@ bool CachedTxIsTrusted(const CWallet& wallet, const CWalletTx& wtx)
     return CachedTxIsTrusted(wallet, wtx, trusted_parents);
 }
 
-Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
+Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse, bool include_nonmempool)
 {
     Balance ret;
     bool allow_used_addresses = !avoid_reuse || !wallet.IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE);
@@ -252,17 +255,38 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
             const bool is_trusted{CachedTxIsTrusted(wallet, wtx, trusted_parents)};
             const int tx_depth{wallet.GetTxDepthInMainChain(wtx)};
 
-            if (!wallet.IsSpent(outpoint) && (allow_used_addresses || !wallet.IsSpentKey(txo.GetTxOut().scriptPubKey))) {
-                // Get the amounts for mine
-                CAmount credit_mine = txo.GetTxOut().nValue;
+            bool nonmempool_spent = false;
+            switch (wallet.HowSpent(outpoint)) {
+            case CWallet::SpendType::CONFIRMED:
+            case CWallet::SpendType::MEMPOOL:
+                // treat as spent; ignore
+                break;
+            case CWallet::SpendType::NONMEMPOOL:
+                if (!include_nonmempool) break;
+                nonmempool_spent = true;
+                [[fallthrough]];
+            case CWallet::SpendType::UNSPENT:
+                CAmount* bucket = nullptr;
 
                 // Set the amounts in the return object
                 if (wallet.IsTxImmatureCoinBase(wtx) && wtx.isConfirmed()) {
-                    ret.m_mine_immature += credit_mine;
+                    bucket = &ret.m_mine_immature;
                 } else if (is_trusted && tx_depth >= min_depth) {
-                    ret.m_mine_trusted += credit_mine;
+                    bucket = &ret.m_mine_trusted;
                 } else if (!is_trusted && wtx.InMempool()) {
-                    ret.m_mine_untrusted_pending += credit_mine;
+                    bucket = &ret.m_mine_untrusted_pending;
+                }
+                if (bucket) {
+                    // Get the amounts for mine
+                    CAmount credit_mine = txo.GetTxOut().nValue;
+
+                    if (!allow_used_addresses && wallet.IsSpentKey(txo.GetTxOut().scriptPubKey)) {
+                        bucket = &ret.m_mine_used;
+                    }
+                    *bucket += credit_mine;
+                    if (nonmempool_spent) {
+                        ret.m_mine_nonmempool -= credit_mine;
+                    }
                 }
             }
         }

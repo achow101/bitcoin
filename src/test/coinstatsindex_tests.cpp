@@ -1,22 +1,39 @@
-// Copyright (c) 2020-2022 The Bitcoin Core developers
+// Copyright (c) 2020-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chain.h>
 #include <chainparams.h>
+#include <coins.h>
+#include <consensus/validation.h>
 #include <index/coinstatsindex.h>
 #include <interfaces/chain.h>
 #include <kernel/coinstats.h>
+#include <kernel/types.h>
+#include <key.h>
+#include <primitives/block.h>
+#include <primitives/transaction.h>
+#include <script/script.h>
+#include <sync.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <util/check.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <memory>
+#include <optional>
+#include <span>
+#include <vector>
+
+using kernel::ChainstateRole;
 
 BOOST_AUTO_TEST_SUITE(coinstatsindex_tests)
 
 BOOST_FIXTURE_TEST_CASE(coinstatsindex_initial_sync, TestChain100Setup)
 {
-    CoinStatsIndex coin_stats_index{interfaces::MakeChain(m_node), 1 << 20, true};
+    CoinStatsIndex coin_stats_index{interfaces::MakeChain(m_node), 1_MiB, true};
     BOOST_REQUIRE(coin_stats_index.Init());
 
     const CBlockIndex* block_index;
@@ -61,14 +78,6 @@ BOOST_FIXTURE_TEST_CASE(coinstatsindex_initial_sync, TestChain100Setup)
 
     BOOST_CHECK(block_index != new_block_index);
 
-    // It is not safe to stop and destroy the index until it finishes handling
-    // the last BlockConnected notification. The BlockUntilSyncedToCurrentChain()
-    // call above is sufficient to ensure this, but the
-    // SyncWithValidationInterfaceQueue() call below is also needed to ensure
-    // TSAN always sees the test thread waiting for the notification thread, and
-    // avoid potential false positive reports.
-    m_node.validation_signals->SyncWithValidationInterfaceQueue();
-
     // Shutdown sequence (c.f. Shutdown() in init.cpp)
     coin_stats_index.Stop();
 }
@@ -80,14 +89,14 @@ BOOST_FIXTURE_TEST_CASE(coinstatsindex_unclean_shutdown, TestChain100Setup)
     Chainstate& chainstate = Assert(m_node.chainman)->ActiveChainstate();
     const CChainParams& params = Params();
     {
-        CoinStatsIndex index{interfaces::MakeChain(m_node), 1 << 20};
+        CoinStatsIndex index{interfaces::MakeChain(m_node), 1_MiB};
         BOOST_REQUIRE(index.Init());
         index.Sync();
         std::shared_ptr<const CBlock> new_block;
         CBlockIndex* new_block_index = nullptr;
         {
             const CScript script_pub_key{CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
-            const CBlock block = this->CreateBlock({}, script_pub_key, chainstate);
+            const CBlock block = this->CreateBlock({}, script_pub_key);
 
             new_block = std::make_shared<CBlock>(block);
 
@@ -101,12 +110,12 @@ BOOST_FIXTURE_TEST_CASE(coinstatsindex_unclean_shutdown, TestChain100Setup)
         // Send block connected notification, then stop the index without
         // sending a chainstate flushed notification. Prior to #24138, this
         // would cause the index to be corrupted and fail to reload.
-        ValidationInterfaceTest::BlockConnected(ChainstateRole::NORMAL, index, new_block, new_block_index);
+        ValidationInterfaceTest::BlockConnected(ChainstateRole{}, index, new_block, new_block_index);
         index.Stop();
     }
 
     {
-        CoinStatsIndex index{interfaces::MakeChain(m_node), 1 << 20};
+        CoinStatsIndex index{interfaces::MakeChain(m_node), 1_MiB};
         BOOST_REQUIRE(index.Init());
         // Make sure the index can be loaded.
         BOOST_REQUIRE(index.StartBackgroundSync());

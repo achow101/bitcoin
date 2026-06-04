@@ -8,14 +8,15 @@
 
 #include <attributes.h>
 #include <crypto/common.h>
-#include <prevector.h> // IWYU pragma: export
+#include <prevector.h>
 #include <serialize.h>
 #include <uint256.h>
 #include <util/hash_type.h>
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <iterator>
 #include <limits>
 #include <span>
 #include <stdexcept>
@@ -270,18 +271,10 @@ public:
     }
 
     inline bool operator==(const int64_t& rhs) const    { return m_value == rhs; }
-    inline bool operator!=(const int64_t& rhs) const    { return m_value != rhs; }
-    inline bool operator<=(const int64_t& rhs) const    { return m_value <= rhs; }
-    inline bool operator< (const int64_t& rhs) const    { return m_value <  rhs; }
-    inline bool operator>=(const int64_t& rhs) const    { return m_value >= rhs; }
-    inline bool operator> (const int64_t& rhs) const    { return m_value >  rhs; }
+    inline auto operator<=>(const int64_t& rhs) const    { return m_value <=> rhs; }
 
     inline bool operator==(const CScriptNum& rhs) const { return operator==(rhs.m_value); }
-    inline bool operator!=(const CScriptNum& rhs) const { return operator!=(rhs.m_value); }
-    inline bool operator<=(const CScriptNum& rhs) const { return operator<=(rhs.m_value); }
-    inline bool operator< (const CScriptNum& rhs) const { return operator< (rhs.m_value); }
-    inline bool operator>=(const CScriptNum& rhs) const { return operator>=(rhs.m_value); }
-    inline bool operator> (const CScriptNum& rhs) const { return operator> (rhs.m_value); }
+    inline auto operator<=>(const CScriptNum& rhs) const { return operator<=>(rhs.m_value); }
 
     inline CScriptNum operator+(   const int64_t& rhs)    const { return CScriptNum(m_value + rhs);}
     inline CScriptNum operator-(   const int64_t& rhs)    const { return CScriptNum(m_value - rhs);}
@@ -595,6 +588,8 @@ struct CScriptWitness
     void SetNull() { stack.clear(); stack.shrink_to_fit(); }
 
     std::string ToString() const;
+
+    bool operator==(const CScriptWitness&) const = default;
 };
 
 /** A reference to a CScript: the Hash160 of its serialization */

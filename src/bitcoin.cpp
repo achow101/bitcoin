@@ -1,10 +1,13 @@
-// Copyright (c) 2025 The Bitcoin Core developers
+// Copyright (c) 2025-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <clientversion.h>
+#include <common/args.h>
+#include <common/license_info.h>
+#include <common/system.h>
 #include <util/fs.h>
 #include <util/exec.h>
 #include <util/strencodings.h>
@@ -47,7 +50,7 @@ Run '%s help' to see additional commands (e.g. for testing and debugging).
 )";
 
 struct CommandLine {
-    bool use_multiprocess{false};
+    std::optional<bool> use_multiprocess;
     bool show_version{false};
     bool show_help{false};
     std::string_view command;
@@ -55,10 +58,13 @@ struct CommandLine {
 };
 
 CommandLine ParseCommandLine(int argc, char* argv[]);
+bool UseMultiprocess(const CommandLine& cmd);
 static void ExecCommand(const std::vector<const char*>& args, std::string_view argv0);
 
 int main(int argc, char* argv[])
 {
+    SetupEnvironment();
+
     try {
         CommandLine cmd{ParseCommandLine(argc, argv)};
         if (cmd.show_version) {
@@ -78,17 +84,16 @@ int main(int argc, char* argv[])
                 return EXIT_FAILURE;
             }
         } else if (cmd.command == "gui") {
-            args.emplace_back(cmd.use_multiprocess ? "bitcoin-gui" : "bitcoin-qt");
+            args.emplace_back(UseMultiprocess(cmd) ? "bitcoin-gui" : "bitcoin-qt");
         } else if (cmd.command == "node") {
-            args.emplace_back(cmd.use_multiprocess ? "bitcoin-node" : "bitcoind");
+            args.emplace_back(UseMultiprocess(cmd) ? "bitcoin-node" : "bitcoind");
         } else if (cmd.command == "rpc") {
             args.emplace_back("bitcoin-cli");
             // Since "bitcoin rpc" is a new interface that doesn't need to be
             // backward compatible, enable -named by default so it is convenient
             // for callers to use a mix of named and unnamed parameters. Callers
-            // can override this by specifying -nonamed, but should not need to
-            // unless they are passing string values containing '=' characters
-            // as unnamed parameters.
+            // can override this by specifying -nonamed, but it handles parameters
+            // that contain '=' characters, so -nonamed should rarely be needed.
             args.emplace_back("-named");
         } else if (cmd.command == "wallet") {
             args.emplace_back("bitcoin-wallet");
@@ -143,6 +148,30 @@ CommandLine ParseCommandLine(int argc, char* argv[])
     return cmd;
 }
 
+bool UseMultiprocess(const CommandLine& cmd)
+{
+    // If -m or -M options were explicitly specified, there is no need to
+    // further parse arguments to determine which to use.
+    if (cmd.use_multiprocess) return *cmd.use_multiprocess;
+
+    ArgsManager args;
+    args.SetDefaultFlags(ArgsManager::ALLOW_ANY);
+    std::string error_message;
+    auto argv{cmd.args};
+    argv.insert(argv.begin(), nullptr);
+    if (!args.ParseParameters(argv.size(), argv.data(), error_message)) {
+        tfm::format(std::cerr, "Warning: failed to parse subcommand command line options: %s\n", error_message);
+    }
+    if (!args.ReadConfigFiles(error_message, true)) {
+        tfm::format(std::cerr, "Warning: failed to parse subcommand config: %s\n", error_message);
+    }
+    args.SelectConfigNetwork(args.GetChainTypeString());
+
+    // If any -ipc* options are set these need to be processed by a
+    // multiprocess-capable binary.
+    return args.IsArgSet("-ipcbind") || args.IsArgSet("-ipcconnect") || args.IsArgSet("-ipcfd");
+}
+
 //! Execute the specified bitcoind, bitcoin-qt or other command line in `args`
 //! using src, bin and libexec directory paths relative to this executable, where
 //! the path to this executable is specified in `wrapper_argv0`.
@@ -183,7 +212,7 @@ static void ExecCommand(const std::vector<const char*>& args, std::string_view w
 
     // Try to resolve any symlinks and figure out the directory containing the wrapper executable.
     std::error_code ec;
-    fs::path wrapper_dir{fs::weakly_canonical(wrapper_path, ec)};
+    auto wrapper_dir{fs::weakly_canonical(wrapper_path, ec)};
     if (wrapper_dir.empty()) wrapper_dir = wrapper_path; // Restore previous path if weakly_canonical failed.
     wrapper_dir = wrapper_dir.parent_path();
 
@@ -199,7 +228,7 @@ static void ExecCommand(const std::vector<const char*>& args, std::string_view w
 
     // If wrapper is installed in a bin/ directory, look for target executable
     // in libexec/
-    (wrapper_dir.filename() == "bin" && try_exec(fs::path{wrapper_dir.parent_path()} / "libexec" / arg0.filename())) ||
+    (wrapper_dir.filename() == "bin" && try_exec(wrapper_dir.parent_path() / "libexec" / arg0.filename())) ||
 #ifdef WIN32
     // Otherwise check the "daemon" subdirectory in a windows install.
     (!wrapper_dir.empty() && try_exec(wrapper_dir / "daemon" / arg0.filename())) ||

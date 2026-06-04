@@ -1,6 +1,6 @@
 # macOS Build Guide
 
-**Updated for MacOS [15](https://www.apple.com/macos/macos-sequoia/)**
+**Updated for MacOS [26](https://www.apple.com/os/macos/)**
 
 This guide describes how to build bitcoind, command-line utilities, and GUI on macOS.
 
@@ -16,7 +16,9 @@ macOS comes with a built-in Terminal located in:
 ### 1. Xcode Command Line Tools
 
 The Xcode Command Line Tools are a collection of build tools for macOS.
-These tools must be installed in order to build Bitcoin Core from source.
+Version 16.2 (or higher) of these tools must be
+[installed](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools)
+in order to build Bitcoin Core from source.
 
 To install, run the following command from your terminal:
 
@@ -139,7 +141,7 @@ It is required that you have `python` and `zip` installed.
 
 There are many ways to configure Bitcoin Core, here are a few common examples:
 
-##### Wallet (only SQlite) and GUI Support:
+##### Wallet and GUI:
 
 This enables the GUI.
 If `sqlite` or `qt` are not installed, this will throw an error.
@@ -170,12 +172,12 @@ Run the following in your terminal to compile Bitcoin Core:
 
 ``` bash
 cmake --build build     # Append "-j N" here for N parallel jobs.
-ctest --test-dir build  # Append "-j N" for N parallel tests. Some tests are disabled if Python 3 is not available.
+ctest --test-dir build  # Append "-j N" for N parallel tests.
 ```
 
 ### 3. Deploy (optional)
 
-You can also create a  `.zip` containing the `.app` bundle by running the following command:
+You can also create a `.zip` containing the `.app` bundle by running the following command:
 
 ``` bash
 cmake --build build --target deploy

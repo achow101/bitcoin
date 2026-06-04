@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2022 The Bitcoin Core developers
+# Copyright (c) 2020-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test orphaned block rewards in the wallet."""
@@ -46,6 +46,7 @@ class OrphanedBlockRewardTest(BitcoinTestFramework):
           "trusted": 10,
           "untrusted_pending": 0,
           "immature": 0,
+          "nonmempool": 0,
         })
         # And the unconfirmed tx to be abandoned
         assert_equal(self.nodes[1].gettransaction(txid)["details"][0]["abandoned"], True)

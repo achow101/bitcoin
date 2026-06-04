@@ -13,6 +13,22 @@
 #include <script/keyorigin.h>
 #include <script/script.h>
 #include <sync.h>
+#include <uint256.h>
+
+#include <compare>
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
+#include <span>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
+
+class MuSig2SecNonce;
 
 struct ShortestVectorFirstComparator
 {
@@ -162,6 +178,10 @@ public:
     virtual bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const { return false; }
     virtual bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const { return false; }
     virtual std::vector<CPubKey> GetMuSig2ParticipantPubkeys(const CPubKey& pubkey) const { return {}; }
+    virtual std::map<CPubKey, std::vector<CPubKey>> GetAllMuSig2ParticipantPubkeys() const {return {}; }
+    virtual void SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const {}
+    virtual std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const { return std::nullopt; }
+    virtual void DeleteMuSig2Session(const uint256& session_id) const {}
 
     bool GetKeyByXOnly(const XOnlyPubKey& pubkey, CKey& key) const
     {
@@ -206,6 +226,10 @@ public:
     bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const override;
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
     std::vector<CPubKey> GetMuSig2ParticipantPubkeys(const CPubKey& pubkey) const override;
+    std::map<CPubKey, std::vector<CPubKey>> GetAllMuSig2ParticipantPubkeys() const override;
+    void SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const override;
+    std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const override;
+    void DeleteMuSig2Session(const uint256& session_id) const override;
 };
 
 struct FlatSigningProvider final : public SigningProvider
@@ -216,6 +240,7 @@ struct FlatSigningProvider final : public SigningProvider
     std::map<CKeyID, CKey> keys;
     std::map<XOnlyPubKey, TaprootBuilder> tr_trees; /** Map from output key to Taproot tree (which can then make the TaprootSpendData */
     std::map<CPubKey, std::vector<CPubKey>> aggregate_pubkeys; /** MuSig2 aggregate pubkeys */
+    std::map<uint256, MuSig2SecNonce>* musig2_secnonces{nullptr};
 
     bool GetCScript(const CScriptID& scriptid, CScript& script) const override;
     bool GetPubKey(const CKeyID& keyid, CPubKey& pubkey) const override;
@@ -225,6 +250,10 @@ struct FlatSigningProvider final : public SigningProvider
     bool GetTaprootSpendData(const XOnlyPubKey& output_key, TaprootSpendData& spenddata) const override;
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
     std::vector<CPubKey> GetMuSig2ParticipantPubkeys(const CPubKey& pubkey) const override;
+    std::map<CPubKey, std::vector<CPubKey>> GetAllMuSig2ParticipantPubkeys() const override;
+    void SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const override;
+    std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const override;
+    void DeleteMuSig2Session(const uint256& session_id) const override;
 
     FlatSigningProvider& Merge(FlatSigningProvider&& b) LIFETIMEBOUND;
 };

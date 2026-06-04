@@ -1,15 +1,15 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <banman.h>
 
 #include <common/system.h>
-#include <logging.h>
 #include <netaddress.h>
 #include <node/interface_ui.h>
 #include <sync.h>
+#include <util/log.h>
 #include <util/time.h>
 #include <util/translation.h>
 
@@ -36,7 +36,7 @@ void BanMan::LoadBanlist()
     if (m_ban_db.Read(m_banned)) {
         SweepBanned(); // sweep out unused entries
 
-        LogDebug(BCLog::NET, "Loaded %d banned node addresses/subnets  %dms\n", m_banned.size(),
+        LogDebug(BCLog::NET, "Loaded %d banned node addresses/subnets %dms", m_banned.size(),
                  Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
     } else {
         LogInfo("Recreating the banlist database");
@@ -65,7 +65,7 @@ void BanMan::DumpBanlist()
         m_is_dirty = true;
     }
 
-    LogDebug(BCLog::NET, "Flushed %d banned node addresses/subnets to disk  %dms\n", banmap.size(),
+    LogDebug(BCLog::NET, "Flushed %d banned node addresses/subnets to disk %dms", banmap.size(),
              Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
 }
 

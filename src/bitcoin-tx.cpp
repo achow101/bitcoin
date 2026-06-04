@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 #include <clientversion.h>
 #include <coins.h>
 #include <common/args.h>
+#include <common/license_info.h>
 #include <common/system.h>
 #include <compat/compat.h>
 #include <consensus/amount.h>
@@ -585,10 +586,9 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
     // starts as a clone of the raw tx:
     CMutableTransaction mergedTx{tx};
     const CMutableTransaction txv{tx};
-    CCoinsView viewDummy;
-    CCoinsViewCache view(&viewDummy);
+    CCoinsViewCache view{&CoinsViewEmpty::Get()};
 
-    if (!registers.count("privatekeys"))
+    if (!registers.contains("privatekeys"))
         throw std::runtime_error("privatekeys register variable must be set.");
     FillableSigningProvider tempKeystore;
     UniValue keysObj = registers["privatekeys"];
@@ -604,7 +604,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
     }
 
     // Add previous txouts given in the RPC call:
-    if (!registers.count("prevtxs"))
+    if (!registers.contains("prevtxs"))
         throw std::runtime_error("prevtxs register variable must be set.");
     UniValue prevtxsObj = registers["prevtxs"];
     {
@@ -681,7 +681,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
         SignatureData sigdata = DataFromTransaction(mergedTx, i, coin.out);
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
         if (!fHashSingle || (i < mergedTx.vout.size()))
-            ProduceSignature(keystore, MutableTransactionSignatureCreator(mergedTx, i, amount, nHashType), prevPubKey, sigdata);
+            ProduceSignature(keystore, MutableTransactionSignatureCreator(mergedTx, i, amount, {.sighash_type = nHashType}), prevPubKey, sigdata);
 
         if (amount == MAX_MONEY && !sigdata.scriptWitness.IsNull()) {
             throw std::runtime_error(strprintf("Missing amount for CTxOut with scriptPubKey=%s", HexStr(prevPubKey)));
