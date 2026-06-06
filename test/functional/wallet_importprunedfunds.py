@@ -157,6 +157,29 @@ class ImportPrunedFundsTest(BitcoinTestFramework):
         available_utxos = [u["txid"] for u in node.listunspent(minconf=0)]
         assert utxo["txid"] not in available_utxos, "UTXO should still be spent by conflicting tx"
 
+        self.log.info("Test removeprunedfunds restores inputs of removed confirmed spend")
+        parent_txid = node.sendtoaddress(node.getnewaddress(), 1)
+        self.generate(node, 1)
+        parent_utxo = next(
+            utxo for utxo in node.listunspent() if utxo["txid"] == parent_txid
+        )
+        parent_outpoint = (parent_txid, parent_utxo["vout"])
+
+        child_txid = node.sendall(
+            recipients=[w1.getnewaddress()], inputs=[parent_utxo]
+        )["txid"]
+        self.generate(node, 1)
+
+        def parent_is_unspent():
+            return any(
+                (utxo["txid"], utxo["vout"]) == parent_outpoint
+                for utxo in node.listunspent(minconf=0)
+            )
+
+        assert_equal(parent_is_unspent(), False)
+        node.removeprunedfunds(child_txid)
+        assert_equal(parent_is_unspent(), True)
+
 
 if __name__ == '__main__':
     ImportPrunedFundsTest(__file__).main()
