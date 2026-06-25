@@ -86,8 +86,8 @@ RPCMethod walletpassphrase()
 
         pwallet->TopUpKeyPool();
 
-        pwallet->nRelockTime = GetTime() + nSleepTime;
-        relock_time = pwallet->nRelockTime;
+        pwallet->m_relock_time = GetTime() + nSleepTime;
+        relock_time = pwallet->m_relock_time;
     }
 
     // Get wallet scheduler to queue up the relock callback in the future.
@@ -101,11 +101,7 @@ RPCMethod walletpassphrase()
     std::weak_ptr<CWallet> weak_wallet = wallet;
     context.scheduler->scheduleFromNow([weak_wallet, relock_time] {
         if (auto shared_wallet = weak_wallet.lock()) {
-            LOCK2(shared_wallet->m_relock_mutex, shared_wallet->cs_wallet);
-            // Skip if this is not the most recent relock callback.
-            if (shared_wallet->nRelockTime != relock_time) return;
-            shared_wallet->Lock();
-            shared_wallet->nRelockTime = 0;
+            shared_wallet->Lock(relock_time);
         }
     }, std::chrono::seconds(nSleepTime));
 
@@ -207,10 +203,7 @@ RPCMethod walletlock()
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: the wallet is currently being used to rescan the blockchain for related transactions. Please call `abortrescan` before locking the wallet.");
     }
 
-    LOCK2(pwallet->m_relock_mutex, pwallet->cs_wallet);
-
     pwallet->Lock();
-    pwallet->nRelockTime = 0;
 
     return UniValue::VNULL;
 },

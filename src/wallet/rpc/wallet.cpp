@@ -95,7 +95,7 @@ static RPCMethod getwalletinfo()
     obj.pushKV("keypoolsize_hd_internal", pwallet->GetKeyPoolSize() - kpExternalSize);
 
     if (pwallet->HasEncryptionKeys()) {
-        obj.pushKV("unlocked_until", pwallet->nRelockTime);
+        obj.pushKV("unlocked_until", pwallet->m_relock_time);
     }
     obj.pushKV("private_keys_enabled", !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     obj.pushKV("avoid_reuse", pwallet->IsWalletFlagSet(WALLET_FLAG_AVOID_REUSE));

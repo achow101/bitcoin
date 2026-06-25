@@ -3387,17 +3387,21 @@ bool CWallet::IsLocked() const
     return vMasterKey.empty();
 }
 
-bool CWallet::Lock()
+bool CWallet::Lock(std::optional<int64_t> relock_time)
 {
     if (!HasEncryptionKeys())
         return false;
 
     {
         LOCK2(m_relock_mutex, cs_wallet);
+        if (relock_time.has_value() && m_relock_time != relock_time.value()) {
+            return false;
+        }
         if (!vMasterKey.empty()) {
             memory_cleanse(vMasterKey.data(), vMasterKey.size() * sizeof(decltype(vMasterKey)::value_type));
             vMasterKey.clear();
         }
+        m_relock_time = 0;
     }
 
     NotifyStatusChanged(this);

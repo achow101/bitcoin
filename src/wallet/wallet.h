@@ -486,7 +486,8 @@ public:
     }
 
     bool IsLocked() const override;
-    bool Lock();
+    // Lock the wallet. If relock_time is provided, only lock if that matches the wallet's current m_relock_time
+    bool Lock(std::optional<int64_t> relock_time = std::nullopt);
 
     /** Interface to assert chain access */
     bool HaveChain() const { return m_chain ? true : false; }
@@ -594,7 +595,7 @@ public:
     void LoadAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& request) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Holds a timestamp at which point the wallet is scheduled (externally) to be relocked. Caller must arrange for actual relocking to occur via Lock().
-    int64_t nRelockTime GUARDED_BY(cs_wallet){0};
+    int64_t m_relock_time GUARDED_BY(cs_wallet){0};
 
     // Used to prevent concurrent calls to walletpassphrase RPC.
     Mutex m_unlock_mutex;
