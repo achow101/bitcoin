@@ -101,7 +101,8 @@ RPCMethod walletpassphrase()
     std::weak_ptr<CWallet> weak_wallet = wallet;
     context.scheduler->scheduleFromNow([weak_wallet, relock_time] {
         if (auto shared_wallet = weak_wallet.lock()) {
-            shared_wallet->Lock(relock_time);
+            WalletUnlockReserver reserver(*shared_wallet, WalletUnlockReserver::exclusive, std::defer_lock);
+            shared_wallet->Lock(reserver, relock_time);
         }
     }, std::chrono::seconds(nSleepTime));
 
@@ -138,7 +139,8 @@ RPCMethod walletpassphrasechange()
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: the wallet is currently being used to rescan the blockchain for related transactions. Please call `abortrescan` before changing the passphrase.");
     }
 
-    LOCK2(pwallet->m_relock_mutex, pwallet->cs_wallet);
+    WalletUnlockReserver reserver(*pwallet, WalletUnlockReserver::exclusive);
+    LOCK(pwallet->cs_wallet);
 
     SecureString strOldWalletPass;
     strOldWalletPass.reserve(100);
@@ -152,7 +154,7 @@ RPCMethod walletpassphrasechange()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "passphrase cannot be empty");
     }
 
-    if (!pwallet->ChangeWalletPassphrase(strOldWalletPass, strNewWalletPass)) {
+    if (!pwallet->ChangeWalletPassphrase(reserver, strOldWalletPass, strNewWalletPass)) {
         // Check if the old passphrase had a null character (see #27067 for details)
         if (strOldWalletPass.find('\0') == std::string::npos) {
             throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Error: The wallet passphrase entered was incorrect.");
@@ -203,7 +205,8 @@ RPCMethod walletlock()
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: the wallet is currently being used to rescan the blockchain for related transactions. Please call `abortrescan` before locking the wallet.");
     }
 
-    pwallet->Lock();
+    WalletUnlockReserver reserver(*pwallet, WalletUnlockReserver::exclusive, std::defer_lock);
+    pwallet->Lock(reserver);
 
     return UniValue::VNULL;
 },
@@ -257,7 +260,8 @@ RPCMethod encryptwallet()
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: the wallet is currently being used to rescan the blockchain for related transactions. Please call `abortrescan` before encrypting the wallet.");
     }
 
-    LOCK2(pwallet->m_relock_mutex, pwallet->cs_wallet);
+    WalletUnlockReserver reserver(*pwallet, WalletUnlockReserver::exclusive);
+    LOCK(pwallet->cs_wallet);
 
     SecureString strWalletPass;
     strWalletPass.reserve(100);
@@ -267,7 +271,7 @@ RPCMethod encryptwallet()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "passphrase cannot be empty");
     }
 
-    if (!pwallet->EncryptWallet(strWalletPass)) {
+    if (!pwallet->EncryptWallet(reserver, strWalletPass)) {
         throw JSONRPCError(RPC_WALLET_ENCRYPTION_FAILED, "Error: Failed to encrypt the wallet.");
     }
 

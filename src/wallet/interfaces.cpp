@@ -138,16 +138,21 @@ public:
 
     bool encryptWallet(const SecureString& wallet_passphrase) override
     {
-        return m_wallet->EncryptWallet(wallet_passphrase);
+        WalletUnlockReserver reserver(*m_wallet, WalletUnlockReserver::exclusive, std::defer_lock);
+        return m_wallet->EncryptWallet(reserver, wallet_passphrase);
     }
     bool isCrypted() override { return m_wallet->HasEncryptionKeys(); }
-    bool lock() override { return m_wallet->Lock(); }
+    bool lock() override {
+        WalletUnlockReserver reserver(*m_wallet, WalletUnlockReserver::exclusive, std::defer_lock);
+        return m_wallet->Lock(reserver);
+    }
     bool unlock(const SecureString& wallet_passphrase) override { return m_wallet->Unlock(wallet_passphrase); }
     bool isLocked() override { return m_wallet->IsLocked(); }
     bool changeWalletPassphrase(const SecureString& old_wallet_passphrase,
         const SecureString& new_wallet_passphrase) override
     {
-        return m_wallet->ChangeWalletPassphrase(old_wallet_passphrase, new_wallet_passphrase);
+        WalletUnlockReserver reserver(*m_wallet, WalletUnlockReserver::exclusive, std::defer_lock);
+        return m_wallet->ChangeWalletPassphrase(reserver, old_wallet_passphrase, new_wallet_passphrase);
     }
     void abortRescan() override { m_wallet->AbortRescan(); }
     bool backupWallet(const std::string& filename) override { return m_wallet->BackupWallet(filename); }

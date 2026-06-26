@@ -302,6 +302,7 @@ struct CRecipient
 };
 
 class WalletRescanReserver; //forward declarations for ScanForWalletTransactions/RescanFromTime
+class WalletUnlockReserver;
 /**
  * A CWallet maintains a set of transactions and balances, and provides the ability to create new transactions.
  */
@@ -487,7 +488,7 @@ public:
 
     bool IsLocked() const override;
     // Lock the wallet. If relock_time is provided, only lock if that matches the wallet's current m_relock_time
-    bool Lock(std::optional<int64_t> relock_time = std::nullopt);
+    bool Lock(WalletUnlockReserver& reserver, std::optional<int64_t> relock_time = std::nullopt);
 
     /** Interface to assert chain access */
     bool HaveChain() const { return m_chain ? true : false; }
@@ -600,11 +601,11 @@ public:
     // Used to prevent concurrent calls to walletpassphrase RPC.
     Mutex m_unlock_mutex;
     // Used to prevent deleting the passphrase from memory when it is still in use.
-    RecursiveMutex m_relock_mutex;
+    mutable std::shared_mutex m_relock_mutex;
 
     bool Unlock(const SecureString& strWalletPassphrase);
-    bool ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
-    bool EncryptWallet(const SecureString& strWalletPassphrase);
+    bool ChangeWalletPassphrase(WalletUnlockReserver& reserver, const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
+    bool EncryptWallet(WalletUnlockReserver& reserver, const SecureString& strWalletPassphrase);
 
     unsigned int ComputeTimeSmart(const CWalletTx& wtx, bool rescanning_old_block) const;
 

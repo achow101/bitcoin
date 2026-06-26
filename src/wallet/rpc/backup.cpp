@@ -391,7 +391,7 @@ RPCMethod importdescriptors()
 
     // Ensure that the wallet is not locked for the remainder of this RPC, as
     // the passphrase is used to top up the keypool.
-    LOCK(pwallet->m_relock_mutex);
+    WalletUnlockReserver unlock_reserver(*pwallet);
 
     const UniValue& requests = main_request.params[0];
     const int64_t minimum_timestamp = 1;

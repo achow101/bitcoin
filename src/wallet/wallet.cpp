@@ -433,7 +433,8 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
 
     // Encrypt the wallet
     if (born_encrypted) {
-        if (!wallet->EncryptWallet(passphrase)) {
+        WalletUnlockReserver reserver(*wallet, WalletUnlockReserver::exclusive);
+        if (!wallet->EncryptWallet(reserver, passphrase)) {
             error = Untranslated("Error: Wallet created but failed to encrypt.");
             status = DatabaseStatus::FAILED_ENCRYPT;
             return nullptr;
@@ -633,13 +634,14 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase)
     return false;
 }
 
-bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase)
+bool CWallet::ChangeWalletPassphrase(WalletUnlockReserver& reserver, const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase)
 {
     bool fWasLocked = IsLocked();
 
     {
-        LOCK2(m_relock_mutex, cs_wallet);
-        Lock();
+        reserver.ReserveExclusively();
+        LOCK(cs_wallet);
+        Lock(reserver);
 
         CKeyingMaterial plain_master_key;
         for (auto& [master_key_id, master_key] : mapMasterKeys)
@@ -656,7 +658,7 @@ bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase,
 
                 WalletBatch(GetDatabase()).WriteMasterKey(master_key_id, master_key);
                 if (fWasLocked)
-                    Lock();
+                    Lock(reserver);
                 return true;
             }
         }
@@ -823,7 +825,7 @@ void CWallet::AddToSpends(const CWalletTx& wtx)
         AddToSpends(txin.prevout, wtx.GetHash());
 }
 
-bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
+bool CWallet::EncryptWallet(WalletUnlockReserver& reserver, const SecureString& strWalletPassphrase)
 {
     // Only descriptor wallets can be encrypted
     Assert(IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
@@ -847,7 +849,8 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     WalletLogPrintf("Encrypting Wallet with an nDeriveIterations of %i\n", master_key.nDeriveIterations);
 
     {
-        LOCK2(m_relock_mutex, cs_wallet);
+        reserver.ReserveExclusively();
+        LOCK(cs_wallet);
         mapMasterKeys[++nMasterKeyMaxID] = master_key;
         WalletBatch* encrypted_batch = new WalletBatch(GetDatabase());
         if (!encrypted_batch->TxnBegin()) {
@@ -880,14 +883,14 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
         delete encrypted_batch;
         encrypted_batch = nullptr;
 
-        Lock();
+        Lock(reserver);
         if (!Unlock(strWalletPassphrase)) {
             return false;
         }
 
         SetupWalletGeneration();
 
-        Lock();
+        Lock(reserver);
 
         // Need to completely rewrite the wallet file; if we don't, the database might keep
         // bits of the unencrypted private key in slack space in the database file.
@@ -3387,13 +3390,14 @@ bool CWallet::IsLocked() const
     return vMasterKey.empty();
 }
 
-bool CWallet::Lock(std::optional<int64_t> relock_time)
+bool CWallet::Lock(WalletUnlockReserver& reserver, std::optional<int64_t> relock_time)
 {
     if (!HasEncryptionKeys())
         return false;
 
     {
-        LOCK2(m_relock_mutex, cs_wallet);
+        reserver.ReserveExclusively();
+        LOCK(cs_wallet);
         if (relock_time.has_value() && m_relock_time != relock_time.value()) {
             return false;
         }

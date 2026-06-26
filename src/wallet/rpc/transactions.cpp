@@ -872,7 +872,7 @@ RPCMethod rescanblockchain()
     std::optional<int> stop_height;
     uint256 start_block;
 
-    LOCK(pwallet->m_relock_mutex);
+    WalletUnlockReserver unlock_reserver(*pwallet);
     {
         LOCK(pwallet->cs_wallet);
         EnsureWalletIsUnlocked(*pwallet);

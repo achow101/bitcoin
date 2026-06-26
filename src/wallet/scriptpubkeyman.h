@@ -27,6 +27,7 @@
 
 #include <functional>
 #include <optional>
+#include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -35,6 +36,7 @@ enum class OutputType;
 namespace wallet {
 struct MigrationData;
 class ScriptPubKeyMan;
+class WalletUnlockReserver;
 
 // Wallet storage things that ScriptPubKeyMans need in order to be able to store things to the wallet database.
 // It provides access to things that are part of the entire wallet and not specific to a ScriptPubKeyMan such as
@@ -44,6 +46,9 @@ class ScriptPubKeyMan;
 class WalletStorage
 {
 public:
+    // Used to prevent deleting the passphrase from memory when it is still in use.
+    mutable std::shared_mutex m_relock_mutex;
+
     virtual ~WalletStorage() = default;
     virtual std::string LogName() const = 0;
     virtual WalletDatabase& GetDatabase() const = 0;
@@ -424,6 +429,54 @@ struct MigrationData
     std::shared_ptr<CWallet> solvable_wallet{nullptr};
 };
 
+/** RAII object to reserve a wallet unlock */
+class WalletUnlockReserver
+{
+private:
+    const WalletStorage& m_storage;
+    std::shared_lock<std::shared_mutex> m_shared_lock;
+    std::unique_lock<std::shared_mutex> m_unique_lock;
+    bool m_reserved;
+public:
+    struct exclusive_lock_t {};
+    static constexpr exclusive_lock_t exclusive {};
+
+    explicit WalletUnlockReserver(const WalletStorage& w) : m_storage(w), m_shared_lock(m_storage.m_relock_mutex), m_unique_lock(), m_reserved(true) {}
+    explicit WalletUnlockReserver(const WalletStorage& w, std::defer_lock_t d) : m_storage(w), m_shared_lock(m_storage.m_relock_mutex, d), m_unique_lock(), m_reserved(false) {}
+    explicit WalletUnlockReserver(const WalletStorage& w, exclusive_lock_t) : m_storage(w), m_shared_lock(), m_unique_lock(m_storage.m_relock_mutex), m_reserved(true) {}
+    explicit WalletUnlockReserver(const WalletStorage& w, exclusive_lock_t, std::defer_lock_t d) : m_storage(w), m_shared_lock(), m_unique_lock(m_storage.m_relock_mutex, d), m_reserved(false) {}
+
+    void ReserveShared()
+    {
+        Assert(m_shared_lock.mutex());
+        if (m_reserved) return;
+        m_shared_lock.lock();
+        m_reserved = true;
+    }
+
+    void AssertReservedShared()
+    {
+        Assert(m_shared_lock.mutex() && m_reserved);
+    }
+
+    void ReserveExclusively()
+    {
+        Assert(m_unique_lock.mutex());
+        if (m_reserved) return;
+        m_unique_lock.lock();
+        m_reserved = true;
+    }
+
+    void AssertReservedExclusively()
+    {
+        Assert(m_shared_lock.mutex() && m_reserved);
+    }
+
+    void AssertReserved()
+    {
+        Assert(m_reserved);
+    }
+};
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_SCRIPTPUBKEYMAN_H
