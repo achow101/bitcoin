@@ -679,15 +679,15 @@ RPCMethod gethdkeys()
             const std::shared_ptr<const CWallet> wallet = GetWalletForJSONRPCRequest(request);
             if (!wallet) return UniValue::VNULL;
 
-            LOCK(wallet->cs_wallet);
-
             UniValue options{request.params[0].isNull() ? UniValue::VOBJ : request.params[0]};
             const bool active_only{options.exists("active_only") ? options["active_only"].get_bool() : false};
             const bool priv{options.exists("private") ? options["private"].get_bool() : false};
+            std::unique_ptr<WalletUnlockReserver> reserver;
             if (priv) {
-                EnsureWalletIsUnlocked(*wallet);
+                reserver = EnsureWalletIsUnlocked(*wallet);
             }
 
+            LOCK(wallet->cs_wallet);
 
             std::set<ScriptPubKeyMan*> spkms;
             if (active_only) {
@@ -794,8 +794,8 @@ static RPCMethod createwalletdescriptor()
                 internals.push_back(internal_only.get_bool());
             }
 
+            std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(*pwallet);
             LOCK(pwallet->cs_wallet);
-            EnsureWalletIsUnlocked(*pwallet);
 
             CExtPubKey xpub;
             if (hdkey.isNull()) {
@@ -871,7 +871,7 @@ RPCMethod addhdkey()
                 throw JSONRPCError(RPC_WALLET_ERROR, "addhdkey is not available for wallets without private keys");
             }
 
-            EnsureWalletIsUnlocked(*wallet);
+            std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(*wallet);
 
             CExtKey hdkey;
             if (request.params[0].isNull()) {

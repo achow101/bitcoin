@@ -82,11 +82,13 @@ std::shared_ptr<CWallet> GetWalletForJSONRPCRequest(const JSONRPCRequest& reques
         "Multiple wallets are loaded. Please select which wallet to use by requesting the RPC through the /wallet/<walletname> URI path.");
 }
 
-void EnsureWalletIsUnlocked(const CWallet& wallet)
+std::unique_ptr<WalletUnlockReserver> EnsureWalletIsUnlocked(const CWallet& wallet)
 {
+    std::unique_ptr<WalletUnlockReserver> reserver = std::make_unique<WalletUnlockReserver>(wallet);
     if (wallet.IsLocked()) {
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
     }
+    return reserver;
 }
 
 WalletContext& EnsureWalletContext(const std::any& context)

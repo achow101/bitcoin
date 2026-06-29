@@ -244,7 +244,7 @@ RPCMethod keypoolrefill()
         kpSize = (unsigned int)request.params[0].getInt<int>();
     }
 
-    EnsureWalletIsUnlocked(*pwallet);
+    std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(*pwallet);
     pwallet->TopUpKeyPool(kpSize);
 
     if (pwallet->GetKeyPoolSize() < kpSize) {

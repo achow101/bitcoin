@@ -46,7 +46,7 @@ std::optional<std::string> GetWalletNameFromJSONRPCRequest(const JSONRPCRequest&
  */
 std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<std::string_view> wallet_name);
 
-void EnsureWalletIsUnlocked(const CWallet&);
+[[nodiscard]] std::unique_ptr<WalletUnlockReserver> EnsureWalletIsUnlocked(const CWallet&);
 WalletContext& EnsureWalletContext(const std::any& context);
 
 bool GetAvoidReuseFlag(const CWallet& wallet, const UniValue& param);

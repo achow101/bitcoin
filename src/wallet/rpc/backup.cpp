@@ -391,7 +391,7 @@ RPCMethod importdescriptors()
 
     // Ensure that the wallet is not locked for the remainder of this RPC, as
     // the passphrase is used to top up the keypool.
-    WalletUnlockReserver unlock_reserver(*pwallet);
+    std::unique_ptr<WalletUnlockReserver> unlock_reserver = EnsureWalletIsUnlocked(*pwallet);
 
     const UniValue& requests = main_request.params[0];
     const int64_t minimum_timestamp = 1;
@@ -401,7 +401,6 @@ RPCMethod importdescriptors()
     UniValue response(UniValue::VARR);
     {
         LOCK(pwallet->cs_wallet);
-        EnsureWalletIsUnlocked(*pwallet);
 
         CHECK_NONFATAL(pwallet->chain().findBlock(pwallet->GetLastBlockHash(), FoundBlock().time(lowest_timestamp).mtpTime(now)));
 
@@ -521,8 +520,10 @@ RPCMethod listdescriptors()
     if (wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && priv) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Can't get private descriptor string for watch-only wallets");
     }
+
+    std::unique_ptr<WalletUnlockReserver> reserver;
     if (priv) {
-        EnsureWalletIsUnlocked(*wallet);
+        reserver = EnsureWalletIsUnlocked(*wallet);
     }
 
     LOCK(wallet->cs_wallet);

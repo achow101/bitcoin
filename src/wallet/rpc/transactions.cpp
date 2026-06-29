@@ -872,10 +872,9 @@ RPCMethod rescanblockchain()
     std::optional<int> stop_height;
     uint256 start_block;
 
-    WalletUnlockReserver unlock_reserver(*pwallet);
+    std::unique_ptr<WalletUnlockReserver> unlock_reserver = EnsureWalletIsUnlocked(*pwallet);
     {
         LOCK(pwallet->cs_wallet);
-        EnsureWalletIsUnlocked(*pwallet);
         int tip_height = pwallet->GetLastBlockHeight();
 
         if (!request.params[0].isNull()) {

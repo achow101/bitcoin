@@ -170,7 +170,7 @@ static void PreventOutdatedOptions(const UniValue& options)
 
 UniValue SendMoney(CWallet& wallet, const CCoinControl &coin_control, std::vector<CRecipient> &recipients, mapValue_t map_value, bool verbose)
 {
-    EnsureWalletIsUnlocked(wallet);
+    std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(wallet);
 
     // This function is only used by sendtoaddress and sendmany.
     // This should always try to sign, if we don't have (all) private keys, don't
@@ -184,6 +184,8 @@ UniValue SendMoney(CWallet& wallet, const CCoinControl &coin_control, std::vecto
 
     // Shuffle recipient list
     std::shuffle(recipients.begin(), recipients.end(), FastRandomContext());
+
+    LOCK(wallet.cs_wallet);
 
     // Send
     auto res = CreateTransaction(wallet, recipients, /*change_pos=*/std::nullopt, coin_control, true);
@@ -298,8 +300,6 @@ RPCMethod sendtoaddress()
     // the user could have gotten from another RPC command prior to now
     pwallet->BlockUntilSyncedToCurrentChain();
 
-    LOCK(pwallet->cs_wallet);
-
     // Wallet comments
     mapValue_t mapValue;
     if (!request.params[2].isNull() && !request.params[2].get_str().empty())
@@ -317,8 +317,6 @@ RPCMethod sendtoaddress()
     coin_control.m_avoid_partial_spends |= coin_control.m_avoid_address_reuse;
 
     SetFeeEstimateMode(*pwallet, coin_control, /*conf_target=*/request.params[6], /*estimate_mode=*/request.params[7], /*fee_rate=*/request.params[9], /*override_min_fee=*/false);
-
-    EnsureWalletIsUnlocked(*pwallet);
 
     UniValue address_amounts(UniValue::VOBJ);
     const std::string address = request.params[0].get_str();
@@ -401,8 +399,6 @@ RPCMethod sendmany()
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
     pwallet->BlockUntilSyncedToCurrentChain();
-
-    LOCK(pwallet->cs_wallet);
 
     if (!request.params[0].isNull() && !request.params[0].get_str().empty()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Dummy value must be set to \"\"");
@@ -913,7 +909,7 @@ RPCMethod signrawtransactionwithwallet()
 
     // Sign the transaction
     LOCK(pwallet->cs_wallet);
-    EnsureWalletIsUnlocked(*pwallet);
+    std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(*pwallet);
 
     // Fetch previous transactions (inputs):
     std::map<COutPoint, Coin> coins;
@@ -1106,10 +1102,8 @@ static RPCMethod bumpfee_helper(std::string method_name)
     // the user could have gotten from another RPC command prior to now
     pwallet->BlockUntilSyncedToCurrentChain();
 
+    std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(*pwallet);
     LOCK(pwallet->cs_wallet);
-
-    EnsureWalletIsUnlocked(*pwallet);
-
 
     std::vector<bilingual_str> errors;
     CAmount old_fee;
@@ -1648,7 +1642,8 @@ RPCMethod walletprocesspsbt()
     bool finalize = request.params[4].isNull() ? true : request.params[4].get_bool();
     bool complete = true;
 
-    if (sign) EnsureWalletIsUnlocked(*pwallet);
+    std::unique_ptr<WalletUnlockReserver> reserver;
+    if (sign) reserver = EnsureWalletIsUnlocked(*pwallet);
 
     const auto err{wallet.FillPSBT(psbtx, {.sign = sign, .sighash_type = nHashType, .finalize = finalize, .bip32_derivs = bip32derivs}, complete)};
     if (err) {

@@ -39,9 +39,7 @@ RPCMethod signmessage()
             const std::shared_ptr<const CWallet> pwallet = GetWalletForJSONRPCRequest(request);
             if (!pwallet) return UniValue::VNULL;
 
-            LOCK(pwallet->cs_wallet);
-
-            EnsureWalletIsUnlocked(*pwallet);
+            std::unique_ptr<WalletUnlockReserver> reserver = EnsureWalletIsUnlocked(*pwallet);
 
             std::string strAddress = request.params[0].get_str();
             std::string strMessage = request.params[1].get_str();
