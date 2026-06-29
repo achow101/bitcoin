@@ -68,9 +68,10 @@ static void WalletEncrypt(benchmark::Bench& bench, unsigned int key_count)
             wallet = TestCreateWallet(std::move(database), context, create_flags);
 
             {
+                WalletUnlockReserver reserver(*wallet);
                 LOCK(wallet->cs_wallet);
                 for (auto& [desc, keys] : descs) {
-                    Assert(wallet->AddWalletDescriptor(desc, keys, /*label=*/"", /*internal=*/false));
+                    Assert(wallet->AddWalletDescriptor(reserver, desc, keys, /*label=*/"", /*internal=*/false));
                 }
             }
         })

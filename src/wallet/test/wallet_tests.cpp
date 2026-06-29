@@ -61,6 +61,7 @@ static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t in
 
 static void AddKey(CWallet& wallet, const CKey& key)
 {
+    WalletUnlockReserver reserver(wallet);
     LOCK(wallet.cs_wallet);
     FlatSigningProvider provider;
     std::string error;
@@ -68,13 +69,14 @@ static void AddKey(CWallet& wallet, const CKey& key)
     assert(descs.size() == 1);
     auto& desc = descs.at(0);
     WalletDescriptor w_desc(std::move(desc), 0, 0, 1, 1);
-    Assert(wallet.AddWalletDescriptor(w_desc, provider, "", false));
+    Assert(wallet.AddWalletDescriptor(reserver, w_desc, provider, "", false));
 }
 
 BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
     {
+        WalletUnlockReserver reserver(wallet);
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
         auto key{GenerateRandomKey()};
@@ -84,9 +86,9 @@ BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
         auto descs{Parse(desc_str, provider, error, /* require_checksum=*/ false)};
         auto& desc{descs.at(0)};
         WalletDescriptor w_desc{std::move(desc), 0, 0, 0, 0};
-        BOOST_CHECK(wallet.AddWalletDescriptor(w_desc, provider, "", false));
+        BOOST_CHECK(wallet.AddWalletDescriptor(reserver, w_desc, provider, "", false));
         // Wallet should update the non-range descriptor successfully
-        BOOST_CHECK(wallet.AddWalletDescriptor(w_desc, provider, "", false));
+        BOOST_CHECK(wallet.AddWalletDescriptor(reserver, w_desc, provider, "", false));
     }
 }
 
@@ -398,7 +400,8 @@ public:
         CTransactionRef tx;
         CCoinControl dummy;
         {
-            auto res = CreateTransaction(*wallet, {recipient}, /*change_pos=*/std::nullopt, dummy);
+            WalletUnlockReserver reserver(*wallet);
+            auto res = CreateTransaction(*wallet, reserver, {recipient}, /*change_pos=*/std::nullopt, dummy);
             BOOST_CHECK(res);
             tx = res->tx;
         }

@@ -55,7 +55,7 @@ RPCMethod signmessage()
             }
 
             std::string signature;
-            SigningResult err = pwallet->SignMessage(strMessage, *pkhash, signature);
+            SigningResult err = pwallet->SignMessage(*reserver, strMessage, *pkhash, signature);
             if (err == SigningResult::SIGNING_FAILED) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, SigningResultString(err));
             } else if (err != SigningResult::OK) {

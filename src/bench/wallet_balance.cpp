@@ -37,9 +37,10 @@ static void WalletBalance(benchmark::Bench& bench, const bool set_dirty, const b
     FakeNodeClock clock{test_setup->m_node.chainman->GetParams().GenesisBlock().Time()};
     CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
     {
+        WalletUnlockReserver reserver(wallet);
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
-        wallet.SetupDescriptorScriptPubKeyMans();
+        wallet.SetupDescriptorScriptPubKeyMans(reserver);
     }
     auto handler = test_setup->m_node.chain->handleNotifications({&wallet, [](CWallet*) {}});
 

@@ -313,7 +313,8 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     // We cannot source new unconfirmed inputs(bip125 rule 2)
     new_coin_control.m_min_depth = 1;
 
-    auto res = CreateTransaction(wallet, recipients, /*change_pos=*/std::nullopt, new_coin_control, false);
+    WalletUnlockReserver nosign_reserver(wallet, std::defer_lock);
+    auto res = CreateTransaction(wallet, nosign_reserver, recipients, /*change_pos=*/std::nullopt, new_coin_control, false);
     if (!res) {
         errors.emplace_back(Untranslated("Unable to create transaction.") + Untranslated(" ") + util::ErrorString(res));
         return Result::WALLET_ERROR;
@@ -329,7 +330,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     return Result::OK;
 }
 
-bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx) {
+bool SignTransaction(CWallet& wallet, WalletUnlockReserver& reserver, CMutableTransaction& mtx) {
     LOCK(wallet.cs_wallet);
 
     if (wallet.IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
@@ -339,13 +340,13 @@ bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx) {
         // First fill transaction with our data without signing,
         // so external signers are not asked to sign more than once.
         bool complete;
-        wallet.FillPSBT(psbtx, {.sign = false, .bip32_derivs = true}, complete);
-        auto err{wallet.FillPSBT(psbtx, {.sign = true, .bip32_derivs = false}, complete)};
+        wallet.FillPSBT(reserver, psbtx, {.sign = false, .bip32_derivs = true}, complete);
+        auto err{wallet.FillPSBT(reserver, psbtx, {.sign = true, .bip32_derivs = false}, complete)};
         if (err) return false;
         complete = FinalizeAndExtractPSBT(psbtx, mtx);
         return complete;
     } else {
-        return wallet.SignTransaction(mtx);
+        return wallet.SignTransaction(reserver, mtx);
     }
 }
 

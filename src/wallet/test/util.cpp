@@ -28,7 +28,8 @@ std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cc
     {
         LOCK(wallet->cs_wallet);
         wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
-        wallet->SetupDescriptorScriptPubKeyMans();
+        WalletUnlockReserver reserver(*wallet);
+        wallet->SetupDescriptorScriptPubKeyMans(reserver);
 
         FlatSigningProvider provider;
         std::string error;
@@ -36,7 +37,7 @@ std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cc
         assert(descs.size() == 1);
         auto& desc = descs.at(0);
         WalletDescriptor w_desc(std::move(desc), 0, 0, 1, 1);
-        Assert(wallet->AddWalletDescriptor(w_desc, provider, "", false));
+        Assert(wallet->AddWalletDescriptor(reserver, w_desc, provider, "", false));
     }
     WalletRescanReserver reserver(*wallet);
     reserver.reserve();
@@ -139,8 +140,9 @@ wallet::DescriptorScriptPubKeyMan* CreateDescriptor(CWallet& keystore, const std
 
     WalletDescriptor w_desc(std::move(desc), timestamp, range_start, range_end, next_index);
 
+    WalletUnlockReserver reserver(keystore);
     LOCK(keystore.cs_wallet);
-    auto spkm = Assert(keystore.AddWalletDescriptor(w_desc, keys,/*label=*/"", /*internal=*/false));
+    auto spkm = Assert(keystore.AddWalletDescriptor(reserver, w_desc, keys,/*label=*/"", /*internal=*/false));
     return &spkm.value().get();
 };
 } // namespace wallet

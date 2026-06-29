@@ -93,7 +93,7 @@ std::set<int> InterpretSubtractFeeFromOutputInstructions(const UniValue& sffo_in
     return sffo_set;
 }
 
-static UniValue FinishTransaction(const std::shared_ptr<CWallet> pwallet, const UniValue& options, CMutableTransaction& rawTx)
+static UniValue FinishTransaction(const std::shared_ptr<CWallet> pwallet, WalletUnlockReserver& reserver, const UniValue& options, CMutableTransaction& rawTx)
 {
     bool can_anti_fee_snipe = !options.exists("locktime");
 
@@ -114,8 +114,8 @@ static UniValue FinishTransaction(const std::shared_ptr<CWallet> pwallet, const 
     // First fill transaction with our data without signing,
     // so external signers are not asked to sign more than once.
     bool complete;
-    pwallet->FillPSBT(psbtx, {.sign = false, .bip32_derivs = true}, complete);
-    const auto err{pwallet->FillPSBT(psbtx, {.sign = true, .bip32_derivs = false}, complete)};
+    pwallet->FillPSBT(reserver, psbtx, {.sign = false, .bip32_derivs = true}, complete);
+    const auto err{pwallet->FillPSBT(reserver, psbtx, {.sign = true, .bip32_derivs = false}, complete)};
     if (err) {
         throw JSONRPCPSBTError(*err);
     }
@@ -188,7 +188,7 @@ UniValue SendMoney(CWallet& wallet, const CCoinControl &coin_control, std::vecto
     LOCK(wallet.cs_wallet);
 
     // Send
-    auto res = CreateTransaction(wallet, recipients, /*change_pos=*/std::nullopt, coin_control, true);
+    auto res = CreateTransaction(wallet, *reserver, recipients, /*change_pos=*/std::nullopt, coin_control, true);
     if (!res) {
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, util::ErrorString(res).original);
     }
@@ -929,7 +929,7 @@ RPCMethod signrawtransactionwithwallet()
     // Script verification errors
     std::map<int, bilingual_str> input_errors;
 
-    bool complete = pwallet->SignTransaction(mtx, coins, *nHashType, input_errors);
+    bool complete = pwallet->SignTransaction(*reserver, mtx, coins, *nHashType, input_errors);
     UniValue result(UniValue::VOBJ);
     SignTransactionResultToJSON(mtx, complete, coins, input_errors, result);
     return result;
@@ -1133,7 +1133,7 @@ static RPCMethod bumpfee_helper(std::string method_name)
     // For bumpfee, return the new transaction id.
     // For psbtbumpfee, return the base64-encoded unsigned PSBT of the new transaction.
     if (!want_psbt) {
-        if (!feebumper::SignTransaction(*pwallet, mtx)) {
+        if (!feebumper::SignTransaction(*pwallet, *reserver, mtx)) {
             if (pwallet->IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Transaction incomplete. Try psbtbumpfee instead.");
             }
@@ -1149,7 +1149,7 @@ static RPCMethod bumpfee_helper(std::string method_name)
     } else {
         PartiallySignedTransaction psbtx(mtx, psbt_version);
         bool complete = false;
-        const auto err{pwallet->FillPSBT(psbtx, {.sign = false, .bip32_derivs = true}, complete)};
+        const auto err{pwallet->FillPSBT(*reserver, psbtx, {.sign = false, .bip32_derivs = true}, complete)};
         CHECK_NONFATAL(!err);
         CHECK_NONFATAL(!complete);
         DataStream ssTx{};
@@ -1262,6 +1262,11 @@ RPCMethod send()
             std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
             if (!pwallet) return UniValue::VNULL;
 
+            // Acquire the relock lock, but don't use EnsureWalletIsUnlocked as this RPC does not
+            // require the wallet to be unlocked, it only needs to prevent the wallet from locking
+            // if it was already unlocked.
+            WalletUnlockReserver reserver(*pwallet);
+
             UniValue options{request.params[4].isNull() ? UniValue::VOBJ : request.params[4]};
             InterpretFeeEstimationInstructions(/*conf_target=*/request.params[1], /*estimate_mode=*/request.params[2], /*fee_rate=*/request.params[3], options);
             PreventOutdatedOptions(options);
@@ -1291,7 +1296,7 @@ RPCMethod send()
             auto txr = FundTransaction(*pwallet, rawTx, recipients, options, coin_control, /*override_min_fee=*/false);
 
             CMutableTransaction tx = CMutableTransaction(*txr.tx);
-            return FinishTransaction(pwallet, options, tx);
+            return FinishTransaction(pwallet, reserver, options, tx);
         }
     };
 }
@@ -1377,6 +1382,11 @@ RPCMethod sendall()
             // Make sure the results are valid at least up to the most recent block
             // the user could have gotten from another RPC command prior to now
             pwallet->BlockUntilSyncedToCurrentChain();
+
+            // Acquire the relock lock, but don't use EnsureWalletIsUnlocked as this RPC does not
+            // require the wallet to be unlocked, it only needs to prevent the wallet from locking
+            // if it was already unlocked.
+            WalletUnlockReserver reserver(*pwallet);
 
             UniValue options{request.params[4].isNull() ? UniValue::VOBJ : request.params[4]};
             InterpretFeeEstimationInstructions(/*conf_target=*/request.params[1], /*estimate_mode=*/request.params[2], /*fee_rate=*/request.params[3], options);
@@ -1579,7 +1589,7 @@ RPCMethod sendall()
                 }
             }
 
-            return FinishTransaction(pwallet, options, rawTx);
+            return FinishTransaction(pwallet, reserver, options, rawTx);
         }
     };
 }
@@ -1642,10 +1652,10 @@ RPCMethod walletprocesspsbt()
     bool finalize = request.params[4].isNull() ? true : request.params[4].get_bool();
     bool complete = true;
 
-    std::unique_ptr<WalletUnlockReserver> reserver;
+    std::unique_ptr<WalletUnlockReserver> reserver = std::make_unique<WalletUnlockReserver>(*pwallet, std::defer_lock);
     if (sign) reserver = EnsureWalletIsUnlocked(*pwallet);
 
-    const auto err{wallet.FillPSBT(psbtx, {.sign = sign, .sighash_type = nHashType, .finalize = finalize, .bip32_derivs = bip32derivs}, complete)};
+    const auto err{wallet.FillPSBT(*reserver, psbtx, {.sign = sign, .sighash_type = nHashType, .finalize = finalize, .bip32_derivs = bip32derivs}, complete)};
     if (err) {
         throw JSONRPCPSBTError(*err);
     }
@@ -1796,7 +1806,8 @@ RPCMethod walletcreatefundedpsbt()
     // Fill transaction with out data but don't sign
     bool bip32derivs = request.params[4].isNull() ? true : request.params[4].get_bool();
     bool complete = true;
-    const auto err{wallet.FillPSBT(psbtx, {.sign = false, .bip32_derivs = bip32derivs}, complete)};
+    WalletUnlockReserver nosign_reserver(*pwallet, std::defer_lock);
+    const auto err{wallet.FillPSBT(nosign_reserver, psbtx, {.sign = false, .bip32_derivs = bip32derivs}, complete)};
     if (err) {
         throw JSONRPCPSBTError(*err);
     }

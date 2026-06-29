@@ -85,7 +85,7 @@ std::shared_ptr<CWallet> GetWalletForJSONRPCRequest(const JSONRPCRequest& reques
 std::unique_ptr<WalletUnlockReserver> EnsureWalletIsUnlocked(const CWallet& wallet)
 {
     std::unique_ptr<WalletUnlockReserver> reserver = std::make_unique<WalletUnlockReserver>(wallet);
-    if (wallet.IsLocked()) {
+    if (wallet.IsLocked(*reserver)) {
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
     }
     return reserver;

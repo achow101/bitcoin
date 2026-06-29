@@ -548,15 +548,15 @@ const CWalletTx* CWallet::GetWalletTx(const Txid& hash) const
     return &(it->second);
 }
 
-void CWallet::UpgradeDescriptorCache()
+void CWallet::UpgradeDescriptorCache(WalletUnlockReserver& reserver)
 {
-    if (!IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) || IsLocked() || IsWalletFlagSet(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED)) {
+    if (!IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) || IsLocked(reserver) || IsWalletFlagSet(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED)) {
         return;
     }
 
     for (ScriptPubKeyMan* spkm : GetAllScriptPubKeyMans()) {
         DescriptorScriptPubKeyMan* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(spkm);
-        desc_spkm->UpgradeDescriptorCache();
+        desc_spkm->UpgradeDescriptorCache(reserver);
     }
     SetWalletFlag(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED);
 }
@@ -613,8 +613,9 @@ static bool DecryptMasterKey(const SecureString& wallet_passphrase, const CMaste
     return true;
 }
 
-bool CWallet::Unlock(const SecureString& strWalletPassphrase)
+bool CWallet::Unlock(WalletUnlockReserver& reserver, const SecureString& strWalletPassphrase)
 {
+    reserver.AssertReserved();
     CKeyingMaterial plain_master_key;
 
     {
@@ -624,9 +625,9 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase)
             if (!DecryptMasterKey(strWalletPassphrase, master_key, plain_master_key)) {
                 continue; // try another master key
             }
-            if (Unlock(plain_master_key)) {
+            if (Unlock(reserver, plain_master_key)) {
                 // Now that we've unlocked, upgrade the descriptor cache
-                UpgradeDescriptorCache();
+                UpgradeDescriptorCache(reserver);
                 return true;
             }
         }
@@ -636,10 +637,10 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase)
 
 bool CWallet::ChangeWalletPassphrase(WalletUnlockReserver& reserver, const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase)
 {
-    bool fWasLocked = IsLocked();
+    reserver.ReserveExclusively();
+    bool fWasLocked = IsLocked(reserver);
 
     {
-        reserver.ReserveExclusively();
         LOCK(cs_wallet);
         Lock(reserver);
 
@@ -649,7 +650,7 @@ bool CWallet::ChangeWalletPassphrase(WalletUnlockReserver& reserver, const Secur
             if (!DecryptMasterKey(strOldWalletPassphrase, master_key, plain_master_key)) {
                 return false;
             }
-            if (Unlock(plain_master_key))
+            if (Unlock(reserver, plain_master_key))
             {
                 if (!EncryptMasterKey(strNewWalletPassphrase, plain_master_key, master_key)) {
                     return false;
@@ -884,11 +885,11 @@ bool CWallet::EncryptWallet(WalletUnlockReserver& reserver, const SecureString& 
         encrypted_batch = nullptr;
 
         Lock(reserver);
-        if (!Unlock(strWalletPassphrase)) {
+        if (!Unlock(reserver, strWalletPassphrase)) {
             return false;
         }
 
-        SetupWalletGeneration();
+        SetupWalletGeneration(reserver);
 
         Lock(reserver);
 
@@ -2171,7 +2172,7 @@ void MaybeResendWalletTxs(WalletContext& context)
 }
 
 
-bool CWallet::SignTransaction(CMutableTransaction& tx) const
+bool CWallet::SignTransaction(WalletUnlockReserver& reserver, CMutableTransaction& tx) const
 {
     AssertLockHeld(cs_wallet);
 
@@ -2187,16 +2188,16 @@ bool CWallet::SignTransaction(CMutableTransaction& tx) const
         coins[input.prevout] = Coin(wtx.tx->vout[input.prevout.n], prev_height, wtx.IsCoinBase());
     }
     std::map<int, bilingual_str> input_errors;
-    return SignTransaction(tx, coins, SIGHASH_DEFAULT, input_errors);
+    return SignTransaction(reserver, tx, coins, SIGHASH_DEFAULT, input_errors);
 }
 
-bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const
+bool CWallet::SignTransaction(WalletUnlockReserver& reserver, CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const
 {
     // Try to sign with all ScriptPubKeyMans
     for (ScriptPubKeyMan* spk_man : GetAllScriptPubKeyMans()) {
         // spk_man->SignTransaction will return true if the transaction is complete,
         // so we can exit early and return true if that happens
-        if (spk_man->SignTransaction(tx, coins, sighash, input_errors)) {
+        if (spk_man->SignTransaction(reserver, tx, coins, sighash, input_errors)) {
             return true;
         }
     }
@@ -2205,7 +2206,7 @@ bool CWallet::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint,
     return false;
 }
 
-std::optional<PSBTError> CWallet::FillPSBT(PartiallySignedTransaction& psbtx, const common::PSBTFillOptions& options, bool& complete, size_t* n_signed) const
+std::optional<PSBTError> CWallet::FillPSBT(WalletUnlockReserver& reserver, PartiallySignedTransaction& psbtx, const common::PSBTFillOptions& options, bool& complete, size_t* n_signed) const
 {
     if (n_signed) {
         *n_signed = 0;
@@ -2239,7 +2240,7 @@ std::optional<PSBTError> CWallet::FillPSBT(PartiallySignedTransaction& psbtx, co
     // Fill in information from ScriptPubKeyMans
     for (ScriptPubKeyMan* spk_man : GetAllScriptPubKeyMans()) {
         int n_signed_this_spkm = 0;
-        const auto error{spk_man->FillPSBT(psbtx, txdata, options, &n_signed_this_spkm)};
+        const auto error{spk_man->FillPSBT(reserver, psbtx, txdata, options, &n_signed_this_spkm)};
         if (error) {
             return error;
         }
@@ -2260,14 +2261,14 @@ std::optional<PSBTError> CWallet::FillPSBT(PartiallySignedTransaction& psbtx, co
     return {};
 }
 
-SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
+SigningResult CWallet::SignMessage(WalletUnlockReserver& reserver, const std::string& message, const PKHash& pkhash, std::string& str_sig) const
 {
     SignatureData sigdata;
     CScript script_pub_key = GetScriptForDestination(pkhash);
     for (const auto& spk_man_pair : m_spk_managers) {
         if (spk_man_pair.second->CanProvide(script_pub_key, sigdata)) {
             LOCK(cs_wallet);  // DescriptorScriptPubKeyMan calls IsLocked which can lock cs_wallet in a deadlocking order
-            return spk_man_pair.second->SignMessage(message, pkhash, str_sig);
+            return spk_man_pair.second->SignMessage(reserver, message, pkhash, str_sig);
         }
     }
     return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
@@ -3133,7 +3134,8 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
 
         // Born encrypted wallets will have their keys generated later
         if (!born_encrypted) {
-            walletInstance->SetupWalletGeneration();
+            WalletUnlockReserver reserver(*walletInstance);
+            walletInstance->SetupWalletGeneration(reserver);
         }
 
         if (chain) {
@@ -3381,11 +3383,12 @@ bool CWallet::IsTxImmatureCoinBase(const CWalletTx& wtx) const
     return GetTxBlocksToMaturity(wtx) > 0;
 }
 
-bool CWallet::IsLocked() const
+bool CWallet::IsLocked(WalletUnlockReserver& reserver) const
 {
     if (!HasEncryptionKeys()) {
         return false;
     }
+    reserver.AssertReserved();
     LOCK(cs_wallet);
     return vMasterKey.empty();
 }
@@ -3412,8 +3415,9 @@ bool CWallet::Lock(WalletUnlockReserver& reserver, std::optional<int64_t> relock
     return true;
 }
 
-bool CWallet::Unlock(const CKeyingMaterial& vMasterKeyIn)
+bool CWallet::Unlock(WalletUnlockReserver& reserver, const CKeyingMaterial& vMasterKeyIn)
 {
+    reserver.AssertReserved();
     {
         LOCK(cs_wallet);
         for (const auto& spk_man_pair : m_spk_managers) {
@@ -3610,13 +3614,13 @@ void CWallet::LoadDescriptorScriptPubKeyMan(uint256 id, WalletDescriptor& desc, 
     AddScriptPubKeyMan(id, std::move(spk_manager));
 }
 
-DescriptorScriptPubKeyMan& CWallet::SetupDescriptorScriptPubKeyMan(WalletBatch& batch, const CExtKey& master_key, const OutputType& output_type, bool internal)
+DescriptorScriptPubKeyMan& CWallet::SetupDescriptorScriptPubKeyMan(WalletBatch& batch, WalletUnlockReserver& reserver, const CExtKey& master_key, const OutputType& output_type, bool internal)
 {
     AssertLockHeld(cs_wallet);
-    if (IsLocked()) {
+    if (IsLocked(reserver)) {
         throw std::runtime_error(std::string(__func__) + ": Wallet is locked, cannot setup new descriptors");
     }
-    auto spk_manager = DescriptorScriptPubKeyMan::GenerateNewSingleSig(*this, batch, m_keypool_size, master_key, output_type, internal);
+    auto spk_manager = DescriptorScriptPubKeyMan::GenerateNewSingleSig(*this, batch, reserver, m_keypool_size, master_key, output_type, internal);
     DescriptorScriptPubKeyMan* out = spk_manager.get();
     uint256 id = spk_manager->GetID();
     AddScriptPubKeyMan(id, std::move(spk_manager));
@@ -3624,17 +3628,17 @@ DescriptorScriptPubKeyMan& CWallet::SetupDescriptorScriptPubKeyMan(WalletBatch& 
     return *out;
 }
 
-void CWallet::SetupDescriptorScriptPubKeyMans(WalletBatch& batch, const CExtKey& master_key)
+void CWallet::SetupDescriptorScriptPubKeyMans(WalletBatch& batch, WalletUnlockReserver& reserver, const CExtKey& master_key)
 {
     AssertLockHeld(cs_wallet);
     for (bool internal : {false, true}) {
         for (OutputType t : OUTPUT_TYPES) {
-            SetupDescriptorScriptPubKeyMan(batch, master_key, t, internal);
+            SetupDescriptorScriptPubKeyMan(batch, reserver, master_key, t, internal);
         }
     }
 }
 
-void CWallet::SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch)
+void CWallet::SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch, WalletUnlockReserver& reserver)
 {
     AssertLockHeld(cs_wallet);
     assert(!IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER));
@@ -3647,16 +3651,16 @@ void CWallet::SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch)
     CExtKey master_key;
     master_key.SetSeed(seed_key);
 
-    SetupDescriptorScriptPubKeyMans(batch, master_key);
+    SetupDescriptorScriptPubKeyMans(batch, reserver, master_key);
 }
 
-void CWallet::SetupDescriptorScriptPubKeyMans()
+void CWallet::SetupDescriptorScriptPubKeyMans(WalletUnlockReserver& reserver)
 {
     AssertLockHeld(cs_wallet);
 
     if (!IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
         if (!RunWithinTxn(GetDatabase(), /*process_desc=*/"setup descriptors", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet){
-            SetupOwnDescriptorScriptPubKeyMans(batch);
+            SetupOwnDescriptorScriptPubKeyMans(batch, reserver);
             return true;
         })) throw std::runtime_error("Error: cannot process db transaction for descriptors setup");
     } else {
@@ -3688,7 +3692,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
                     continue;
                 }
                 OutputType t =  *desc->GetOutputType();
-                auto spk_manager = ExternalSignerScriptPubKeyMan::CreateNew(*this, batch, m_keypool_size, std::move(desc));
+                auto spk_manager = ExternalSignerScriptPubKeyMan::CreateNew(*this, batch, reserver, m_keypool_size, std::move(desc));
                 uint256 id = spk_manager->GetID();
                 AddScriptPubKeyMan(id, std::move(spk_manager));
                 AddActiveScriptPubKeyManWithDb(batch, id, t, internal);
@@ -3700,7 +3704,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
     }
 }
 
-void CWallet::SetupWalletGeneration()
+void CWallet::SetupWalletGeneration(WalletUnlockReserver& reserver)
 {
     AssertLockHeld(cs_wallet);
     // Skip setup for non-external-signer wallets that are either blank
@@ -3709,7 +3713,7 @@ void CWallet::SetupWalletGeneration()
         (IsWalletFlagSet(WALLET_FLAG_BLANK_WALLET) || IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS))) {
         return;
     }
-    SetupDescriptorScriptPubKeyMans();
+    SetupDescriptorScriptPubKeyMans(reserver);
 }
 
 void CWallet::AddActiveScriptPubKeyMan(uint256 id, OutputType type, bool internal)
@@ -3797,7 +3801,7 @@ std::optional<bool> CWallet::IsInternalScriptPubKeyMan(ScriptPubKeyMan* spk_man)
     return GetScriptPubKeyMan(*type, /* internal= */ true) == desc_spk_man;
 }
 
-util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> CWallet::AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal)
+util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> CWallet::AddWalletDescriptor(WalletUnlockReserver& reserver, WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal)
 {
     AssertLockHeld(cs_wallet);
 
@@ -3806,11 +3810,11 @@ util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> CWallet::AddWall
     auto spk_man = GetDescriptorScriptPubKeyMan(desc);
     if (spk_man) {
         WalletLogPrintf("Update existing descriptor: %s\n", desc.descriptor->ToString());
-        if (auto spkm_res = spk_man->UpdateWalletDescriptor(desc, signing_provider); !spkm_res) {
+        if (auto spkm_res = spk_man->UpdateWalletDescriptor(reserver, desc, signing_provider); !spkm_res) {
             return util::Error{util::ErrorString(spkm_res)};
         }
     } else {
-        auto new_spk_man = DescriptorScriptPubKeyMan::CreateFromImport(*this, desc, m_keypool_size, signing_provider);
+        auto new_spk_man = DescriptorScriptPubKeyMan::CreateFromImport(*this, reserver, desc, m_keypool_size, signing_provider);
         spk_man = new_spk_man.get();
 
         // Save the descriptor to memory
@@ -3919,7 +3923,7 @@ bool CWallet::MigrateToSQLite(bilingual_str& error)
     return true;
 }
 
-std::optional<MigrationData> CWallet::GetDescriptorsForLegacy(bilingual_str& error) const
+std::optional<MigrationData> CWallet::GetDescriptorsForLegacy(WalletUnlockReserver& reserver, bilingual_str& error) const
 {
     AssertLockHeld(cs_wallet);
 
@@ -3930,7 +3934,7 @@ std::optional<MigrationData> CWallet::GetDescriptorsForLegacy(bilingual_str& err
         return std::nullopt;
     }
 
-    std::optional<MigrationData> res = legacy_spkm->MigrateToDescriptor();
+    std::optional<MigrationData> res = legacy_spkm->MigrateToDescriptor(reserver);
     if (res == std::nullopt) {
         error = _("Error: Unable to produce descriptors for this legacy wallet. Make sure to provide the wallet's passphrase if it is encrypted.");
         return std::nullopt;
@@ -3938,7 +3942,7 @@ std::optional<MigrationData> CWallet::GetDescriptorsForLegacy(bilingual_str& err
     return res;
 }
 
-util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data)
+util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, WalletUnlockReserver& reserver, MigrationData& data)
 {
     AssertLockHeld(cs_wallet);
 
@@ -3987,10 +3991,10 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     if (has_spendable_material && !IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
         // Use the existing master key if we have it
         if (data.master_key.key.IsValid()) {
-            SetupDescriptorScriptPubKeyMans(local_wallet_batch, data.master_key);
+            SetupDescriptorScriptPubKeyMans(local_wallet_batch, reserver, data.master_key);
         } else {
             // Setup with a new seed if we don't.
-            SetupOwnDescriptorScriptPubKeyMans(local_wallet_batch);
+            SetupOwnDescriptorScriptPubKeyMans(local_wallet_batch, reserver);
         }
     }
 
@@ -4164,12 +4168,12 @@ static std::string MigrationPrefixName(CWallet& wallet)
     return name.empty() ? "default_wallet" : name;
 }
 
-bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, MigrationResult& res, const bool load_on_startup = true) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, MigrationResult& res, WalletUnlockReserver& reserver, const bool load_on_startup = true) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     AssertLockHeld(wallet.cs_wallet);
 
     // Get all of the descriptors from the legacy wallet
-    std::optional<MigrationData> data = wallet.GetDescriptorsForLegacy(error);
+    std::optional<MigrationData> data = wallet.GetDescriptorsForLegacy(reserver, error);
     if (data == std::nullopt) return false;
 
     // Create the watchonly and solvable wallets if necessary
@@ -4221,7 +4225,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 
                 // Add to the wallet
                 WalletDescriptor w_desc(std::move(descs.at(0)), creation_time, 0, 0, 0);
-                if (auto spkm_res = data->watchonly_wallet->AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
+                if (auto spkm_res = data->watchonly_wallet->AddWalletDescriptor(reserver, w_desc, keys, "", false); !spkm_res) {
                     throw std::runtime_error(util::ErrorString(spkm_res).original);
                 }
             }
@@ -4260,7 +4264,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 
                 // Add to the wallet
                 WalletDescriptor w_desc(std::move(descs.at(0)), creation_time, 0, 0, 0);
-                if (auto spkm_res = data->solvable_wallet->AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
+                if (auto spkm_res = data->solvable_wallet->AddWalletDescriptor(reserver, w_desc, keys, "", false); !spkm_res) {
                     throw std::runtime_error(util::ErrorString(spkm_res).original);
                 }
             }
@@ -4272,7 +4276,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 
     // Add the descriptors to wallet, remove LegacyScriptPubKeyMan, and cleanup txs and address book data
     return RunWithinTxn(wallet.GetDatabase(), /*process_desc=*/"apply migration process", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
-        if (auto res_migration = wallet.ApplyMigrationData(batch, *data); !res_migration) {
+        if (auto res_migration = wallet.ApplyMigrationData(batch, reserver, *data); !res_migration) {
             error = util::ErrorString(res_migration);
             return false;
         }
@@ -4365,7 +4369,8 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     bool success = false;
 
     // Unlock the wallet if needed
-    if (local_wallet->IsLocked() && !local_wallet->Unlock(passphrase)) {
+    std::unique_ptr<WalletUnlockReserver> reserver = std::make_unique<WalletUnlockReserver>(*local_wallet);
+    if (local_wallet->IsLocked(*reserver) && !local_wallet->Unlock(*reserver, passphrase)) {
         if (passphrase.find('\0') == std::string::npos) {
             return util::Error{Untranslated("Error: Wallet decryption failed, the wallet passphrase was not provided or was incorrect.")};
         } else {
@@ -4392,7 +4397,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
 
         // Do the migration of keys and scripts for non-empty wallets, and cleanup if it fails
         if (HasLegacyRecords(*local_wallet)) {
-            success = DoMigration(*local_wallet, context, error, res, load_wallet);
+            success = DoMigration(*local_wallet, context, error, res, *reserver, load_wallet);
             // No scripts mean empty wallet after migration
             empty_local_wallet = local_wallet->GetAllScriptPubKeyMans().empty();
         } else {
@@ -4401,6 +4406,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
             success = true;
         }
     }
+    reserver.reset();
 
     // In case of loading failure, we need to remember the wallet files we have created to remove.
     // A `set` is used as it may be populated with the same wallet directory paths multiple times,
@@ -4564,7 +4570,7 @@ std::set<CExtPubKey> CWallet::GetActiveHDPubKeys() const
     return active_xpubs;
 }
 
-std::optional<CKey> CWallet::GetKey(const CKeyID& keyid) const
+std::optional<CKey> CWallet::GetKey(WalletUnlockReserver& reserver, const CKeyID& keyid) const
 {
     Assert(IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
 
@@ -4572,7 +4578,7 @@ std::optional<CKey> CWallet::GetKey(const CKeyID& keyid) const
         const DescriptorScriptPubKeyMan* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(spkm);
         assert(desc_spkm);
         LOCK(desc_spkm->cs_desc_man);
-        if (std::optional<CKey> key = desc_spkm->GetKey(keyid)) {
+        if (std::optional<CKey> key = desc_spkm->GetKey(reserver, keyid)) {
             return key;
         }
     }

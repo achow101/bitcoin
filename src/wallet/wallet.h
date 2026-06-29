@@ -311,7 +311,7 @@ class CWallet final : public WalletStorage, public interfaces::Chain::Notificati
 private:
     CKeyingMaterial vMasterKey GUARDED_BY(cs_wallet);
 
-    bool Unlock(const CKeyingMaterial& vMasterKeyIn);
+    bool Unlock(WalletUnlockReserver& reserver, const CKeyingMaterial& vMasterKeyIn);
 
     std::atomic<bool> fAbortRescan{false};
     std::atomic<bool> fScanningWallet{false}; // controlled by WalletRescanReserver
@@ -486,7 +486,7 @@ public:
         assert(NotifyUnload.empty());
     }
 
-    bool IsLocked() const override;
+    bool IsLocked(WalletUnlockReserver& reserver) const override;
     // Lock the wallet. If relock_time is provided, only lock if that matches the wallet's current m_relock_time
     bool Lock(WalletUnlockReserver& reserver, std::optional<int64_t> relock_time = std::nullopt);
 
@@ -588,7 +588,7 @@ public:
     double ScanningProgress() const { return fScanningWallet ? (double) m_scanning_progress : 0; }
 
     //! Upgrade DescriptorCaches
-    void UpgradeDescriptorCache() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void UpgradeDescriptorCache(WalletUnlockReserver& reserver) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Marks destination as previously spent.
     void LoadAddressPreviouslySpent(const CTxDestination& dest) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -600,10 +600,8 @@ public:
 
     // Used to prevent concurrent calls to walletpassphrase RPC.
     Mutex m_unlock_mutex;
-    // Used to prevent deleting the passphrase from memory when it is still in use.
-    mutable std::shared_mutex m_relock_mutex;
 
-    bool Unlock(const SecureString& strWalletPassphrase);
+    bool Unlock(WalletUnlockReserver& reserver, const SecureString& strWalletPassphrase);
     bool ChangeWalletPassphrase(WalletUnlockReserver& reserver, const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
     bool EncryptWallet(WalletUnlockReserver& reserver, const SecureString& strWalletPassphrase);
 
@@ -664,10 +662,10 @@ public:
     OutputType TransactionChangeType(const std::optional<OutputType>& change_type, const std::vector<CRecipient>& vecSend) const;
 
     /** Fetch the inputs and sign with SIGHASH_ALL. */
-    bool SignTransaction(CMutableTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool SignTransaction(WalletUnlockReserver& reserver, CMutableTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /** Sign the tx given the input coins and sighash. */
-    bool SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const;
-    SigningResult SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const;
+    bool SignTransaction(WalletUnlockReserver& reserver, CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const;
+    SigningResult SignMessage(WalletUnlockReserver& reserver, const std::string& message, const PKHash& pkhash, std::string& str_sig) const;
 
     /**
      * Fills out a PSBT with information from the wallet. Fills in UTXOs if we have
@@ -681,10 +679,11 @@ public:
      * @param[out] n_signed the number of inputs signed by this wallet
      * @returns an error if something goes wrong
      */
-    std::optional<common::PSBTError> FillPSBT(PartiallySignedTransaction& psbtx,
-                  const common::PSBTFillOptions& options,
-                  bool& complete,
-                  size_t* n_signed = nullptr) const;
+    std::optional<common::PSBTError> FillPSBT(WalletUnlockReserver& reserver,
+                                              PartiallySignedTransaction& psbtx,
+                                              const common::PSBTFillOptions& options,
+                                              bool& complete,
+                                              size_t* n_signed = nullptr) const;
 
     /**
      * Submit the transaction to the node's mempool and then relay to peers.
@@ -1026,16 +1025,16 @@ public:
     void DeactivateScriptPubKeyMan(uint256 id, OutputType type, bool internal);
 
     //! Create new DescriptorScriptPubKeyMan and add it to the wallet
-    DescriptorScriptPubKeyMan& SetupDescriptorScriptPubKeyMan(WalletBatch& batch, const CExtKey& master_key, const OutputType& output_type, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    DescriptorScriptPubKeyMan& SetupDescriptorScriptPubKeyMan(WalletBatch& batch, WalletUnlockReserver& reserver, const CExtKey& master_key, const OutputType& output_type, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     //! Create new DescriptorScriptPubKeyMans and add them to the wallet
-    void SetupDescriptorScriptPubKeyMans(WalletBatch& batch, const CExtKey& master_key) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    void SetupDescriptorScriptPubKeyMans() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetupDescriptorScriptPubKeyMans(WalletBatch& batch, WalletUnlockReserver& reserver, const CExtKey& master_key) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetupDescriptorScriptPubKeyMans(WalletUnlockReserver& reserver) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Create new seed and default DescriptorScriptPubKeyMans for this wallet
-    void SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch, WalletUnlockReserver& reserver) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Setup new descriptors or seed for new address generation
-    void SetupWalletGeneration() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetupWalletGeneration(WalletUnlockReserver& reserver) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Return the DescriptorScriptPubKeyMan for a WalletDescriptor if it is already in the wallet
     DescriptorScriptPubKeyMan* GetDescriptorScriptPubKeyMan(const WalletDescriptor& desc) const;
@@ -1046,7 +1045,7 @@ public:
     std::optional<bool> IsInternalScriptPubKeyMan(ScriptPubKeyMan* spk_man) const;
 
     //! Add a descriptor to the wallet, return a ScriptPubKeyMan & associated output type
-    util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> AddWalletDescriptor(WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    util::Result<std::reference_wrapper<DescriptorScriptPubKeyMan>> AddWalletDescriptor(WalletUnlockReserver& reserver, WalletDescriptor& desc, const FlatSigningProvider& signing_provider, const std::string& label, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** Move all records from the BDB database to a new SQLite database for storage.
      * The original BDB file will be deleted and replaced with a new SQLite file.
@@ -1056,11 +1055,11 @@ public:
     bool MigrateToSQLite(bilingual_str& error) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Get all of the descriptors from a legacy wallet
-    std::optional<MigrationData> GetDescriptorsForLegacy(bilingual_str& error) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::optional<MigrationData> GetDescriptorsForLegacy(WalletUnlockReserver& reserver, bilingual_str& error) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Adds the ScriptPubKeyMans given in MigrationData to this wallet, removes LegacyScriptPubKeyMan,
     //! and where needed, moves tx and address book entries to watchonly_wallet or solvable_wallet
-    util::Result<void> ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    util::Result<void> ApplyMigrationData(WalletBatch& local_wallet_batch, WalletUnlockReserver& reserver, MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Whether the (external) signer performs R-value signature grinding
     bool CanGrindR() const;
@@ -1075,7 +1074,7 @@ public:
 
     //! Find the private key for the given key id from the wallet's descriptors, if available
     //! Returns nullopt when no descriptor has the key or if the wallet is locked.
-    std::optional<CKey> GetKey(const CKeyID& keyid) const;
+    std::optional<CKey> GetKey(WalletUnlockReserver& reserver, const CKeyID& keyid) const;
 
     //! Disconnect chain notifications and wait for all notifications to be processed
     void DisconnectChainNotifications();

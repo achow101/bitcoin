@@ -122,9 +122,10 @@ static void WalletCreateTx(benchmark::Bench& bench, const OutputType output_type
     FakeNodeClock clock{test_setup->m_node.chainman->GetParams().GenesisBlock().Time()};
     CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
     {
+        wallet::WalletUnlockReserver reserver(wallet);
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
-        wallet.SetupDescriptorScriptPubKeyMans();
+        wallet.SetupDescriptorScriptPubKeyMans(reserver);
     }
 
     // Generate destinations
@@ -164,8 +165,9 @@ static void WalletCreateTx(benchmark::Bench& bench, const OutputType output_type
     std::vector<wallet::CRecipient> recipients = {{dest, target, true}};
 
     bench.run([&] {
+        wallet::WalletUnlockReserver reserver(wallet);
         LOCK(wallet.cs_wallet);
-        const auto& tx_res = CreateTransaction(wallet, recipients, /*change_pos=*/std::nullopt, coin_control);
+        const auto& tx_res = CreateTransaction(wallet, reserver, recipients, /*change_pos=*/std::nullopt, coin_control);
         assert(tx_res);
     });
 }
@@ -177,9 +179,10 @@ static void AvailableCoins(benchmark::Bench& bench, const std::vector<OutputType
     FakeNodeClock clock{test_setup->m_node.chainman->GetParams().GenesisBlock().Time()};
     CWallet wallet{test_setup->m_node.chain.get(), "", CreateMockableWalletDatabase()};
     {
+        wallet::WalletUnlockReserver reserver(wallet);
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
-        wallet.SetupDescriptorScriptPubKeyMans();
+        wallet.SetupDescriptorScriptPubKeyMans(reserver);
     }
 
     // Generate destinations

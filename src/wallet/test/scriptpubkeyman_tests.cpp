@@ -21,6 +21,7 @@ BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
     std::unique_ptr<interfaces::Chain>& chain = m_node.chain;
 
     CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
+    WalletUnlockReserver reserver(keystore);
     auto key_scriptpath = GenerateRandomKey();
 
     // Verify that a SigningProvider for a pubkey is only returned if its corresponding private key is available
@@ -28,13 +29,13 @@ BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
     std::string desc_str = "tr(" + EncodeSecret(key_internal) + ",pk(" + HexStr(key_scriptpath.GetPubKey()) + "))";
     auto spk_man1 = CreateDescriptor(keystore, desc_str, true);
     BOOST_CHECK(spk_man1 != nullptr);
-    auto signprov_keypath_spendable = spk_man1->GetSigningProvider(key_internal.GetPubKey());
+    auto signprov_keypath_spendable = spk_man1->GetSigningProvider(reserver, key_internal.GetPubKey());
     BOOST_CHECK(signprov_keypath_spendable != nullptr);
 
     desc_str = "tr(" + HexStr(XOnlyPubKey::NUMS_H) + ",pk(" + HexStr(key_scriptpath.GetPubKey()) + "))";
     auto spk_man2 = CreateDescriptor(keystore, desc_str, true);
     BOOST_CHECK(spk_man2 != nullptr);
-    auto signprov_keypath_nums_h = spk_man2->GetSigningProvider(XOnlyPubKey::NUMS_H.GetEvenCorrespondingCPubKey());
+    auto signprov_keypath_nums_h = spk_man2->GetSigningProvider(reserver, XOnlyPubKey::NUMS_H.GetEvenCorrespondingCPubKey());
     BOOST_CHECK(signprov_keypath_nums_h == nullptr);
 }
 

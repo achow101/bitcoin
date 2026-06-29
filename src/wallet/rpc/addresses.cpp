@@ -518,7 +518,8 @@ RPCMethod getaddressinfo()
     DescriptorScriptPubKeyMan* desc_spk_man = dynamic_cast<DescriptorScriptPubKeyMan*>(spk_man);
     if (desc_spk_man) {
         std::string desc_str;
-        if (desc_spk_man->GetDescriptorString(desc_str, /*priv=*/false)) {
+        WalletUnlockReserver dummy_reserver(*pwallet, std::defer_lock);
+        if (desc_spk_man->GetDescriptorString(dummy_reserver, desc_str, /*priv=*/false)) {
             ret.pushKV("parent_desc", desc_str);
         }
     }

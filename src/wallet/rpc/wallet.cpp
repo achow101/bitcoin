@@ -698,6 +698,7 @@ RPCMethod gethdkeys()
 
             std::map<CExtPubKey, std::set<std::tuple<std::string, bool, bool>>> wallet_xpubs;
             std::map<CExtPubKey, CExtKey> wallet_xprvs;
+            WalletUnlockReserver noprivs_reserver(*wallet, std::defer_lock);
             for (auto* spkm : spkms) {
                 auto* desc_spkm{dynamic_cast<DescriptorScriptPubKeyMan*>(spkm)};
                 CHECK_NONFATAL(desc_spkm);
@@ -710,10 +711,10 @@ RPCMethod gethdkeys()
                 w_desc.descriptor->GetPubKeys(desc_pubkeys, desc_xpubs);
                 for (const CExtPubKey& xpub : desc_xpubs) {
                     std::string desc_str;
-                    bool ok = desc_spkm->GetDescriptorString(desc_str, /*priv=*/false);
+                    bool ok = desc_spkm->GetDescriptorString(noprivs_reserver, desc_str, /*priv=*/false);
                     CHECK_NONFATAL(ok);
                     wallet_xpubs[xpub].emplace(desc_str, wallet->IsActiveScriptPubKeyMan(*spkm), desc_spkm->HasPrivKey(xpub.pubkey.GetID()));
-                    if (std::optional<CKey> key = priv ? desc_spkm->GetKey(xpub.pubkey.GetID()) : std::nullopt) {
+                    if (std::optional<CKey> key = priv ? desc_spkm->GetKey(*reserver, xpub.pubkey.GetID()) : std::nullopt) {
                         wallet_xprvs[xpub] = CExtKey(xpub, *key);
                     }
                 }
@@ -811,7 +812,7 @@ static RPCMethod createwalletdescriptor()
                 }
             }
 
-            std::optional<CKey> key = pwallet->GetKey(xpub.pubkey.GetID());
+            std::optional<CKey> key = pwallet->GetKey(*reserver, xpub.pubkey.GetID());
             if (!key) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Private key for %s is not known", EncodeExtPubKey(xpub)));
             }
@@ -823,7 +824,7 @@ static RPCMethod createwalletdescriptor()
                 WalletDescriptor w_desc = GenerateWalletDescriptor(xpub, *output_type, internal);
                 uint256 w_id = DescriptorID(*w_desc.descriptor);
                 if (!pwallet->GetScriptPubKeyMan(w_id)) {
-                    spkms.emplace_back(pwallet->SetupDescriptorScriptPubKeyMan(batch, active_hdkey, *output_type, internal));
+                    spkms.emplace_back(pwallet->SetupDescriptorScriptPubKeyMan(batch, *reserver, active_hdkey, *output_type, internal));
                 }
             }
             if (spkms.empty()) {
@@ -834,7 +835,7 @@ static RPCMethod createwalletdescriptor()
             UniValue descs{UniValue::VARR};
             for (const auto& spkm : spkms) {
                 std::string desc_str;
-                bool ok = spkm.get().GetDescriptorString(desc_str, false);
+                bool ok = spkm.get().GetDescriptorString(*reserver, desc_str, false);
                 CHECK_NONFATAL(ok);
                 descs.push_back(desc_str);
             }
@@ -901,7 +902,7 @@ RPCMethod addhdkey()
                 throw JSONRPCError(RPC_WALLET_ERROR, "HD key already exists");
             }
 
-            auto spkm = wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false);
+            auto spkm = wallet->AddWalletDescriptor(*reserver, w_desc, keys, /*label=*/"", /*internal=*/false);
             if (!spkm) {
                 throw JSONRPCError(RPC_WALLET_ERROR, util::ErrorString(spkm).original);
             }

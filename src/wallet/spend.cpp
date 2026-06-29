@@ -1058,6 +1058,7 @@ bool IsDust(const CRecipient& recipient, const CFeeRate& dustRelayFee)
 
 static util::Result<CreatedTransactionResult> CreateTransactionInternal(
         CWallet& wallet,
+        WalletUnlockReserver& reserver,
         const std::vector<CRecipient>& vecSend,
         std::optional<unsigned int> change_pos,
         const CCoinControl& coin_control,
@@ -1402,7 +1403,7 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
         return util::Error{error};
     }
 
-    if (sign && !wallet.SignTransaction(txNew)) {
+    if (sign && !wallet.SignTransaction(reserver, txNew)) {
         return util::Error{_("Signing transaction failed")};
     }
 
@@ -1446,6 +1447,7 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
 
 util::Result<CreatedTransactionResult> CreateTransaction(
         CWallet& wallet,
+        WalletUnlockReserver& reserver,
         const std::vector<CRecipient>& vecSend,
         std::optional<unsigned int> change_pos,
         const CCoinControl& coin_control,
@@ -1461,7 +1463,7 @@ util::Result<CreatedTransactionResult> CreateTransaction(
 
     LOCK(wallet.cs_wallet);
 
-    auto res = CreateTransactionInternal(wallet, vecSend, change_pos, coin_control, sign);
+    auto res = CreateTransactionInternal(wallet, reserver, vecSend, change_pos, coin_control, sign);
     TRACEPOINT(coin_selection, normal_create_tx_internal,
            wallet.GetName().c_str(),
            bool(res),
@@ -1480,7 +1482,7 @@ util::Result<CreatedTransactionResult> CreateTransaction(
             ExtractDestination(txr_ungrouped.tx->vout[*txr_ungrouped.change_pos].scriptPubKey, tmp_cc.destChange);
         }
 
-        auto txr_grouped = CreateTransactionInternal(wallet, vecSend, change_pos, tmp_cc, sign);
+        auto txr_grouped = CreateTransactionInternal(wallet, reserver, vecSend, change_pos, tmp_cc, sign);
         // if fee of this alternative one is within the range of the max fee, we use this one
         const bool use_aps{txr_grouped.has_value() ? (txr_grouped->fee <= txr_ungrouped.fee + wallet.m_max_aps_fee) : false};
         TRACEPOINT(coin_selection, aps_create_tx_internal,
@@ -1538,7 +1540,8 @@ util::Result<CreatedTransactionResult> FundTransaction(CWallet& wallet, const CM
         preset_txin.SetScriptWitness(txin.scriptWitness);
     }
 
-    auto res = CreateTransaction(wallet, vecSend, change_pos, coinControl, false);
+    WalletUnlockReserver nosign_reserver(wallet, std::defer_lock);
+    auto res = CreateTransaction(wallet, nosign_reserver, vecSend, change_pos, coinControl, false);
     if (!res) {
         return res;
     }

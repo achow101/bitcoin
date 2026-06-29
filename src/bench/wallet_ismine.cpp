@@ -43,6 +43,7 @@ static void WalletIsMine(benchmark::Bench& bench, int num_combo = 0)
     // For a descriptor wallet, fill with num_combo combo descriptors with random keys
     // This benchmarks a non-HD wallet migrated to descriptors
     if (num_combo > 0) {
+        WalletUnlockReserver reserver(*wallet);
         LOCK(wallet->cs_wallet);
         for (int i = 0; i < num_combo; ++i) {
             CKey key;
@@ -51,7 +52,7 @@ static void WalletIsMine(benchmark::Bench& bench, int num_combo = 0)
             std::string error;
             std::vector<std::unique_ptr<Descriptor>> desc = Parse("combo(" + EncodeSecret(key) + ")", keys, error, /*require_checksum=*/false);
             WalletDescriptor w_desc(std::move(desc.at(0)), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
-            Assert(wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false));
+            Assert(wallet->AddWalletDescriptor(reserver, w_desc, keys, /*label=*/"", /*internal=*/false));
         }
     }
 

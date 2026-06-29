@@ -138,7 +138,7 @@ static int64_t GetImportTimestamp(const UniValue& data, int64_t now)
     throw JSONRPCError(RPC_TYPE_ERROR, "Missing required timestamp field for key");
 }
 
-static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+static UniValue ProcessDescriptorImport(CWallet& wallet, WalletUnlockReserver& reserver, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     UniValue warnings(UniValue::VARR);
     UniValue result(UniValue::VOBJ);
@@ -280,7 +280,7 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
                 parsed_desc->GetPubKeys(pubkeys, extpubs);
                 std::transform(extpubs.begin(), extpubs.end(), std::inserter(pubkeys, pubkeys.begin()), [](const CExtPubKey& xpub) { return xpub.pubkey; });
                 CHECK_NONFATAL(pubkeys.size() == 1);
-                if (wallet.GetKey(pubkeys.begin()->GetID())) {
+                if (wallet.GetKey(reserver, pubkeys.begin()->GetID())) {
                     throw JSONRPCError(RPC_WALLET_ERROR, "Cannot import an unused() descriptor when its private key is already in the wallet");
                 }
             }
@@ -288,7 +288,7 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
             WalletDescriptor w_desc(std::move(parsed_desc), timestamp, range_start, range_end, next_index);
 
             // Add descriptor to the wallet
-            auto spk_manager_res = wallet.AddWalletDescriptor(w_desc, keys, label, desc_internal);
+            auto spk_manager_res = wallet.AddWalletDescriptor(reserver, w_desc, keys, label, desc_internal);
 
             if (!spk_manager_res) {
                 throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Could not add descriptor '%s': %s", descriptor, util::ErrorString(spk_manager_res).original));
@@ -408,7 +408,7 @@ RPCMethod importdescriptors()
         for (const UniValue& request : requests.getValues()) {
             // This throws an error if "timestamp" doesn't exist
             const int64_t timestamp = std::max(GetImportTimestamp(request, now), minimum_timestamp);
-            const UniValue result = ProcessDescriptorImport(*pwallet, request, timestamp);
+            const UniValue result = ProcessDescriptorImport(*pwallet, *unlock_reserver, request, timestamp);
             response.push_back(result);
 
             if (lowest_timestamp > timestamp ) {
@@ -521,7 +521,7 @@ RPCMethod listdescriptors()
         throw JSONRPCError(RPC_WALLET_ERROR, "Can't get private descriptor string for watch-only wallets");
     }
 
-    std::unique_ptr<WalletUnlockReserver> reserver;
+    std::unique_ptr<WalletUnlockReserver> reserver = std::make_unique<WalletUnlockReserver>(*wallet, std::defer_lock);
     if (priv) {
         reserver = EnsureWalletIsUnlocked(*wallet);
     }
@@ -548,7 +548,7 @@ RPCMethod listdescriptors()
         LOCK(desc_spk_man->cs_desc_man);
         const auto& wallet_descriptor = desc_spk_man->GetWalletDescriptor();
         std::string descriptor;
-        CHECK_NONFATAL(desc_spk_man->GetDescriptorString(descriptor, priv));
+        CHECK_NONFATAL(desc_spk_man->GetDescriptorString(*reserver, descriptor, priv));
         const bool is_range = wallet_descriptor.descriptor->IsRange();
         wallet_descriptors.push_back({
             descriptor,

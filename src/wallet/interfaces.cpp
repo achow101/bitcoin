@@ -146,8 +146,14 @@ public:
         WalletUnlockReserver reserver(*m_wallet, WalletUnlockReserver::exclusive, std::defer_lock);
         return m_wallet->Lock(reserver);
     }
-    bool unlock(const SecureString& wallet_passphrase) override { return m_wallet->Unlock(wallet_passphrase); }
-    bool isLocked() override { return m_wallet->IsLocked(); }
+    bool unlock(const SecureString& wallet_passphrase) override {
+        WalletUnlockReserver reserver(*m_wallet);
+        return m_wallet->Unlock(reserver, wallet_passphrase);
+    }
+    bool isLocked() override {
+        WalletUnlockReserver reserver(*m_wallet);
+        return m_wallet->IsLocked(reserver);
+    }
     bool changeWalletPassphrase(const SecureString& old_wallet_passphrase,
         const SecureString& new_wallet_passphrase) override
     {
@@ -172,7 +178,8 @@ public:
     }
     SigningResult signMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) override
     {
-        return m_wallet->SignMessage(message, pkhash, str_sig);
+        WalletUnlockReserver reserver(*m_wallet);
+        return m_wallet->SignMessage(reserver, message, pkhash, str_sig);
     }
     bool isSpendable(const CTxDestination& dest) override
     {
@@ -267,8 +274,9 @@ public:
         bool sign,
         std::optional<unsigned int> change_pos) override
     {
+        WalletUnlockReserver reserver(*m_wallet);
         LOCK(m_wallet->cs_wallet);
-        return CreateTransaction(*m_wallet, recipients, change_pos, coin_control, sign);
+        return CreateTransaction(*m_wallet, reserver, recipients, change_pos, coin_control, sign);
     }
     void commitTransaction(CTransactionRef tx,
         WalletValueMap value_map,
@@ -297,7 +305,10 @@ public:
         std::vector<CTxOut> outputs; // just an empty list of new recipients for now
         return feebumper::CreateRateBumpTransaction(*m_wallet.get(), txid, coin_control, errors, old_fee, new_fee, mtx, /* require_mine= */ true, outputs) == feebumper::Result::OK;
     }
-    bool signBumpTransaction(CMutableTransaction& mtx) override { return feebumper::SignTransaction(*m_wallet.get(), mtx); }
+    bool signBumpTransaction(CMutableTransaction& mtx) override {
+        WalletUnlockReserver reserver(*m_wallet);
+        return feebumper::SignTransaction(*m_wallet.get(), reserver, mtx);
+    }
     bool commitBumpTransaction(const Txid& txid,
         CMutableTransaction&& mtx,
         std::vector<bilingual_str>& errors,
@@ -374,7 +385,8 @@ public:
         PartiallySignedTransaction& psbtx,
         bool& complete) override
     {
-        return m_wallet->FillPSBT(psbtx, options, complete, n_signed);
+        WalletUnlockReserver reserver(*m_wallet);
+        return m_wallet->FillPSBT(reserver, psbtx, options, complete, n_signed);
     }
     WalletBalances getBalances() override
     {

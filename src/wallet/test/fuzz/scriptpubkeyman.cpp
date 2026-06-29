@@ -83,8 +83,9 @@ static std::optional<std::pair<WalletDescriptor, FlatSigningProvider>> CreateWal
 
 static DescriptorScriptPubKeyMan* CreateDescriptor(WalletDescriptor& wallet_desc, FlatSigningProvider& keys, CWallet& keystore)
 {
+    WalletUnlockReserver reserver(keystore);
     LOCK(keystore.cs_wallet);
-    auto spk_manager_res = keystore.AddWalletDescriptor(wallet_desc, keys, /*label=*/"", /*internal=*/false);
+    auto spk_manager_res = keystore.AddWalletDescriptor(reserver, wallet_desc, keys, /*label=*/"", /*internal=*/false);
     if (!spk_manager_res) return nullptr;
     return &spk_manager_res.value().get();
 };
@@ -144,7 +145,8 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                                            *std::get_if<PKHash>(&dest) :
                                            PKHash{ConsumeUInt160(fuzzed_data_provider)}};
                         std::string str_sig;
-                        (void)spk_manager->SignMessage(msg, pk_hash, str_sig);
+                        WalletUnlockReserver reserver(wallet);
+                        (void)spk_manager->SignMessage(reserver, msg, pk_hash, str_sig);
                         (void)spk_manager->GetMetadata(dest);
                     }
                 }
@@ -182,7 +184,8 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                 std::map<COutPoint, Coin> coins{ConsumeCoins(fuzzed_data_provider)};
                 const int sighash{fuzzed_data_provider.ConsumeIntegral<int>()};
                 std::map<int, bilingual_str> input_errors;
-                (void)spk_manager->SignTransaction(tx_to, coins, sighash, input_errors);
+                WalletUnlockReserver reserver(wallet);
+                (void)spk_manager->SignTransaction(reserver, tx_to, coins, sighash, input_errors);
             },
             [&] {
                 std::optional<PartiallySignedTransaction> opt_psbt{ConsumeDeserializableConstructor<PartiallySignedTransaction>(fuzzed_data_provider)};
@@ -203,13 +206,15 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
                     .bip32_derivs = fuzzed_data_provider.ConsumeBool()
                 };
                 if (options.sighash_type == 151) options.sighash_type = std::nullopt;
-                (void)spk_manager->FillPSBT(psbt, txdata, options);
+                WalletUnlockReserver reserver(wallet);
+                (void)spk_manager->FillPSBT(reserver, psbt, txdata, options);
             }
         );
     }
 
     std::string descriptor;
-    (void)spk_manager->GetDescriptorString(descriptor, /*priv=*/fuzzed_data_provider.ConsumeBool());
+    WalletUnlockReserver reserver(wallet);
+    (void)spk_manager->GetDescriptorString(reserver, descriptor, /*priv=*/fuzzed_data_provider.ConsumeBool());
     (void)spk_manager->GetEndRange();
     (void)spk_manager->GetKeyPoolSize();
 }
@@ -338,7 +343,8 @@ FUZZ_TARGET(spkm_migration, .init = initialize_spkm_migration)
         );
     }
 
-    auto result{legacy_data.MigrateToDescriptor()};
+    WalletUnlockReserver reserver(wallet);
+    auto result{legacy_data.MigrateToDescriptor(reserver)};
     assert(result);
     if ((add_hd_chain && version >= CHDChain::VERSION_HD_CHAIN_SPLIT) || (!add_hd_chain && add_inactive_hd_chain)) {
         added_chains *= 2;

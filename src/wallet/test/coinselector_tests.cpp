@@ -160,7 +160,8 @@ static std::unique_ptr<CWallet> NewWallet(const node::NodeContext& m_node, const
     std::unique_ptr<CWallet> wallet = std::make_unique<CWallet>(m_node.chain.get(), wallet_name, CreateMockableWalletDatabase());
     LOCK(wallet->cs_wallet);
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
-    wallet->SetupDescriptorScriptPubKeyMans();
+    WalletUnlockReserver reserver(*wallet);
+    wallet->SetupDescriptorScriptPubKeyMans(reserver);
     return wallet;
 }
 

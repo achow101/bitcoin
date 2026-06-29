@@ -17,6 +17,7 @@ namespace wallet {
 class CCoinControl;
 class CWallet;
 class CWalletTx;
+class WalletUnlockReserver;
 
 namespace feebumper {
 
@@ -60,7 +61,7 @@ Result CreateRateBumpTransaction(CWallet& wallet,
 //! Sign the new transaction,
 //! @return false if the tx couldn't be found or if it was
 //! impossible to create the signature(s)
-bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx);
+bool SignTransaction(CWallet& wallet, WalletUnlockReserver& reserver, CMutableTransaction& mtx);
 
 //! Commit the bumpfee transaction.
 //! @return success in case of CWallet::CommitTransaction was successful,

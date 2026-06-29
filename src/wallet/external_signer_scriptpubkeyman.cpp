@@ -26,7 +26,7 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Lo
     return std::unique_ptr<ExternalSignerScriptPubKeyMan>(new ExternalSignerScriptPubKeyMan(storage, descriptor, keypool_size, keys, ckeys));
 }
 
-std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::CreateNew(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, std::unique_ptr<Descriptor> desc)
+std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::CreateNew(WalletStorage& storage, WalletBatch& batch, WalletUnlockReserver& reserver, int64_t keypool_size, std::unique_ptr<Descriptor> desc)
 {
     auto spkm = std::unique_ptr<ExternalSignerScriptPubKeyMan>(new ExternalSignerScriptPubKeyMan(storage, keypool_size));
 
@@ -46,7 +46,7 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Cr
     }
 
     // TopUp
-    spkm->TopUpWithDB(batch);
+    spkm->TopUpWithDB(batch, reserver);
 
     storage.UnsetBlankWalletFlag(batch);
     return spkm;
@@ -86,10 +86,10 @@ util::Result<void> ExternalSignerScriptPubKeyMan::DisplayAddress(const CTxDestin
 }
 
 // If sign is true, transaction must previously have been filled
-std::optional<PSBTError> ExternalSignerScriptPubKeyMan::FillPSBT(PartiallySignedTransaction& psbt, const PrecomputedTransactionData& txdata, const common::PSBTFillOptions& options, int* n_signed) const
+std::optional<PSBTError> ExternalSignerScriptPubKeyMan::FillPSBT(WalletUnlockReserver& reserver, PartiallySignedTransaction& psbt, const PrecomputedTransactionData& txdata, const common::PSBTFillOptions& options, int* n_signed) const
 {
     if (!options.sign) {
-        return DescriptorScriptPubKeyMan::FillPSBT(psbt, txdata, options, n_signed);
+        return DescriptorScriptPubKeyMan::FillPSBT(reserver, psbt, txdata, options, n_signed);
     }
 
     // Already complete if every input is now signed

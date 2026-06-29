@@ -79,8 +79,9 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
     const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
     {
+        wallet::WalletUnlockReserver reserver(*wallet);
         LOCK(wallet->cs_wallet);
-        wallet->SetupDescriptorScriptPubKeyMans();
+        wallet->SetupDescriptorScriptPubKeyMans(reserver);
     }
 
     auto build_address{[]() {

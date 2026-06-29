@@ -531,10 +531,10 @@ std::unordered_set<CScript, SaltedSipHasher> LegacyDataSPKM::GetNotMineScriptPub
     return spks;
 }
 
-std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
+std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor(WalletUnlockReserver& reserver)
 {
     LOCK(cs_KeyStore);
-    if (m_storage.IsLocked()) {
+    if (m_storage.IsLocked(reserver)) {
         return std::nullopt;
     }
 
@@ -606,7 +606,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
 
         // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
         provider.keys.emplace(key.GetPubKey().GetID(), key);
-        auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, provider);
+        auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, reserver, w_desc, /*keypool_size=*/0, provider);
         auto desc_spks = desc_spk_man->GetScriptPubKeys();
 
         // Remove the scriptPubKeys from our current set
@@ -663,7 +663,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
 
             // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
             provider.keys.emplace(master_key.key.GetPubKey().GetID(), master_key.key);
-            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, provider);
+            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, reserver, w_desc, /*keypool_size=*/0, provider);
             auto desc_spks = desc_spk_man->GetScriptPubKeys();
 
             // Remove the scriptPubKeys from our current set
@@ -744,7 +744,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
                 keys.keys.emplace(key.GetPubKey().GetID(), key);
             }
             WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
-            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, keys);
+            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, reserver, w_desc, /*keypool_size=*/0, keys);
             auto desc_spks_set = desc_spk_man->GetScriptPubKeys();
             desc_spks.insert(desc_spks.end(), desc_spks_set.begin(), desc_spks_set.end());
 
@@ -829,20 +829,20 @@ bool LegacyDataSPKM::DeleteRecordsWithDB(WalletBatch& batch)
     return batch.EraseRecords(DBKeys::LEGACY_TYPES);
 }
 
-std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromImport(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
+std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromImport(WalletStorage& storage, WalletUnlockReserver& reserver, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
 {
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, descriptor, keypool_size));
     LOCK(spkm->cs_desc_man);
     WalletBatch batch(storage.GetDatabase());
-    spkm->UpdateWithSigningProvider(batch, provider);
+    spkm->UpdateWithSigningProvider(batch, reserver, provider);
     return spkm;
 }
 
-std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromMigration(WalletStorage& storage, WalletBatch& batch, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
+std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromMigration(WalletStorage& storage, WalletBatch& batch, WalletUnlockReserver& reserver, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
 {
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, descriptor, keypool_size));
     LOCK(spkm->cs_desc_man);
-    spkm->UpdateWithSigningProvider(batch, provider);
+    spkm->UpdateWithSigningProvider(batch, reserver, provider);
     return spkm;
 }
 
@@ -864,10 +864,10 @@ std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::LoadFromSt
     return std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, descriptor, keypool_size, keys, ckeys));
 }
 
-std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNewSingleSig(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal)
+std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNewSingleSig(WalletStorage& storage, WalletBatch& batch, WalletUnlockReserver& reserver, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal)
 {
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, keypool_size));
-    spkm->SetupDescriptorGeneration(batch, master_key, addr_type, internal);
+    spkm->SetupDescriptorGeneration(batch, reserver, master_key, addr_type, internal);
     return spkm;
 }
 
@@ -990,10 +990,10 @@ void DescriptorScriptPubKeyMan::ReturnDestination(int64_t index, bool internal, 
     NotifyCanGetAddressesChanged();
 }
 
-std::map<CKeyID, CKey> DescriptorScriptPubKeyMan::GetKeys() const
+std::map<CKeyID, CKey> DescriptorScriptPubKeyMan::GetKeys(WalletUnlockReserver& reserver) const
 {
     AssertLockHeld(cs_desc_man);
-    if (m_storage.HasEncryptionKeys() && !m_storage.IsLocked()) {
+    if (m_storage.HasEncryptionKeys() && !m_storage.IsLocked(reserver)) {
         KeyMap keys;
         for (const auto& key_pair : m_map_crypted_keys) {
             const CPubKey& pubkey = key_pair.second.first;
@@ -1015,10 +1015,10 @@ bool DescriptorScriptPubKeyMan::HasPrivKey(const CKeyID& keyid) const
     return m_map_keys.contains(keyid) || m_map_crypted_keys.contains(keyid);
 }
 
-std::optional<CKey> DescriptorScriptPubKeyMan::GetKey(const CKeyID& keyid) const
+std::optional<CKey> DescriptorScriptPubKeyMan::GetKey(WalletUnlockReserver& reserver, const CKeyID& keyid) const
 {
     AssertLockHeld(cs_desc_man);
-    if (m_storage.HasEncryptionKeys() && !m_storage.IsLocked()) {
+    if (m_storage.HasEncryptionKeys() && !m_storage.IsLocked(reserver)) {
         const auto& it = m_map_crypted_keys.find(keyid);
         if (it == m_map_crypted_keys.end()) {
             return std::nullopt;
@@ -1041,14 +1041,15 @@ std::optional<CKey> DescriptorScriptPubKeyMan::GetKey(const CKeyID& keyid) const
 
 bool DescriptorScriptPubKeyMan::TopUp(unsigned int size)
 {
+    WalletUnlockReserver reserver(m_storage);
     WalletBatch batch(m_storage.GetDatabase());
     if (!batch.TxnBegin()) return false;
-    bool res = TopUpWithDB(batch, size);
+    bool res = TopUpWithDB(batch, reserver, size);
     if (!batch.TxnCommit()) throw std::runtime_error(strprintf("Error during descriptors keypool top up. Cannot commit changes for wallet [%s]", m_storage.LogName()));
     return res;
 }
 
-bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int size)
+bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, WalletUnlockReserver& reserver, unsigned int size)
 {
     LOCK(cs_desc_man);
     std::set<CScript> new_spks;
@@ -1070,7 +1071,7 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
     }
 
     FlatSigningProvider provider;
-    provider.keys = GetKeys();
+    provider.keys = GetKeys(reserver);
 
     uint256 id = GetID();
     for (int32_t i = m_max_cached_index + 1; i < new_range_end; ++i) {
@@ -1141,16 +1142,16 @@ std::vector<WalletDestination> DescriptorScriptPubKeyMan::MarkUnusedAddresses(co
     return result;
 }
 
-void DescriptorScriptPubKeyMan::AddDescriptorKey(const CKey& key, const CPubKey &pubkey)
+void DescriptorScriptPubKeyMan::AddDescriptorKey(WalletUnlockReserver& reserver, const CKey& key, const CPubKey &pubkey)
 {
     LOCK(cs_desc_man);
     WalletBatch batch(m_storage.GetDatabase());
-    if (!AddDescriptorKeyWithDB(batch, key, pubkey)) {
+    if (!AddDescriptorKeyWithDB(batch, reserver, key, pubkey)) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor private key failed");
     }
 }
 
-bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, const CKey& key, const CPubKey &pubkey)
+bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, WalletUnlockReserver& reserver, const CKey& key, const CPubKey &pubkey)
 {
     AssertLockHeld(cs_desc_man);
     assert(!m_storage.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
@@ -1162,7 +1163,7 @@ bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, const
     }
 
     if (m_storage.HasEncryptionKeys()) {
-        if (m_storage.IsLocked()) {
+        if (m_storage.IsLocked(reserver)) {
             return false;
         }
 
@@ -1182,16 +1183,17 @@ bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, const
     }
 }
 
-void DescriptorScriptPubKeyMan::SetupDescriptorGeneration(WalletBatch& batch, const CExtKey& master_key, OutputType addr_type, bool internal)
+void DescriptorScriptPubKeyMan::SetupDescriptorGeneration(WalletBatch& batch, WalletUnlockReserver& reserver, const CExtKey& master_key, OutputType addr_type, bool internal)
 {
     LOCK(cs_desc_man);
     Assert(m_storage.IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
     Assert(!m_wallet_descriptor.descriptor);
+    reserver.AssertReserved();
 
     m_wallet_descriptor = GenerateWalletDescriptor(master_key.Neuter(), addr_type, internal);
 
     // Store the master private key, and descriptor
-    if (!AddDescriptorKeyWithDB(batch, master_key.key, master_key.key.GetPubKey())) {
+    if (!AddDescriptorKeyWithDB(batch, reserver, master_key.key, master_key.key.GetPubKey())) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor master private key failed");
     }
     if (!batch.WriteDescriptor(GetID(), m_wallet_descriptor)) {
@@ -1204,7 +1206,7 @@ void DescriptorScriptPubKeyMan::SetupDescriptorGeneration(WalletBatch& batch, co
     }
 
     // TopUp
-    TopUpWithDB(batch);
+    TopUpWithDB(batch, reserver);
 
     m_storage.UnsetBlankWalletFlag(batch);
 }
@@ -1249,7 +1251,7 @@ int64_t DescriptorScriptPubKeyMan::GetTimeFirstKey() const
     return m_wallet_descriptor.creation_time;
 }
 
-std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvider(const CScript& script, bool include_private) const
+std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvider(WalletUnlockReserver& reserver, const CScript& script, bool include_private) const
 {
     LOCK(cs_desc_man);
 
@@ -1260,10 +1262,10 @@ std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvid
     }
     int32_t index = it->second;
 
-    return GetSigningProvider(index, include_private);
+    return GetSigningProvider(reserver, index, include_private);
 }
 
-std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvider(const CPubKey& pubkey) const
+std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvider(WalletUnlockReserver& reserver, const CPubKey& pubkey) const
 {
     LOCK(cs_desc_man);
 
@@ -1275,14 +1277,14 @@ std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvid
     int32_t index = it->second;
 
     // Always try to get the signing provider with private keys. This function should only be called during signing anyways
-    std::unique_ptr<FlatSigningProvider> out = GetSigningProvider(index, true);
+    std::unique_ptr<FlatSigningProvider> out = GetSigningProvider(reserver, index, true);
     if (!out->HaveKey(pubkey.GetID())) {
         return nullptr;
     }
     return out;
 }
 
-std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvider(int32_t index, bool include_private) const
+std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvider(WalletUnlockReserver& reserver, int32_t index, bool include_private) const
 {
     AssertLockHeld(cs_desc_man);
 
@@ -1303,7 +1305,7 @@ std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvid
 
     if (HavePrivateKeys() && include_private) {
         FlatSigningProvider master_provider;
-        master_provider.keys = GetKeys();
+        master_provider.keys = GetKeys(reserver);
         m_wallet_descriptor.descriptor->ExpandPrivate(index, master_provider, *out_keys);
 
         // Always include musig_secnonces as this descriptor may have a participant private key
@@ -1316,7 +1318,8 @@ std::unique_ptr<FlatSigningProvider> DescriptorScriptPubKeyMan::GetSigningProvid
 
 std::unique_ptr<SigningProvider> DescriptorScriptPubKeyMan::GetSolvingProvider(const CScript& script) const
 {
-    return GetSigningProvider(script, false);
+    WalletUnlockReserver dummy_reserver(m_storage, std::defer_lock);
+    return GetSigningProvider(dummy_reserver, script, false);
 }
 
 bool DescriptorScriptPubKeyMan::CanProvide(const CScript& script, SignatureData& sigdata)
@@ -1324,11 +1327,11 @@ bool DescriptorScriptPubKeyMan::CanProvide(const CScript& script, SignatureData&
     return IsMine(script);
 }
 
-bool DescriptorScriptPubKeyMan::SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const
+bool DescriptorScriptPubKeyMan::SignTransaction(WalletUnlockReserver& reserver, CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors) const
 {
     std::unique_ptr<FlatSigningProvider> keys = std::make_unique<FlatSigningProvider>();
     for (const auto& coin_pair : coins) {
-        std::unique_ptr<FlatSigningProvider> coin_keys = GetSigningProvider(coin_pair.second.out.scriptPubKey, true);
+        std::unique_ptr<FlatSigningProvider> coin_keys = GetSigningProvider(reserver, coin_pair.second.out.scriptPubKey, true);
         if (!coin_keys) {
             continue;
         }
@@ -1338,9 +1341,9 @@ bool DescriptorScriptPubKeyMan::SignTransaction(CMutableTransaction& tx, const s
     return ::SignTransaction(tx, keys.get(), coins, {.sighash_type = sighash}, input_errors);
 }
 
-SigningResult DescriptorScriptPubKeyMan::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
+SigningResult DescriptorScriptPubKeyMan::SignMessage(WalletUnlockReserver& reserver, const std::string& message, const PKHash& pkhash, std::string& str_sig) const
 {
-    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(GetScriptForDestination(pkhash), true);
+    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(reserver, GetScriptForDestination(pkhash), true);
     if (!keys) {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
     }
@@ -1356,7 +1359,7 @@ SigningResult DescriptorScriptPubKeyMan::SignMessage(const std::string& message,
     return SigningResult::OK;
 }
 
-std::optional<PSBTError> DescriptorScriptPubKeyMan::FillPSBT(PartiallySignedTransaction& psbtx, const PrecomputedTransactionData& txdata, const common::PSBTFillOptions& options, int* n_signed) const
+std::optional<PSBTError> DescriptorScriptPubKeyMan::FillPSBT(WalletUnlockReserver& reserver, PartiallySignedTransaction& psbtx, const PrecomputedTransactionData& txdata, const common::PSBTFillOptions& options, int* n_signed) const
 {
     if (n_signed) {
         *n_signed = 0;
@@ -1383,7 +1386,7 @@ std::optional<PSBTError> DescriptorScriptPubKeyMan::FillPSBT(PartiallySignedTran
         }
 
         std::unique_ptr<FlatSigningProvider> keys = std::make_unique<FlatSigningProvider>();
-        std::unique_ptr<FlatSigningProvider> script_keys = GetSigningProvider(script, /*include_private=*/options.sign);
+        std::unique_ptr<FlatSigningProvider> script_keys = GetSigningProvider(reserver, script, /*include_private=*/options.sign);
         if (script_keys) {
             keys->Merge(std::move(*script_keys));
         } else {
@@ -1418,7 +1421,7 @@ std::optional<PSBTError> DescriptorScriptPubKeyMan::FillPSBT(PartiallySignedTran
             }
 
             for (const auto& pubkey : pubkeys) {
-                std::unique_ptr<FlatSigningProvider> pk_keys = GetSigningProvider(pubkey);
+                std::unique_ptr<FlatSigningProvider> pk_keys = GetSigningProvider(reserver, pubkey);
                 if (pk_keys) {
                     keys->Merge(std::move(*pk_keys));
                 }
@@ -1453,7 +1456,7 @@ std::optional<PSBTError> DescriptorScriptPubKeyMan::FillPSBT(PartiallySignedTran
 
 std::unique_ptr<CKeyMetadata> DescriptorScriptPubKeyMan::GetMetadata(const CTxDestination& dest) const
 {
-    std::unique_ptr<SigningProvider> provider = GetSigningProvider(GetScriptForDestination(dest));
+    std::unique_ptr<SigningProvider> provider = GetSolvingProvider(GetScriptForDestination(dest));
     if (provider) {
         KeyOriginInfo orig;
         CKeyID key_id = GetKeyForDestination(*provider, dest);
@@ -1550,14 +1553,14 @@ int32_t DescriptorScriptPubKeyMan::GetEndRange() const
     return m_max_cached_index + 1;
 }
 
-bool DescriptorScriptPubKeyMan::GetDescriptorString(std::string& out, const bool priv) const
+bool DescriptorScriptPubKeyMan::GetDescriptorString(WalletUnlockReserver& reserver, std::string& out, const bool priv) const
 {
     LOCK(cs_desc_man);
 
     FlatSigningProvider provider;
-    provider.keys = GetKeys();
 
     if (priv) {
+        provider.keys = GetKeys(reserver);
         // For the private version, always return the master key to avoid
         // exposing child private keys. The risk implications of exposing child
         // private keys together with the parent xpub may be non-obvious for users.
@@ -1567,10 +1570,10 @@ bool DescriptorScriptPubKeyMan::GetDescriptorString(std::string& out, const bool
     return m_wallet_descriptor.descriptor->ToNormalizedString(provider, out, &m_wallet_descriptor.cache);
 }
 
-void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()
+void DescriptorScriptPubKeyMan::UpgradeDescriptorCache(WalletUnlockReserver& reserver)
 {
     LOCK(cs_desc_man);
-    if (m_storage.IsLocked() || m_storage.IsWalletFlagSet(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED)) {
+    if (m_storage.IsLocked(reserver) || m_storage.IsWalletFlagSet(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED)) {
         return;
     }
 
@@ -1581,7 +1584,7 @@ void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()
 
     // Expand the descriptor
     FlatSigningProvider provider;
-    provider.keys = GetKeys();
+    provider.keys = GetKeys(reserver);
     FlatSigningProvider out_keys;
     std::vector<CScript> scripts_temp;
     DescriptorCache temp_cache;
@@ -1596,7 +1599,7 @@ void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()
     }
 }
 
-util::Result<void> DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescriptor& descriptor, const FlatSigningProvider& provider)
+util::Result<void> DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletUnlockReserver& reserver, WalletDescriptor& descriptor, const FlatSigningProvider& provider)
 {
     LOCK(cs_desc_man);
     std::string error;
@@ -1610,24 +1613,24 @@ util::Result<void> DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescr
     m_wallet_descriptor = descriptor;
 
     WalletBatch batch(m_storage.GetDatabase());
-    UpdateWithSigningProvider(batch, provider);
+    UpdateWithSigningProvider(batch, reserver, provider);
     NotifyFirstKeyTimeChanged(this, m_wallet_descriptor.creation_time);
     return {};
 }
 
-void DescriptorScriptPubKeyMan::UpdateWithSigningProvider(WalletBatch& batch, const FlatSigningProvider& signing_provider)
+void DescriptorScriptPubKeyMan::UpdateWithSigningProvider(WalletBatch& batch, WalletUnlockReserver& reserver, const FlatSigningProvider& signing_provider)
 {
     AssertLockHeld(cs_desc_man);
     // Add the private keys to the descriptor
     for (const auto& entry : signing_provider.keys) {
         const CKey& key = entry.second;
-        if (!AddDescriptorKeyWithDB(batch, key, key.GetPubKey())) {
+        if (!AddDescriptorKeyWithDB(batch, reserver, key, key.GetPubKey())) {
             throw std::runtime_error(std::string(__func__) + ": writing descriptor private key failed");
         }
     }
 
     // Top up key pool, to generate scriptPubKeys
-    if (!TopUpWithDB(batch)) {
+    if (!TopUpWithDB(batch, reserver)) {
         throw std::runtime_error("Could not top up scriptPubKeys");
     }
 }
