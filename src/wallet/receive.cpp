@@ -249,12 +249,12 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse,
     {
         LOCK(wallet.cs_wallet);
         std::set<Txid> trusted_parents;
-        for (const auto& [outpoint, txo] : wallet.GetTXOs()) {
-            const bool is_trusted{CachedTxIsTrusted(wallet, txo.GetState(), outpoint.hash, trusted_parents)};
+        for (const auto& txo : wallet.m_txos) {
+            const bool is_trusted{CachedTxIsTrusted(wallet, txo.GetState(), txo.GetOutpoint().hash, trusted_parents)};
             const int tx_depth{wallet.GetTxStateDepthInMainChain(txo.GetState())};
 
             bool nonmempool_spent = false;
-            switch (wallet.HowSpent(outpoint)) {
+            switch (wallet.HowSpent(txo.GetOutpoint())) {
             case CWallet::SpendType::CONFIRMED:
             case CWallet::SpendType::MEMPOOL:
                 // treat as spent; ignore
@@ -299,8 +299,8 @@ std::map<CTxDestination, CAmount> GetAddressBalances(const CWallet& wallet)
     {
         LOCK(wallet.cs_wallet);
         std::set<Txid> trusted_parents;
-        for (const auto& [outpoint, txo] : wallet.GetTXOs()) {
-            if (!CachedTxIsTrusted(wallet, txo.GetState(), outpoint.hash, trusted_parents)) continue;
+        for (const auto& txo : wallet.m_txos) {
+            if (!CachedTxIsTrusted(wallet, txo.GetState(), txo.GetOutpoint().hash, trusted_parents)) continue;
             if (wallet.IsTXOInImmatureCoinBase(txo)) continue;
 
             int nDepth = wallet.GetTxStateDepthInMainChain(txo.GetState());
@@ -310,7 +310,7 @@ std::map<CTxDestination, CAmount> GetAddressBalances(const CWallet& wallet)
             Assume(wallet.IsMine(txo.GetTxOut()));
             if(!ExtractDestination(txo.GetTxOut().scriptPubKey, addr)) continue;
 
-            CAmount n = wallet.IsSpent(outpoint) ? 0 : txo.GetTxOut().nValue;
+            CAmount n = wallet.IsSpent(txo.GetOutpoint()) ? 0 : txo.GetTxOut().nValue;
             balances[addr] += n;
         }
     }

@@ -4661,10 +4661,12 @@ void CWallet::RefreshTXOsFromTx(const CWalletTx& wtx)
         COutPoint outpoint(wtx.GetHash(), i);
         auto it = m_txos.find(outpoint);
         if (it != m_txos.end()) {
-            it->second.SetState(wtx.GetState());
-            it->second.SetTxFromMe(*wtx.m_from_me);
+            m_txos.modify(it, [&wtx](WalletTXO& txo) {
+                txo.SetState(wtx.GetState());
+                txo.SetTxFromMe(*wtx.m_from_me);
+            });
         } else {
-            m_txos.emplace(outpoint, WalletTXO{wtx, txout, wtx.GetState(), wtx.IsCoinBase(), *wtx.m_from_me, wtx.GetTxTime(), wtx.tx->version});
+            m_txos.emplace(outpoint, txout, wtx.GetState(), wtx.IsCoinBase(), *wtx.m_from_me, wtx.GetTxTime(), wtx.tx->version);
         }
     }
 }
@@ -4694,7 +4696,7 @@ std::optional<WalletTXO> CWallet::GetTXO(const COutPoint& outpoint) const
     if (it == m_txos.end()) {
         return std::nullopt;
     }
-    return it->second;
+    return *it;
 }
 
 void CWallet::DisconnectChainNotifications()
@@ -4710,7 +4712,9 @@ void CWallet::UpdateTXOState(const COutPoint& outpoint, const TxState& state) co
 {
     auto it = m_txos.find(outpoint);
     if (it != m_txos.end()) {
-        it->second.SetState(state);
+        m_txos.modify(it, [&state](WalletTXO& txo) {
+            txo.SetState(state);
+        });
     }
 }
 } // namespace wallet

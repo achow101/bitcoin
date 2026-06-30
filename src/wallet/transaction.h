@@ -11,10 +11,14 @@
 #include <tinyformat.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/hasher.h>
 #include <util/overloaded.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <wallet/types.h>
+
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index_container.hpp>
 
 #include <bitset>
 #include <cstdint>
@@ -126,6 +130,59 @@ std::string TxStateString(const T& state)
 {
     return std::visit([](const auto& s) { return s.toString(); }, state);
 }
+
+class WalletTXO
+{
+private:
+    const COutPoint m_outpoint;
+    const CTxOut& m_output;
+    TxState m_tx_state;
+    bool m_tx_coinbase;
+    bool m_tx_from_me;
+    int64_t m_tx_time;
+
+public:
+    WalletTXO(const COutPoint& outpoint, const CTxOut& output, const TxState& state, bool coinbase, bool tx_from_me, int64_t tx_time, uint32_t tx_version)
+    : m_outpoint(outpoint),
+    m_output(output),
+    m_tx_state(state),
+    m_tx_coinbase(coinbase),
+    m_tx_from_me(tx_from_me),
+    m_tx_time(tx_time),
+    m_tx_version(tx_version)
+    {}
+
+    const uint32_t m_tx_version;
+
+    const COutPoint GetOutpoint() const { return m_outpoint; }
+    const CTxOut& GetTxOut() const { return m_output; }
+
+    const TxState& GetState() const { return m_tx_state; }
+    void SetState(const TxState& state) { m_tx_state = state; }
+
+    bool IsTxCoinBase() const { return m_tx_coinbase; }
+
+    void SetTxFromMe(bool from_me) { m_tx_from_me = from_me; }
+    bool GetTxFromMe() const { return m_tx_from_me; }
+
+    int64_t GetTxTime() const { return m_tx_time; }
+};
+
+struct wallettxo_outpoint
+{
+    typedef COutPoint result_type;
+    result_type operator() (const WalletTXO& txo) const
+    {
+        return txo.GetOutpoint();
+    }
+};
+
+using TXOIndex = boost::multi_index_container<
+    WalletTXO,
+    boost::multi_index::indexed_by<
+        boost::multi_index::hashed_unique<wallettxo_outpoint, SaltedOutpointHasher>
+    >
+>;
 
 /**
  * Cachable amount subdivided into avoid reuse and all balances
@@ -395,46 +452,6 @@ struct WalletTxOrderComparator {
     {
         return a->nOrderPos < b->nOrderPos;
     }
-};
-
-class WalletTXO
-{
-private:
-    const CWalletTx& m_wtx;
-    const CTxOut& m_output;
-    TxState m_tx_state;
-    bool m_tx_coinbase;
-    bool m_tx_from_me;
-    int64_t m_tx_time;
-
-public:
-    WalletTXO(const CWalletTx& wtx, const CTxOut& output, const TxState& state, bool coinbase, bool tx_from_me, int64_t tx_time, uint32_t tx_version)
-    : m_wtx(wtx),
-    m_output(output),
-    m_tx_state(state),
-    m_tx_coinbase(coinbase),
-    m_tx_from_me(tx_from_me),
-    m_tx_time(tx_time),
-    m_tx_version(tx_version)
-    {
-        Assume(std::ranges::find(wtx.tx->vout, output) != wtx.tx->vout.end());
-    }
-
-    const CWalletTx& GetWalletTx() const { return m_wtx; }
-
-    const uint32_t m_tx_version;
-
-    const CTxOut& GetTxOut() const { return m_output; }
-
-    const TxState& GetState() const { return m_tx_state; }
-    void SetState(const TxState& state) { m_tx_state = state; }
-
-    bool IsTxCoinBase() const { return m_tx_coinbase; }
-
-    void SetTxFromMe(bool from_me) { m_tx_from_me = from_me; }
-    bool GetTxFromMe() const { return m_tx_from_me; }
-
-    int64_t GetTxTime() const { return m_tx_time; }
 };
 } // namespace wallet
 

@@ -335,8 +335,9 @@ CoinsResult AvailableCoins(const CWallet& wallet,
     std::set<Txid> trusted_parents;
     // Cache for whether each tx passes the tx level checks (first bool), and whether the transaction is "safe" (second bool)
     std::unordered_map<Txid, std::pair<bool, bool>, SaltedTxidHasher> tx_safe_cache;
-    for (const auto& [outpoint, txo] : wallet.GetTXOs()) {
+    for (const auto& txo : wallet.m_txos) {
         const CTxOut& output = txo.GetTxOut();
+        const COutPoint outpoint = txo.GetOutpoint();
 
         if (tx_safe_cache.contains(outpoint.hash) && !tx_safe_cache.at(outpoint.hash).first) {
             continue;
