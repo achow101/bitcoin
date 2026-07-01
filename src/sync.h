@@ -14,6 +14,7 @@
 #include <cassert>
 #include <condition_variable>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 
@@ -129,6 +130,7 @@ using RecursiveMutex = AnnotatedMixin<std::recursive_mutex>;
 
 /** Wrapped mutex: supports waiting but not recursive locking */
 using Mutex = AnnotatedMixin<std::mutex>;
+using SharedMutex = AnnotatedMixin<std::shared_mutex>;
 
 /** Different type to mark Mutex at global scope
  *
@@ -144,6 +146,7 @@ class GlobalMutex : public Mutex { };
 #define AssertLockHeld(cs) AssertLockHeldInternal(#cs, __FILE__, __LINE__, &cs)
 
 inline void AssertLockNotHeldInline(const char* name, const char* file, int line, Mutex* cs) EXCLUSIVE_LOCKS_REQUIRED(!cs) { AssertLockNotHeldInternal(name, file, line, cs); }
+inline void AssertLockNotHeldInline(const char* name, const char* file, int line, SharedMutex* cs) EXCLUSIVE_LOCKS_REQUIRED(!cs) { AssertLockNotHeldInternal(name, file, line, cs); }
 inline void AssertLockNotHeldInline(const char* name, const char* file, int line, RecursiveMutex* cs) LOCKS_EXCLUDED(cs) { AssertLockNotHeldInternal(name, file, line, cs); }
 inline void AssertLockNotHeldInline(const char* name, const char* file, int line, GlobalMutex* cs) LOCKS_EXCLUDED(cs) { AssertLockNotHeldInternal(name, file, line, cs); }
 #define AssertLockNotHeld(cs) AssertLockNotHeldInline(#cs, __FILE__, __LINE__, &cs)
@@ -247,6 +250,67 @@ public:
      friend class reverse_lock;
 };
 
+/** Wrapper around std::shared_lock style lock for MutexType. */
+template <typename MutexType>
+class SCOPED_LOCKABLE SharedLock : public MutexType::shared_lock
+{
+private:
+    using Base = typename MutexType::shared_lock;
+
+    void Enter(const char* pszName, const char* pszFile, int nLine)
+    {
+        EnterCritical(pszName, pszFile, nLine, Base::mutex());
+#ifdef DEBUG_LOCKCONTENTION
+        if (!Base::try_lock()) {
+            ContendedLock(pszName, pszFile, nLine, static_cast<Base&>(*this));
+        }
+#else
+        Base::lock();
+#endif
+    }
+
+    bool TryEnter(const char* pszName, const char* pszFile, int nLine)
+    {
+        EnterCritical(pszName, pszFile, nLine, Base::mutex(), true);
+        if (Base::try_lock()) {
+            return true;
+        }
+        LeaveCritical();
+        return false;
+    }
+
+public:
+    SharedLock(MutexType& mutexIn, const char* pszName, const char* pszFile, int nLine, bool fTry = false) EXCLUSIVE_LOCK_FUNCTION(mutexIn) : Base(mutexIn, std::defer_lock)
+    {
+        if (fTry)
+            TryEnter(pszName, pszFile, nLine);
+        else
+            Enter(pszName, pszFile, nLine);
+    }
+
+    SharedLock(MutexType* pmutexIn, const char* pszName, const char* pszFile, int nLine, bool fTry = false) EXCLUSIVE_LOCK_FUNCTION(pmutexIn)
+    {
+        if (!pmutexIn) return;
+
+        *static_cast<Base*>(this) = Base(*pmutexIn, std::defer_lock);
+        if (fTry)
+            TryEnter(pszName, pszFile, nLine);
+        else
+            Enter(pszName, pszFile, nLine);
+    }
+
+    ~SharedLock() UNLOCK_FUNCTION()
+    {
+        if (Base::owns_lock())
+            LeaveCritical();
+    }
+
+    operator bool()
+    {
+        return Base::owns_lock();
+    }
+};
+
 // clang's thread-safety analyzer is unable to deal with aliases of mutexes, so
 // it is not possible to use the lock's copy of the mutex for that purpose.
 // Instead, the original mutex needs to be passed back to the reverse_lock for
@@ -272,6 +336,8 @@ inline MutexType* MaybeCheckNotHeld(MutexType* m) LOCKS_EXCLUDED(m) LOCK_RETURNE
 #define LOCK_ARGS(cs) MaybeCheckNotHeld(cs), #cs, __FILE__, __LINE__
 #define TRY_LOCK(cs, name) UniqueLock name(LOCK_ARGS(cs), true)
 #define WAIT_LOCK(cs, name) UniqueLock name(LOCK_ARGS(cs))
+#define SHARED_LOCK(cs) SharedLock BITCOIN_UNIQUE_NAME(criticalblock)(LOCK_ARGS(cs))
+#define WAIT_SHARED_LOCK(cs, name) SharedLock name(LOCK_ARGS(cs))
 
 //! Run code while locking a mutex.
 //!
