@@ -157,7 +157,7 @@ static void RefreshMempoolStatus(CWallet& wallet, CWalletTx& tx, interfaces::Cha
         state = TxStateInactive();
     }
     if (state) {
-        tx.SetState(*state);
+        tx.SetState(*state, [&wallet](const COutPoint& o, const TxState& s){ wallet.UpdateTXOState(o, s); });
         wallet.RefreshTXOsFromTx(tx);
     }
 }
@@ -1092,14 +1092,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     if (!fInsertedNew)
     {
         if (state.index() != wtx.GetState().index()) {
-            wtx.SetState(state);
-            for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
-                COutPoint outpoint(wtx.GetHash(), i);
-                auto it = m_txos.find(outpoint);
-                if (it != m_txos.end()) {
-                    it->second.SetState(state);
-                }
-            }
+            wtx.SetState(state, [this](const COutPoint& o, const TxState& s){ UpdateTXOState(o, s); });
             fUpdated = true;
         } else {
             assert(TxStateSerializedIndex(wtx.GetState()) == TxStateSerializedIndex(state));
@@ -1125,17 +1118,13 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
         while (!txs.empty()) {
             CWalletTx* desc_tx = txs.back();
             txs.pop_back();
-            desc_tx->SetState(inactive_state);
+            desc_tx->SetState(inactive_state, [this](const COutPoint& o, const TxState& s){ UpdateTXOState(o, s); });
             // Break caches since we have changed the state
             desc_tx->MarkDirty();
             batch.WriteTx(*desc_tx);
             MarkInputsDirty(desc_tx->tx);
             for (unsigned int i = 0; i < desc_tx->tx->vout.size(); ++i) {
                 COutPoint outpoint(desc_tx->GetHash(), i);
-                auto it = m_txos.find(outpoint);
-                if (it != m_txos.end()) {
-                    it->second.SetState(inactive_state);
-                }
                 std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(outpoint);
                 for (TxSpends::const_iterator it = range.first; it != range.second; ++it) {
                     const auto wit = mapWallet.find(it->second);
@@ -1350,13 +1339,13 @@ bool CWallet::AbandonTransaction(CWalletTx& tx)
         return false;
     }
 
-    auto try_updating_state = [](CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
+    auto try_updating_state = [this](CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
         // If the orig tx was not in block/mempool, none of its spends can be.
         assert(!wtx.isConfirmed());
         assert(!wtx.InMempool());
         // If already conflicted or abandoned, no need to set abandoned
         if (!wtx.isBlockConflicted() && !wtx.isAbandoned()) {
-            wtx.SetState(TxStateInactive{/*abandoned=*/true});
+            wtx.SetState(TxStateInactive{/*abandoned=*/true}, [this](const COutPoint& o, const TxState& s){ UpdateTXOState(o, s); });
             return TxUpdate::NOTIFY_CHANGED;
         }
         return TxUpdate::UNCHANGED;
@@ -1392,7 +1381,7 @@ void CWallet::MarkConflicted(const uint256& hashBlock, int conflicting_height, c
         if (conflictconfirms < GetTxDepthInMainChain(wtx)) {
             // Block is 'more conflicted' than current confirm; update.
             // Mark transaction as conflicted with this block.
-            wtx.SetState(TxStateBlockConflicted{hashBlock, conflicting_height});
+            wtx.SetState(TxStateBlockConflicted{hashBlock, conflicting_height}, [this](const COutPoint& o, const TxState& s){ UpdateTXOState(o, s); });
             return TxUpdate::CHANGED;
         }
         return TxUpdate::UNCHANGED;
@@ -1428,11 +1417,6 @@ void CWallet::RecursiveUpdateTxState(WalletBatch* batch, const Txid& tx_hash, co
             if (batch) batch->WriteTx(wtx);
             // Iterate over all its outputs, and update those tx states as well (if applicable)
             for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
-                COutPoint outpoint(wtx.GetHash(), i);
-                auto it = m_txos.find(outpoint);
-                if (it != m_txos.end()) {
-                    it->second.SetState(wtx.GetState());
-                }
                 std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(COutPoint(now, i));
                 for (TxSpends::const_iterator iter = range.first; iter != range.second; ++iter) {
                     if (!done.contains(iter->second)) {
@@ -1637,7 +1621,7 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
                 auto try_updating_state = [&](CWalletTx& tx) {
                     if (!tx.isBlockConflicted()) return TxUpdate::UNCHANGED;
                     if (tx.state<TxStateBlockConflicted>()->conflicting_block_height >= disconnect_height) {
-                        tx.SetState(TxStateInactive{});
+                        tx.SetState(TxStateInactive{}, [this](const COutPoint& o, const TxState& s){ UpdateTXOState(o, s); });
                         return TxUpdate::CHANGED;
                     }
                     return TxUpdate::UNCHANGED;
@@ -2096,14 +2080,7 @@ bool CWallet::SubmitTxMemoryPoolAndRelay(CWalletTx& wtx,
     // TransactionRemovedFromMempool fires.
     bool ret = chain().broadcastTransaction(wtx.tx, m_default_max_tx_fee, broadcast_method, err_string);
     if (ret) {
-        wtx.SetState(TxStateInMempool{});
-        for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
-            COutPoint outpoint(wtx.GetHash(), i);
-            auto it = m_txos.find(outpoint);
-            if (it != m_txos.end()) {
-                it->second.SetState(TxStateInMempool{});
-            }
-        }
+        wtx.SetState(TxStateInMempool{}, [this](const COutPoint& o, const TxState& s){ UpdateTXOState(o, s); });
     }
     return ret;
 }
@@ -4721,4 +4698,11 @@ void CWallet::DisconnectChainNotifications()
     }
 }
 
+void CWallet::UpdateTXOState(const COutPoint& outpoint, const TxState& state) const
+{
+    auto it = m_txos.find(outpoint);
+    if (it != m_txos.end()) {
+        it->second.SetState(state);
+    }
+}
 } // namespace wallet
