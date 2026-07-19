@@ -159,13 +159,13 @@ RPCMethod walletpassphrasechange()
     if (!pwallet->ChangeWalletPassphrase(strOldWalletPass, strNewWalletPass)) {
         // Check if the old passphrase had a null character (see #27067 for details)
         if (strOldWalletPass.find('\0') == std::string::npos) {
-            throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Error: The wallet passphrase entered was incorrect.");
+            throw JSONRPCError(RPC_WALLET_ERROR, "Error: The wallet passphrase entered was incorrect or the new master key could not be written to the wallet database.");
         } else {
-            throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Error: The old wallet passphrase entered is incorrect. "
-                                                                "It contains a null character (ie - a zero byte). "
-                                                                "If the old passphrase was set with a version of this software prior to 25.0, "
-                                                                "please try again with only the characters up to — but not including — "
-                                                                "the first null character.");
+            throw JSONRPCError(RPC_WALLET_ERROR, "Error: The old wallet passphrase entered is incorrect or the new master key could not be written to the wallet database. "
+                                                 "The passphrase contains a null character (ie - a zero byte). "
+                                                 "If it was set with a version of this software prior to 25.0, "
+                                                 "please try again with only the characters up to — but not including — "
+                                                 "the first null character.");
         }
     }
 
