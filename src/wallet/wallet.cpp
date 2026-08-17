@@ -856,14 +856,12 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     return true;
 }
 
-int64_t CWallet::IncOrderPosNext(WalletBatch* batch)
+std::optional<int64_t> CWallet::IncOrderPosNext(WalletBatch& batch)
 {
     AssertLockHeld(cs_wallet);
     int64_t nRet = nOrderPosNext++;
-    if (batch) {
-        batch->WriteOrderPosNext(nOrderPosNext);
-    } else {
-        WalletBatch(GetDatabase()).WriteOrderPosNext(nOrderPosNext);
+    if (!batch.WriteOrderPosNext(nOrderPosNext)) {
+        return std::nullopt;
     }
     return nRet;
 }
@@ -979,7 +977,11 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     bool fUpdated = update_wtx && update_wtx(wtx, fInsertedNew);
     if (fInsertedNew) {
         wtx.nTimeReceived = GetTime();
-        wtx.nOrderPos = IncOrderPosNext(&batch);
+        std::optional<int64_t> pos = IncOrderPosNext(batch);
+        if (!pos) {
+            return nullptr;
+        }
+        wtx.nOrderPos = *pos;
         wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
         wtx.nTimeSmart = ComputeTimeSmart(wtx, rescanning_old_block);
         AddToSpends(wtx);
