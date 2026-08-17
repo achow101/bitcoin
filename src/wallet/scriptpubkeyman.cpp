@@ -254,7 +254,7 @@ void DescriptorScriptPubKeyMan::ReturnDestination(int64_t index, bool internal, 
     if (m_wallet_descriptor.GetNext() - 1 == index) {
         DecIndex();
     }
-    WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor);
+    (void)WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor);
 }
 
 std::map<CKeyID, CKey> DescriptorScriptPubKeyMan::GetKeys() const

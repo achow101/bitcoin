@@ -221,7 +221,7 @@ bool LegacyDataSPKM::CheckDecryptionKey(const CKeyingMaterial& master_key)
                 break;
             else {
                 // Rewrite these encrypted keys with checksums
-                batch.WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
+                (void)batch.WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
             }
         }
         if (keyPass && keyFail)
