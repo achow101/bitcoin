@@ -103,8 +103,8 @@ public:
     // Wallet encryption
     bool setWalletEncrypted(const SecureString& passphrase);
     // Passphrase only needed when unlocking
-    bool setWalletLocked(bool locked, const SecureString &passPhrase=SecureString());
-    bool changePassphrase(const SecureString &oldPass, const SecureString &newPass);
+    util::Expected<void, wallet::WalletError> setWalletLocked(bool locked, const SecureString &passPhrase=SecureString());
+    util::Expected<void, wallet::WalletError> changePassphrase(const SecureString &oldPass, const SecureString &newPass);
 
     // RAII object for unlocking wallet, returned by requestUnlock()
     class UnlockContext

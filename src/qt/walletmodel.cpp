@@ -328,12 +328,15 @@ bool WalletModel::setWalletEncrypted(const SecureString& passphrase)
     return m_wallet->encryptWallet(passphrase);
 }
 
-bool WalletModel::setWalletLocked(bool locked, const SecureString &passPhrase)
+util::Expected<void, wallet::WalletError> WalletModel::setWalletLocked(bool locked, const SecureString &passPhrase)
 {
     if(locked)
     {
         // Lock
-        return m_wallet->lock();
+        if (m_wallet->lock()) {
+            return {};
+        }
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::GenericError, Untranslated(tr("Error: Unable to lock the wallet").toStdString())}};
     }
     else
     {
@@ -342,7 +345,7 @@ bool WalletModel::setWalletLocked(bool locked, const SecureString &passPhrase)
     }
 }
 
-bool WalletModel::changePassphrase(const SecureString &oldPass, const SecureString &newPass)
+util::Expected<void, wallet::WalletError> WalletModel::changePassphrase(const SecureString &oldPass, const SecureString &newPass)
 {
     m_wallet->lock(); // Make sure wallet is locked before attempting pass change
     return m_wallet->changeWalletPassphrase(oldPass, newPass);

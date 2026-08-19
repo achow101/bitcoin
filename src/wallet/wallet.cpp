@@ -612,7 +612,24 @@ static bool DecryptMasterKey(const SecureString& wallet_passphrase, const CMaste
     return true;
 }
 
-bool CWallet::Unlock(const SecureString& strWalletPassphrase)
+static util::Expected<void, WalletError> UnlockPassphraseError(const SecureString& passphrase)
+{
+    if (passphrase.find('\0') != std::string::npos) {
+        // Check if the passphrase has a null character (see #27067 for details)
+        return util::Unexpected{WalletError{WalletErrorCode::UnlockNeeded, _("Error: The wallet passphrase entered is incorrect. "
+                                                               "It contains a null character (ie - a zero byte). "
+                                                               "If the passphrase was set with a version of this software prior to 25.0, "
+                                                               "please try again with only the characters up to — but not including — "
+                                                               "the first null character. If this is successful, please set a new "
+                                                               "passphrase to avoid this issue in the future.")}};
+    } else if (passphrase.empty()) {
+        return util::Unexpected{WalletError{WalletErrorCode::UnlockNeeded, _("Error: The wallet passphrase was not provided")}};
+    } else {
+        return util::Unexpected{WalletError{WalletErrorCode::UnlockNeeded, _("Error: The wallet passphrase entered was incorrect.")}};
+    }
+}
+
+util::Expected<void, WalletError> CWallet::Unlock(const SecureString& strWalletPassphrase)
 {
     CKeyingMaterial plain_master_key;
 
@@ -626,14 +643,14 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase)
             if (Unlock(plain_master_key)) {
                 // Now that we've unlocked, upgrade the descriptor cache
                 UpgradeDescriptorCache();
-                return true;
+                return {};
             }
         }
     }
-    return false;
+    return UnlockPassphraseError(strWalletPassphrase);
 }
 
-bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase)
+util::Expected<void, WalletError> CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase)
 {
     bool fWasLocked = IsLocked();
 
@@ -645,29 +662,28 @@ bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase,
         for (auto& [master_key_id, master_key] : mapMasterKeys)
         {
             if (!DecryptMasterKey(strOldWalletPassphrase, master_key, plain_master_key)) {
-                return false;
+                return UnlockPassphraseError(strOldWalletPassphrase);
             }
             if (Unlock(plain_master_key))
             {
-                CMasterKey new_master_key{master_key};
-                if (!EncryptMasterKey(strNewWalletPassphrase, plain_master_key, new_master_key)) {
-                    return false;
-                }
-                bool written{WalletBatch(GetDatabase()).WriteMasterKey(master_key_id, new_master_key)};
-                if (written) {
-                    WalletLogPrintf("Wallet passphrase changed to an nDeriveIterations of %i\n", new_master_key.nDeriveIterations);
-                    master_key = std::move(new_master_key);
-                } else {
-                    WalletLogPrintf("Writing the new master key to the wallet database failed\n");
-                }
                 if (fWasLocked)
                     Lock();
-                return written;
+                CMasterKey new_master_key{master_key};
+                if (!EncryptMasterKey(strNewWalletPassphrase, plain_master_key, new_master_key)) {
+                    return util::Unexpected{WalletError{WalletErrorCode::GenericError, _("Error: Unable to encrypt encryption key with new passphrase")}};
+                }
+                if(WalletBatch(GetDatabase()).WriteMasterKey(master_key_id, new_master_key)) {
+                    WalletLogPrintf("Wallet passphrase changed to an nDeriveIterations of %i\n", new_master_key.nDeriveIterations);
+                    master_key = std::move(new_master_key);
+                    return {};
+                } else {
+                    return util::Unexpected{WalletError{WalletErrorCode::GenericError, _("Error: Writing the new encryption key to the wallet database failed")}};
+                }
             }
         }
     }
 
-    return false;
+    return UnlockPassphraseError(strOldWalletPassphrase);
 }
 
 void CWallet::SetLastBlockProcessedInMem(int block_height, uint256 block_hash)
@@ -4348,15 +4364,10 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     bool success = false;
 
     // Unlock the wallet if needed
-    if (local_wallet->IsLocked() && !local_wallet->Unlock(passphrase)) {
-        if (passphrase.find('\0') == std::string::npos) {
-            return util::Error{Untranslated("Error: Wallet decryption failed, the wallet passphrase was not provided or was incorrect.")};
-        } else {
-            return util::Error{Untranslated("Error: Wallet decryption failed, the wallet passphrase entered was incorrect. "
-                                            "The passphrase contains a null character (ie - a zero byte). "
-                                            "If this passphrase was set with a version of this software prior to 25.0, "
-                                            "please try again with only the characters up to — but not including — "
-                                            "the first null character.")};
+    if (local_wallet->IsLocked()) {
+        auto unlocked{local_wallet->Unlock(passphrase)};
+        if (!unlocked) {
+            return util::Error{unlocked.error().message};
         }
     }
 

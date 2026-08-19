@@ -70,17 +70,13 @@ RPCMethod walletpassphrase()
             throw JSONRPCError(RPC_INVALID_PARAMETER, "passphrase cannot be empty");
         }
 
-        if (!pwallet->Unlock(strWalletPass)) {
-            // Check if the passphrase has a null character (see #27067 for details)
-            if (strWalletPass.find('\0') == std::string::npos) {
-                throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Error: The wallet passphrase entered was incorrect.");
-            } else {
-                throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Error: The wallet passphrase entered is incorrect. "
-                                                                    "It contains a null character (ie - a zero byte). "
-                                                                    "If the passphrase was set with a version of this software prior to 25.0, "
-                                                                    "please try again with only the characters up to — but not including — "
-                                                                    "the first null character. If this is successful, please set a new "
-                                                                    "passphrase to avoid this issue in the future.");
+        auto unlocked{pwallet->Unlock(strWalletPass)};
+        if (!unlocked) {
+            switch (unlocked.error().code) {
+            case WalletErrorCode::GenericError:
+                throw JSONRPCError(RPC_WALLET_ERROR, unlocked.error().message.original);
+            case WalletErrorCode::UnlockNeeded:
+                throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, unlocked.error().message.original);
             }
         }
 
@@ -156,16 +152,13 @@ RPCMethod walletpassphrasechange()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "passphrase cannot be empty");
     }
 
-    if (!pwallet->ChangeWalletPassphrase(strOldWalletPass, strNewWalletPass)) {
-        // Check if the old passphrase had a null character (see #27067 for details)
-        if (strOldWalletPass.find('\0') == std::string::npos) {
-            throw JSONRPCError(RPC_WALLET_ERROR, "Error: The wallet passphrase entered was incorrect or the new master key could not be written to the wallet database.");
-        } else {
-            throw JSONRPCError(RPC_WALLET_ERROR, "Error: The old wallet passphrase entered is incorrect or the new master key could not be written to the wallet database. "
-                                                 "The passphrase contains a null character (ie - a zero byte). "
-                                                 "If it was set with a version of this software prior to 25.0, "
-                                                 "please try again with only the characters up to — but not including — "
-                                                 "the first null character.");
+    auto changed{pwallet->ChangeWalletPassphrase(strOldWalletPass, strNewWalletPass)};
+    if (!changed) {
+        switch (changed.error().code) {
+        case WalletErrorCode::GenericError:
+            throw JSONRPCError(RPC_WALLET_ERROR, changed.error().message.original);
+        case WalletErrorCode::UnlockNeeded:
+            throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, changed.error().message.original);
         }
     }
 
