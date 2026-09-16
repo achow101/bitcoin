@@ -2011,6 +2011,7 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t& key_exp_
         error = strprintf("key '%s' is not valid", str);
         return {};
     }
+    split.erase(split.begin());
     std::vector<KeyPath> paths;
     char hardened{'h'};
     DeriveType type = ParseDeriveType(split, hardened);
@@ -2204,6 +2205,7 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkey(uint32_t& key_exp_index
     static_assert(sizeof(info.fingerprint) == 4, "Fingerprint must be 4 bytes");
     assert(fpr_bytes.size() == 4);
     std::copy_n(fpr_bytes.begin(), info.fingerprint.size(), info.fingerprint.begin());
+    slash_split.erase(slash_split.begin());
     std::vector<KeyPath> path;
     if (!ParseKeyPath(slash_split, path, error, /*allow_multipath=*/false)) return {};
     info.path = path.at(0);

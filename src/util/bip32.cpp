@@ -80,10 +80,17 @@ util::Expected<KeyPathElement, std::string> ParseKeyPathElement(std::span<const 
 
 std::optional<KeyPath> ParseHDKeypath(const std::string& keypath_str, bool allow_multipath)
 {
+    if (keypath_str == "m") return KeyPath{};
+
     std::span<const char> sp = keypath_str;
     if (keypath_str.starts_with("m/")) {
         sp = sp.subspan(2);
     }
+    if (keypath_str.ends_with("/")) {
+        sp = sp.subspan(0, sp.size() - 1);
+    }
+    if (sp.empty()) return KeyPath{};
+
     const auto split = util::Split(sp, "/");
 
     util::Expected<KeyPath, std::string> parsed = ParseHDKeypath(split, allow_multipath);
@@ -141,6 +148,10 @@ std::string SingleKeyPathElement::ToString(const std::optional<char>& hardened_c
 
 std::string KeyPathElement::ToString(const std::optional<char>& hardened_char) const
 {
+    if (!IsMultipath()) {
+        return m_indexes.at(0).ToString(apostrophe);
+    }
+
     std::string out = "/<";
     size_t pos = 0;
     for (const auto& i : m_indexes) {
