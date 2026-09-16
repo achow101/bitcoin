@@ -12,6 +12,7 @@
 #include <serialize.h>
 #include <support/allocators/secure.h>
 #include <uint256.h>
+#include <util/bip32.h>
 
 #include <optional>
 #include <stdexcept>
@@ -264,7 +265,7 @@ struct CExtKey {
 //! @param[in] ext_key The extended private key to derive from
 //! @param[in] path The BIP 32 path
 //! @return the resulting extended private key and origin info
-std::optional<std::pair<CExtKey, KeyOriginInfo>> DeriveExtKey(const CExtKey& ext_key, const std::vector<uint32_t>& path);
+std::optional<std::pair<CExtKey, KeyOriginInfo>> DeriveExtKey(const CExtKey& ext_key, const KeyPath& path);
 
 /** KeyPair
  *
