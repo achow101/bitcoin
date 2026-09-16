@@ -5,6 +5,7 @@
 #ifndef BITCOIN_UTIL_BIP32_H
 #define BITCOIN_UTIL_BIP32_H
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -17,16 +18,16 @@ static constexpr uint32_t BIP32_UNHARDENED_FLAG = 0x0;
 /** BIP32 hardened derivation flag (2^31) */
 static constexpr uint32_t BIP32_HARDENED_FLAG = 0x80000000;
 
-class KeyPathElement {
+class SingleKeyPathElement {
 private:
     /** Derivation index, without the hardened flag */
     uint32_t m_index;
     std::optional<char> m_hardened;
 
 public:
-    KeyPathElement() = default;
-    KeyPathElement(uint32_t index, std::optional<char> hardened) : m_index(index), m_hardened(hardened) {}
-    KeyPathElement(uint32_t num) : m_index(num & ~BIP32_HARDENED_FLAG), m_hardened(bool(num & BIP32_HARDENED_FLAG) ? std::optional{'h'} : std::nullopt) {}
+    SingleKeyPathElement() = default;
+    SingleKeyPathElement(uint32_t index, std::optional<char> hardened) : m_index(index), m_hardened(hardened) {}
+    SingleKeyPathElement(uint32_t num) : m_index(num & ~BIP32_HARDENED_FLAG), m_hardened(bool(num & BIP32_HARDENED_FLAG) ? std::optional{'h'} : std::nullopt) {}
 
     /** Derivation index with the hardened flag applied */
     uint32_t ChildNumber() const { return m_index | (m_hardened.has_value() ? BIP32_HARDENED_FLAG : BIP32_UNHARDENED_FLAG); }
@@ -35,8 +36,8 @@ public:
 
     std::string ToString(const std::optional<char>& hardened_char = std::nullopt) const;
 
-    bool operator<(const KeyPathElement& other) const { return ChildNumber() < other.ChildNumber(); }
-    bool operator==(const KeyPathElement& other) const { return ChildNumber() == other.ChildNumber(); }
+    bool operator<(const SingleKeyPathElement& other) const { return ChildNumber() < other.ChildNumber(); }
+    bool operator==(const SingleKeyPathElement& other) const { return ChildNumber() == other.ChildNumber(); }
 
     template <typename Stream>
     inline void Serialize(Stream& s) const
@@ -54,14 +55,60 @@ public:
     }
 };
 
+class KeyPathElement {
+private:
+    std::vector<SingleKeyPathElement> m_indexes;
+
+public:
+    KeyPathElement() = default;
+    KeyPathElement(uint32_t index, bool hardened) : m_indexes({{index, hardened}}) {}
+    KeyPathElement(uint32_t num) : m_indexes({{num & ~BIP32_HARDENED_FLAG, bool(num & BIP32_HARDENED_FLAG)}}) {}
+    KeyPathElement(SingleKeyPathElement index) : m_indexes({index}) {}
+    KeyPathElement(std::vector<SingleKeyPathElement> indexes) : m_indexes(indexes) {}
+
+    std::vector<SingleKeyPathElement> Indexes() const { return m_indexes; };
+
+    /** Derivation index with the hardened flag applied */
+    uint32_t ChildNumber(bool multipath_pos = 0) const { return m_indexes.at(multipath_pos).ChildNumber(); }
+
+    bool IsHardened(bool multipath_pos = 0) const { return m_indexes.at(multipath_pos).IsHardened(); }
+    bool HasHardened() const { return std::any_of(m_indexes.begin(), m_indexes.end(), [](const SingleKeyPathElement& elem) { return elem.IsHardened(); }); }
+    bool IsMultipath() const { return m_indexes.size() > 1; }
+
+    std::string ToString(const std::optional<char>& hardened_char = std::nullopt) const;
+
+    bool operator<(const KeyPathElement& other) const { return m_indexes < other.m_indexes; }
+    bool operator==(const KeyPathElement& other) const { return m_indexes == other.m_indexes; }
+
+    /** Serialize and Unserialize are for backwards compatibility and only serialize the first index.
+     *  There is no serialization of multipath indexes
+     */
+    template <typename Stream>
+    inline void Serialize(Stream& s) const
+    {
+        s << m_indexes.at(0);
+    }
+
+    template <typename Stream>
+    inline void Unserialize(Stream& s)
+    {
+        m_indexes.clear();
+        m_indexes.emplace_back();
+        s >> m_indexes.back();
+    }
+};
+
+
 using KeyPath = std::vector<KeyPathElement>;
 
 /** Parse a single key path element like "0", "0'", or "0h".
  *  Returns the derivation index and hardened status, or an error message. */
-util::Expected<KeyPathElement, std::string> ParseKeyPathElement(std::span<const char> elem);
+util::Expected<SingleKeyPathElement, std::string> ParseSingleKeyPathElement(std::span<const char> elem);
+util::Expected<KeyPathElement, std::string> ParseKeyPathElement(std::span<const char> elem, bool allow_multipath = false);
 
 /** Parse an HD keypaths like "m/7/0'/2000". */
-std::optional<KeyPath> ParseHDKeypath(const std::string& keypath_str);
+std::optional<KeyPath> ParseHDKeypath(const std::string& keypath_str, bool allow_multipath = false);
+util::Expected<KeyPath, std::string> ParseHDKeypath(const std::vector<std::span<const char>>& split_keypath, bool allow_multipath);
 
 /** Write HD keypaths as strings */
 std::string WriteHDKeypath(const KeyPath& keypath, const std::optional<char>& hardened_char = 'h');
