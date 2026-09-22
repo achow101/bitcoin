@@ -44,6 +44,7 @@ public:
     size_t GetKeyCount() const override { return 0; }
     bool CanSelfExpand() const final { return false; }
     std::vector<std::unique_ptr<Descriptor>> GetMultipathExpansion() const override { return {}; }
+    bool IsMultipath() const override { return false; }
 };
 
 BOOST_FIXTURE_TEST_CASE(wallet_load_descriptors, TestingSetup)
