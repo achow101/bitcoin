@@ -3681,7 +3681,7 @@ util::Expected<CExtPubKey, WalletError> CWallet::AddHDKey(const std::optional<CE
             _("Invalid HD key")
         }};
     }
-    WalletDescriptor w_desc(std::move(desc), GetTime(), /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+    WalletDescriptor w_desc(std::move(desc), GetTime(), /*range_start=*/0, /*range_end=*/0, /*next_index=*/0, {});
 
     if (GetDescriptorScriptPubKeyMan(w_desc) != nullptr) {
         return util::Unexpected{WalletError{
@@ -4083,7 +4083,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
                 assert(!desc->IsRange());
 
                 // Add to the wallet
-                WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
+                WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0, {});
                 if (auto spkm_res = data->watchonly_wallet->AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
                     throw std::runtime_error(util::ErrorString(spkm_res).original);
                 }
@@ -4124,7 +4124,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
                 assert(!desc->IsRange());
 
                 // Add to the wallet
-                WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
+                WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0, {});
                 if (auto spkm_res = data->solvable_wallet->AddWalletDescriptor(w_desc, keys, "", false); !spkm_res) {
                     throw std::runtime_error(util::ErrorString(spkm_res).original);
                 }

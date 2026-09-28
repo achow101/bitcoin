@@ -603,7 +603,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
         std::unique_ptr<Descriptor> desc = Parse(desc_str, provider, error, false);
         CHECK_NONFATAL(desc); // It shouldn't be possible to have an invalid
         CHECK_NONFATAL(!desc->IsMultipath()); // or multipath descriptor
-        WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
+        WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0, {});
 
         // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
         provider.keys.emplace(key.GetPubKey().GetID(), key);
@@ -661,7 +661,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
             CHECK_NONFATAL(desc); // It shouldn't be possible to have an invalid
             CHECK_NONFATAL(!desc->IsMultipath()); // or multipath descriptor
             uint32_t chain_counter = std::max((i == 1 ? chain.nInternalChainCounter : chain.nExternalChainCounter), (uint32_t)0);
-            WalletDescriptor w_desc(std::move(desc), 0, 0, chain_counter, 0);
+            WalletDescriptor w_desc(std::move(desc), 0, 0, chain_counter, 0, {});
 
             // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
             provider.keys.emplace(master_key.key.GetPubKey().GetID(), master_key.key);
@@ -745,7 +745,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
                 }
                 keys.keys.emplace(key.GetPubKey().GetID(), key);
             }
-            WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
+            WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0, {});
             auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, keys);
             auto desc_spks_set = desc_spk_man->GetScriptPubKeys();
             desc_spks.insert(desc_spks.end(), desc_spks_set.begin(), desc_spks_set.end());

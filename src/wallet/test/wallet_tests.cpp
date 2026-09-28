@@ -81,7 +81,7 @@ static void AddKey(CWallet& wallet, const CKey& key)
     std::string error;
     auto desc = Parse("combo(" + EncodeSecret(key) + ")", provider, error, /* require_checksum=*/ false);
     assert(desc);
-    WalletDescriptor w_desc(std::move(desc), 0, 0, 1, 1);
+    WalletDescriptor w_desc(std::move(desc), 0, 0, 1, 1, {});
     Assert(wallet.AddWalletDescriptor(w_desc, provider, "", false));
 }
 
@@ -137,7 +137,7 @@ BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
         FlatSigningProvider provider;
         std::string error;
         auto desc{Parse(desc_str, provider, error, /* require_checksum=*/ false)};
-        WalletDescriptor w_desc{std::move(desc), 0, 0, 0, 0};
+        WalletDescriptor w_desc{std::move(desc), 0, 0, 0, 0, {}};
         BOOST_CHECK(wallet.AddWalletDescriptor(w_desc, provider, "", false));
         // Wallet should update the non-range descriptor successfully
         BOOST_CHECK(wallet.AddWalletDescriptor(w_desc, provider, "", false));

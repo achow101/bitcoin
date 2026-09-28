@@ -50,7 +50,7 @@ static void WalletEncrypt(benchmark::Bench& bench, unsigned int key_count)
         FlatSigningProvider keys;
         std::string error;
         std::unique_ptr<Descriptor> desc = Parse("combo(" + EncodeSecret(key) + ")", keys, error, /*require_checksum=*/false);
-        WalletDescriptor w_desc(std::move(desc), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0);
+        WalletDescriptor w_desc(std::move(desc), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/0, /*next_index=*/0, {});
         descs.emplace_back(w_desc, keys);
     }
 

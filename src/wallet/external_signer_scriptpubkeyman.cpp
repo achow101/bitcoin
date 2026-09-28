@@ -31,7 +31,7 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Cr
     int64_t creation_time = GetTime();
 
     // Make the descriptor
-    WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
+    WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0, {});
 
     auto spkm = std::unique_ptr<ExternalSignerScriptPubKeyMan>(new ExternalSignerScriptPubKeyMan(storage, w_desc, keypool_size));
 

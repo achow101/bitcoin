@@ -105,7 +105,7 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
                 range_end = desc_info.range->second;
             }
 
-            WalletDescriptor w_desc(std::move(desc), desc_info.creation_time, range_start, range_end, desc_info.next_index);
+            WalletDescriptor w_desc(std::move(desc), desc_info.creation_time, range_start, range_end, desc_info.next_index, {});
 
             // For descriptors that cannot self expand (i.e. needs private keys or cache), set the cache
             if (!w_desc.descriptor->CanSelfExpand()) {

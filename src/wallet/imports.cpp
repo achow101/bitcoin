@@ -186,7 +186,7 @@ ImportResult ImportDescriptor(CWallet& wallet, const ImportDescriptorRequest& re
         }
 
         Assume(request.timestamp.has_value());
-        WalletDescriptor w_desc(std::move(parsed_desc), request.timestamp.value(), range_start, range_end, next_index);
+        WalletDescriptor w_desc(std::move(parsed_desc), request.timestamp.value(), range_start, range_end, next_index, {});
 
         // Add descriptor to the wallet
         auto spk_manager_res = wallet.AddWalletDescriptor(w_desc, keys, request.label, desc_internal);
