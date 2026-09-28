@@ -31,8 +31,34 @@ util::Expected<std::vector<WalletDescInfo>, std::string> ExportDescriptors(const
             return util::Unexpected{"Can't get descriptor string."};
         }
         const bool is_range = wallet_descriptor.descriptor->IsRange();
+
+        const auto mp_rel_ids = wallet_descriptor.GetMultipathRelativesIDs();
+        std::optional<std::string> multipath;
+        if (mp_rel_ids.size() > 1) {
+            const auto mp_base_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(wallet.GetScriptPubKeyMan(mp_rel_ids.at(0)));
+            if (!Assume(mp_base_spkm)) {
+                return util::Unexpected{"Can't get multipath descriptor string, relative 0 does not exist"};
+            }
+            const std::shared_ptr<const Descriptor>& mp_base = mp_base_spkm->GetWalletDescriptor().descriptor;
+            std::vector<const Descriptor*> rels;
+            rels.reserve(mp_rel_ids.size() - 1);
+            for (size_t i = 1; i < mp_rel_ids.size(); ++i) {
+                const auto rel_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(wallet.GetScriptPubKeyMan(mp_rel_ids.at(i)));
+                if (!Assume(rel_spkm)) {
+                    return util::Unexpected{strprintf("Can't get multipath descriptor string, relative %u does not exist", i)};
+                }
+                rels.emplace_back(rel_spkm->GetWalletDescriptor().descriptor.get());
+            }
+            std::unique_ptr<Descriptor> mp = mp_base->ReconstructMultipath(rels);
+            if (!Assume(mp)) {
+                return util::Unexpected{"Can't reconstruct multipath descriptor"};
+            }
+            multipath = mp->ToString();
+        }
+
         wallet_descriptors.emplace_back(
             descriptor,
+            multipath,
             wallet_descriptor.creation_time,
             wallet.IsActiveScriptPubKeyMan(*desc_spk_man),
             wallet.IsInternalScriptPubKeyMan(desc_spk_man),
