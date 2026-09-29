@@ -42,12 +42,15 @@ class ListDescriptorsTest(BitcoinTestFramework):
         self.log.info('Test the command for a default descriptors wallet.')
         node.createwallet(wallet_name='w3')
         result = node.get_wallet_rpc('w3').listdescriptors()
+        import pprint
+        pprint.pprint(result)
         assert_equal("w3", result['wallet_name'])
         assert_equal(8, len(result['descriptors']))
         assert_equal(8, len([d for d in result['descriptors'] if d['active']]))
         assert_equal(4, len([d for d in result['descriptors'] if d['internal']]))
         for item in result['descriptors']:
             assert_not_equal(item['desc'], '')
+            assert_not_equal(item["multipath_descriptor"], '')
             assert_equal(item['next_index'], 0)
             assert_equal(item['range'], [0, 0])
             assert item['timestamp'] is not None
