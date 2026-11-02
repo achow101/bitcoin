@@ -16,6 +16,7 @@
 #include <util/translation.h>
 #include <util/types.h>
 #include <wallet/db.h>
+#include <wallet/transaction.h>
 
 #include <sqlite3.h>
 
@@ -51,6 +52,35 @@ static int TraceSqlCallback(unsigned code, void* context, void* param1, void* pa
         if (expanded) sqlite3_free(expanded);
     }
     return SQLITE_OK;
+}
+
+static void RecordKeyType(sqlite3_context* ctx, int argc, sqlite3_value** argv)
+{
+    Assert(argc == 1);
+    DataStream s({reinterpret_cast<const std::byte*>(sqlite3_value_blob(argv[0])), static_cast<size_t>(sqlite3_value_bytes(argv[0]))});
+    std::string type;
+    s >> type;
+    sqlite3_result_text(ctx, type.data(), type.size(), nullptr);
+}
+
+static void WalletTxTxid(sqlite3_context* ctx, int argc, sqlite3_value** argv)
+{
+    Assert(argc == 1);
+    DataStream s({reinterpret_cast<const std::byte*>(sqlite3_value_blob(argv[0])), static_cast<size_t>(sqlite3_value_bytes(argv[0]))});
+    std::string type;
+    Txid txid;
+    s >> type >> txid;
+    Assert(type == "tx");
+    sqlite3_result_blob(ctx, txid.data(), txid.size(), nullptr);
+}
+
+static void WalletTxOrderPos(sqlite3_context* ctx, int argc, sqlite3_value** argv)
+{
+    Assert(argc == 1);
+    DataStream blob({reinterpret_cast<const std::byte*>(sqlite3_value_blob(argv[0])), static_cast<size_t>(sqlite3_value_bytes(argv[0]))});
+    CWalletTx* tx = new CWalletTx{deserialize, blob, {}};
+    Assert(tx);
+    sqlite3_result_int64(ctx, tx->nOrderPos);
 }
 
 template <typename T>
@@ -410,6 +440,11 @@ void SQLiteDatabase::Open(int additional_flags)
         SetPragma(m_db, "user_version", strprintf("%d", WALLET_SCHEMA_VERSION),
                   "Failed to set the wallet schema version");
     }
+
+    // Setup our application defined SQL functions
+    ret = sqlite3_create_function_v2(m_db, "record_type", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, &RecordKeyType, nullptr, nullptr, nullptr);
+    ret = sqlite3_create_function_v2(m_db, "wallet_tx_txid", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, &WalletTxTxid, nullptr, nullptr, nullptr);
+    ret = sqlite3_create_function_v2(m_db, "wallet_tx_order_pos", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, &WalletTxOrderPos, nullptr, nullptr, nullptr);
 }
 
 bool SQLiteDatabase::Rewrite()
