@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_SQLITE_H
 #define BITCOIN_WALLET_SQLITE_H
 
+#include <primitives/transaction_identifier.h>
 #include <sync.h>
 #include <wallet/db.h>
 
@@ -100,6 +101,7 @@ public:
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;
     std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) override;
+    std::unique_ptr<DatabaseCursor> GetNewTransactionsCursor() override;
     bool TxnBegin() override;
     bool TxnCommit() override;
     bool TxnAbort() override;

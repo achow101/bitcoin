@@ -7,6 +7,7 @@
 #define BITCOIN_WALLET_DB_H
 
 #include <clientversion.h>
+#include <primitives/transaction_identifier.h>
 #include <streams.h>
 #include <support/allocators/secure.h>
 #include <util/fs.h>
@@ -117,6 +118,7 @@ public:
 
     virtual std::unique_ptr<DatabaseCursor> GetNewCursor() = 0;
     virtual std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) = 0;
+    virtual std::unique_ptr<DatabaseCursor> GetNewTransactionsCursor() = 0;
     virtual bool TxnBegin() = 0;
     virtual bool TxnCommit() = 0;
     virtual bool TxnAbort() = 0;

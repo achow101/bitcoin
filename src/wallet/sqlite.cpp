@@ -729,6 +729,13 @@ std::unique_ptr<DatabaseCursor> SQLiteBatch::GetNewPrefixCursor(std::span<const 
     return std::make_unique<SQLiteCursor>(*m_database.m_db, stmt_text, start_range, end_range);
 }
 
+std::unique_ptr<DatabaseCursor> SQLiteBatch::GetNewTransactionsCursor()
+{
+    if (!m_database.m_db) return nullptr;
+    const char* stmt_text = "SELECT key, value FROM main WHERE record_type(key) = 'tx' ORDER BY wallet_tx_order_pos(value)";
+    return std::make_unique<SQLiteCursor>(*m_database.m_db, stmt_text);
+}
+
 bool SQLiteBatch::TxnBegin()
 {
     if (!m_database.m_db || m_txn) return false;
