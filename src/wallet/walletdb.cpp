@@ -478,22 +478,14 @@ struct LoadResult
 };
 
 using LoadFunc = std::function<DBErrors(CWallet* pwallet, DataStream& key, DataStream& value, std::string& err)>;
-static LoadResult LoadRecords(CWallet* pwallet, DatabaseBatch& batch, const std::string& key, DataStream& prefix, LoadFunc load_func)
+static LoadResult LoadRecords(CWallet* pwallet, DatabaseCursor& cursor, const std::string& key, LoadFunc load_func)
 {
     LoadResult result;
     DataStream ssKey;
     DataStream ssValue{};
 
-    Assume(!prefix.empty());
-    std::unique_ptr<DatabaseCursor> cursor = batch.GetNewPrefixCursor(prefix);
-    if (!cursor) {
-        pwallet->WalletLogPrintf("Error getting database cursor for '%s' records", key);
-        result.m_result = DBErrors::CORRUPT;
-        return result;
-    }
-
     while (true) {
-        DatabaseCursor::Status status = cursor->Next(ssKey, ssValue);
+        DatabaseCursor::Status status = cursor.Next(ssKey, ssValue);
         if (status == DatabaseCursor::Status::DONE) {
             break;
         } else if (status == DatabaseCursor::Status::FAIL) {
@@ -513,6 +505,18 @@ static LoadResult LoadRecords(CWallet* pwallet, DatabaseBatch& batch, const std:
         ++result.m_records;
     }
     return result;
+}
+
+static LoadResult LoadRecords(CWallet* pwallet, DatabaseBatch& batch, const std::string& key, DataStream& prefix, LoadFunc load_func)
+{
+    Assume(!prefix.empty());
+    std::unique_ptr<DatabaseCursor> cursor = batch.GetNewPrefixCursor(prefix);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for '%s' records", key);
+        return {.m_result = DBErrors::CORRUPT};
+    }
+
+    return LoadRecords(pwallet, *cursor, key, load_func);
 }
 
 static LoadResult LoadRecords(CWallet* pwallet, DatabaseBatch& batch, const std::string& key, LoadFunc load_func)
@@ -1031,15 +1035,16 @@ static std::map<Wtxid, CTransactionRef> ReadWtxVariants(DatabaseBatch& batch, co
     return variants;
 }
 
-static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static LoadResult LoadWalletTxs(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
-    AssertLockHeld(pwallet->cs_wallet);
-    DBErrors result = DBErrors::LOAD_OK;
+    std::unique_ptr<DatabaseCursor> cursor = batch.GetNewTransactionsCursor();
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for 'transactions' table");
+        return {.m_result = DBErrors::CORRUPT};
+    }
 
-    // Load tx record
-    any_unordered = false;
-    LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
-        [&any_unordered, &batch] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+    LoadResult tx_res = LoadRecords(pwallet, *cursor, DBKeys::TX,
+        [&batch] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
         DBErrors result = DBErrors::LOAD_OK;
         Txid hash;
         key >> hash;
@@ -1047,10 +1052,6 @@ static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_
             CWalletTx wtx{deserialize, value, ReadWtxVariants(batch, hash)};
             if (wtx.GetHash() != hash) {
                 result = std::max(result, DBErrors::NEED_RESCAN);
-            }
-
-            if (wtx.nOrderPos == -1) {
-                any_unordered = true;
             }
 
             if (!pwallet->LoadToWallet(std::move(wtx))) {
@@ -1063,7 +1064,50 @@ static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_
         }
         return result;
     });
-    result = std::max(result, tx_res.m_result);
+    return tx_res;
+}
+
+static DBErrors LoadTxRecords(CWallet* pwallet, DatabaseBatch& batch, bool& any_unordered) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+{
+    AssertLockHeld(pwallet->cs_wallet);
+    DBErrors result = DBErrors::LOAD_OK;
+
+    // Load tx record
+
+    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+        // Note that we do not need to handle or set any_unordered for this upgrade. All descriptor wallets will have tx records which have nOrderPos set.
+        LoadResult tx_table_res = LoadWalletTxs(pwallet, batch);
+        result = std::max(result, tx_table_res.m_result);
+    } else {
+        // Load the old way for legacy wallet migration
+        any_unordered = false;
+        LoadResult tx_res = LoadRecords(pwallet, batch, DBKeys::TX,
+            [&any_unordered, &batch] (CWallet* pwallet, DataStream& key, DataStream& value, std::string& err) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+            DBErrors result = DBErrors::LOAD_OK;
+            Txid hash;
+            key >> hash;
+            try {
+                CWalletTx wtx{deserialize, value, ReadWtxVariants(batch, hash)};
+                if (wtx.GetHash() != hash) {
+                    result = std::max(result, DBErrors::NEED_RESCAN);
+                }
+
+                if (wtx.nOrderPos == -1) {
+                    any_unordered = true;
+                }
+
+                if (!pwallet->LoadToWallet(std::move(wtx))) {
+                    err = "Error: Corrupt transaction found. This can be fixed by removing transactions from wallet and rescanning.";
+                    return DBErrors::CORRUPT;
+                }
+            } catch (const std::exception& e) {
+                err = strprintf("Error: Corrupt tx record found: %s" ,e.what());
+                return DBErrors::CORRUPT;
+            }
+            return result;
+        });
+        result = std::max(result, tx_res.m_result);
+    }
 
     // Load locked utxo record
     LoadResult locked_utxo_res = LoadRecords(pwallet, batch, DBKeys::LOCKED_UTXO,
