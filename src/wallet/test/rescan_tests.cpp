@@ -82,7 +82,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 
         {
             CBlockLocator locator;
-            BOOST_CHECK(WalletBatch{wallet.GetDatabase()}.ReadBestBlock(locator));
+            BOOST_CHECK(wallet.GetDatastore().ReadBestBlock(locator));
             BOOST_REQUIRE(!locator.IsNull());
             BOOST_CHECK(locator.vHave.front() == newTip->GetBlockHash());
         }
@@ -96,7 +96,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 
         {
             CBlockLocator locator;
-            BOOST_CHECK(WalletBatch{wallet.GetDatabase()}.ReadBestBlock(locator));
+            BOOST_CHECK(wallet.GetDatastore().ReadBestBlock(locator));
             BOOST_REQUIRE(!locator.IsNull());
             BOOST_CHECK(locator.vHave.front() == newTip->GetBlockHash());
         }
@@ -450,7 +450,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_no_progress_saved, TestChai
     // block record: it still points at the tip written when the descriptor
     // was added, not at any block the scan visited.
     CBlockLocator locator;
-    BOOST_CHECK(WalletBatch{wallet.GetDatabase()}.ReadBestBlock(locator));
+    BOOST_CHECK(wallet.GetDatastore().ReadBestBlock(locator));
     BOOST_CHECK(!locator.IsNull());
     BOOST_CHECK_EQUAL(locator.vHave.front(), tip_hash);
 }

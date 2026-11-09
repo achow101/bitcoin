@@ -26,7 +26,7 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Lo
     return std::unique_ptr<ExternalSignerScriptPubKeyMan>(new ExternalSignerScriptPubKeyMan(storage, id, descriptor, keypool_size, keys, ckeys));
 }
 
-std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::CreateNew(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, std::unique_ptr<Descriptor> desc)
+std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::CreateNew(WalletStorage& storage, int64_t keypool_size, std::unique_ptr<Descriptor> desc)
 {
     int64_t creation_time = GetTime();
 
@@ -40,14 +40,14 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Cr
     assert(storage.IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER));
 
     // Store the descriptor
-    if (!batch.WriteDescriptor(spkm->GetID(), spkm->m_wallet_descriptor)) {
+    if (!storage.GetDatastore().WriteDescriptor(spkm->GetID(), spkm->m_wallet_descriptor)) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor failed");
     }
 
     // TopUp
-    spkm->TopUpWithDB(batch);
+    spkm->TopUpWithDB();
 
-    storage.UnsetBlankWalletFlag(batch);
+    storage.UnsetBlankWalletFlag();
     return spkm;
 }
 

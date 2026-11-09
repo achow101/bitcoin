@@ -52,7 +52,7 @@ void CWalletTx::updateState(interfaces::Chain& chain)
     if (!isConfirmed()) RecomputeCanonical();
 }
 
-bool CWalletTx::Update(CTransactionRef new_tx, const TxState& new_state, WalletBatch& batch, bool metadata_changed)
+bool CWalletTx::Update(CTransactionRef new_tx, const TxState& new_state, WalletBatch& datastore, bool metadata_changed)
 {
     Assert(new_tx);
     if (!Assume(GetHash() == new_tx->GetHash())) {
@@ -60,7 +60,7 @@ bool CWalletTx::Update(CTransactionRef new_tx, const TxState& new_state, WalletB
     }
     const auto& [tx_pair, new_variant] = m_txs.emplace(new_tx->GetWitnessHash(), std::move(new_tx));
     if (new_variant) {
-        if (!batch.WriteWtxVariant(GetHash(), tx_pair->second)) {
+        if (!datastore.WriteWtxVariant(GetHash(), tx_pair->second)) {
             throw std::ios_base::failure("Unable to write wtxvariant record");
         }
     }
@@ -87,7 +87,7 @@ bool CWalletTx::Update(CTransactionRef new_tx, const TxState& new_state, WalletB
     }
 
     if (metadata_changed) {
-        if (!batch.WriteTxMetadata(*this)) {
+        if (!datastore.WriteTxMetadata(*this)) {
             throw std::ios_base::failure("Unable to write tx record");
         }
     }

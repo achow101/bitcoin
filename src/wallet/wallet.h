@@ -353,8 +353,7 @@ private:
     using TryUpdatingStateFn = std::function<TxUpdate(CWalletTx& wtx)>;
 
     /** Mark a transaction (and its in-wallet descendants) as a particular tx state. */
-    void RecursiveUpdateTxState(const Txid& tx_hash, const TryUpdatingStateFn& try_updating_state) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    void RecursiveUpdateTxState(WalletBatch* batch, const Txid& tx_hash, const TryUpdatingStateFn& try_updating_state) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void RecursiveUpdateTxState(const Txid& tx_hash, const TryUpdatingStateFn& try_updating_state, bool write = true) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** Mark a transaction's inputs dirty, thus forcing the outputs to be recomputed */
     void MarkInputsDirty(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -363,20 +362,20 @@ private:
      *  plus wtx itself. Sorted by the order in which they were inserted in the wallet (CWalletTx::nOrderPos) */
     std::set<CWalletTx*, WalletTxOrderComparator> GetMalleatedVariants(const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    void SyncMalleatedTxMetadata(WalletBatch& batch, const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SyncMalleatedTxMetadata(const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     bool SyncTransaction(const CTransactionRef& tx, const SyncTxState& state, bool rescanning_old_block = false) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** WalletFlags set on this wallet. */
     std::atomic<uint64_t> m_wallet_flags{0};
 
-    bool SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& strPurpose);
+    bool SetAddressBookWithDB(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& strPurpose);
 
     //! Unsets a wallet flag and saves it to disk
-    void UnsetWalletFlagWithDB(WalletBatch& batch, uint64_t flag);
+    void UnsetWalletFlagWithDB(uint64_t flag);
 
     //! Unset the blank wallet flag and saves it to disk
-    void UnsetBlankWalletFlag(WalletBatch& batch) override;
+    void UnsetBlankWalletFlag() override;
 
     /** Interface for accessing chain state. */
     interfaces::Chain* m_chain;
@@ -386,6 +385,7 @@ private:
 
     /** Internal database handle. */
     std::unique_ptr<WalletDatabase> m_database;
+    std::unique_ptr<WalletBatch> m_datastore;
 
     std::unique_ptr<ChainScanner> m_scanner;
 
@@ -417,10 +417,10 @@ private:
     void AddScriptPubKeyMan(const uint256& id, std::unique_ptr<ScriptPubKeyMan> spkm_man);
 
     // Same as 'AddActiveScriptPubKeyMan' but designed for use within a batch transaction context
-    void AddActiveScriptPubKeyManWithDb(WalletBatch& batch, uint256 id, OutputType type, bool internal);
+    void AddActiveScriptPubKeyManWithDb(uint256 id, OutputType type, bool internal);
 
     /** Store wallet flags */
-    void SetWalletFlagWithDB(WalletBatch& batch, uint64_t flags);
+    void SetWalletFlagWithDB(uint64_t flags);
 
     //! Cache of descriptor ScriptPubKeys used for IsMine. Maps ScriptPubKey to set of spkms
     std::unordered_map<CScript, std::vector<ScriptPubKeyMan*>, SaltedSipHasher> m_cached_spks;
@@ -453,10 +453,10 @@ public:
      */
     mutable RecursiveMutex cs_wallet;
 
-    WalletDatabase& GetDatabase() const override
+    WalletBatch& GetDatastore() const override
     {
-        assert(static_cast<bool>(m_database));
-        return *m_database;
+        Assert(m_datastore);
+        return *m_datastore;
     }
 
     /** Get a name for this wallet for logging/debugging purposes.
@@ -549,7 +549,7 @@ public:
 
     // Whether this or any known scriptPubKey with the same single key has been spent.
     bool IsSpentKey(const CScript& scriptPubKey) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    void SetSpentKeyState(WalletBatch& batch, const Txid& hash, unsigned int n, bool used, std::set<CTxDestination>& tx_destinations) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetSpentKeyState(const Txid& hash, unsigned int n, bool used, std::set<CTxDestination>& tx_destinations) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** Display address on an external signer. */
     util::Result<void> DisplayAddress(const CTxDestination& dest) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -590,7 +590,7 @@ public:
      * Increment the next transaction order id
      * @return next transaction order id
      */
-    std::optional<int64_t> IncOrderPosNext(WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::optional<int64_t> IncOrderPosNext() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     DBErrors ReorderTransactions();
 
     void MarkDirty();
@@ -787,14 +787,14 @@ public:
     bool SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& purpose);
 
     bool DelAddressBook(const CTxDestination& address);
-    bool DelAddressBookWithDB(WalletBatch& batch, const CTxDestination& address);
+    bool DelAddressBookWithDB(const CTxDestination& address);
 
     bool IsAddressPreviouslySpent(const CTxDestination& dest) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    bool SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination& dest, bool used) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool SetAddressPreviouslySpent(const CTxDestination& dest, bool used) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     std::vector<std::string> GetAddressReceiveRequests() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    bool SetAddressReceiveRequest(WalletBatch& batch, const CTxDestination& dest, const std::string& id, const std::string& value) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    bool EraseAddressReceiveRequest(WalletBatch& batch, const CTxDestination& dest, const std::string& id) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool SetAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& value) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     unsigned int GetKeyPoolSize() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
@@ -1006,13 +1006,13 @@ public:
     void DeactivateScriptPubKeyMan(uint256 id, OutputType type, bool internal);
 
     //! Create new DescriptorScriptPubKeyMan and add it to the wallet
-    DescriptorScriptPubKeyMan& SetupDescriptorScriptPubKeyMan(WalletBatch& batch, const CExtKey& master_key, const OutputType& output_type, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    DescriptorScriptPubKeyMan& SetupDescriptorScriptPubKeyMan(const CExtKey& master_key, const OutputType& output_type, bool internal) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     //! Create new DescriptorScriptPubKeyMans and add them to the wallet
-    void SetupDescriptorScriptPubKeyMans(WalletBatch& batch, const CExtKey& master_key) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetupDescriptorScriptPubKeyMans(const CExtKey& master_key) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void SetupDescriptorScriptPubKeyMans() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Create new seed and default DescriptorScriptPubKeyMans for this wallet
-    void SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void SetupOwnDescriptorScriptPubKeyMans() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Setup new descriptors or seed for new address generation
     void SetupWalletGeneration() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -1049,7 +1049,7 @@ public:
 
     //! Adds the ScriptPubKeyMans from MigrationData to this wallet, removes the LegacyDataSPKM,
     //! and moves transaction and address book entries to watchonly_wallet or solvable_wallet as needed.
-    util::Result<void> ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    util::Result<void> ApplyMigrationData(MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     //! Whether the (external) signer performs R-value signature grinding
     bool CanGrindR() const;

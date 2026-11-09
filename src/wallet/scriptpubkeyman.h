@@ -46,9 +46,9 @@ class WalletStorage
 public:
     virtual ~WalletStorage() = default;
     virtual std::string LogName() const = 0;
-    virtual WalletDatabase& GetDatabase() const = 0;
+    virtual WalletBatch& GetDatastore() const = 0;
     virtual bool IsWalletFlagSet(uint64_t) const = 0;
-    virtual void UnsetBlankWalletFlag(WalletBatch&) = 0;
+    virtual void UnsetBlankWalletFlag() = 0;
     //! Pass the encryption key to cb().
     virtual bool WithEncryptionKey(std::function<bool (const CKeyingMaterial&)> cb) const = 0;
     virtual bool HasEncryptionKeys() const = 0;
@@ -90,7 +90,7 @@ public:
     //! Check that the given decryption key is valid for this ScriptPubKeyMan, i.e. it decrypts all of the keys handled by it.
     virtual bool CheckDecryptionKey(const CKeyingMaterial& master_key) { return false; }
     //! Encrypt keys and write them to a batch with an active transaction. Update in-memory keys only after the transaction commits.
-    virtual bool Encrypt(const CKeyingMaterial& master_key, WalletBatch* batch) { return false; }
+    virtual bool Encrypt(const CKeyingMaterial& master_key) { return false; }
 
     virtual util::Result<CTxDestination> GetReservedDestination(const OutputType type, bool internal, int64_t& index) { return util::Error{Untranslated("Not supported")}; }
     virtual void KeepDestination(int64_t index, const OutputType& type) {}
@@ -302,7 +302,7 @@ private:
 
     const uint256 m_id;
 
-    bool AddDescriptorKeyWithDB(WalletBatch& batch, const CKey& key, const CPubKey &pubkey) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
+    bool AddDescriptorKeyWithDB(const CKey& key, const CPubKey &pubkey) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
     KeyMap GetKeys() const EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
@@ -315,7 +315,7 @@ private:
 
     void Load();
 
-    void UpdateWithSigningProvider(WalletBatch& batch, const FlatSigningProvider& signing_provider) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
+    void UpdateWithSigningProvider(const FlatSigningProvider& signing_provider) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
 protected:
     //! Create a DescriptorScriptPubKeyMan from existing data (i.e. during loading)
@@ -335,13 +335,13 @@ protected:
     void SetRangeEnd(int32_t end) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
     //! Same as 'TopUp' but designed for use within a batch transaction context
-    bool TopUpWithDB(WalletBatch& batch, unsigned int size = 0);
+    bool TopUpWithDB(unsigned int size = 0);
 
 public:
     static std::unique_ptr<DescriptorScriptPubKeyMan> LoadFromStorage(WalletStorage& storage, const uint256& id, WalletDescriptor& descriptor, int64_t keypool_size, const KeyMap& keys, const CryptedKeyMap& ckeys);
     static std::unique_ptr<DescriptorScriptPubKeyMan> CreateFromImport(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider);
-    static std::unique_ptr<DescriptorScriptPubKeyMan> CreateFromMigration(WalletStorage& storage, WalletBatch& batch, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider);
-    static std::unique_ptr<DescriptorScriptPubKeyMan> GenerateNewSingleSig(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal);
+    static std::unique_ptr<DescriptorScriptPubKeyMan> CreateFromMigration(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider);
+    static std::unique_ptr<DescriptorScriptPubKeyMan> GenerateNewSingleSig(WalletStorage& storage, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal);
 
     mutable RecursiveMutex cs_desc_man;
 
@@ -349,7 +349,7 @@ public:
     bool IsMine(const CScript& script) const override;
 
     bool CheckDecryptionKey(const CKeyingMaterial& master_key) override;
-    bool Encrypt(const CKeyingMaterial& master_key, WalletBatch* batch) override;
+    bool Encrypt(const CKeyingMaterial& master_key) override;
 
     util::Result<CTxDestination> GetReservedDestination(OutputType type, bool internal, int64_t& index) override;
     void ReturnDestination(int64_t index, bool internal, const CTxDestination& addr) override;

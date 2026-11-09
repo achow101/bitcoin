@@ -81,7 +81,7 @@ static void WalletShowInfo(CWallet* wallet_instance)
 
     tfm::format(std::cout, "Wallet info\n===========\n");
     tfm::format(std::cout, "Name: %s\n", wallet_instance->GetName());
-    tfm::format(std::cout, "Format: %s\n", wallet_instance->GetDatabase().Format());
+    tfm::format(std::cout, "Format: %s\n", wallet_instance->GetDatastore().Format());
     tfm::format(std::cout, "Descriptors: %s\n", wallet_instance->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) ? "yes" : "no");
     tfm::format(std::cout, "Encrypted: %s\n", wallet_instance->HasEncryptionKeys() ? "yes" : "no");
     tfm::format(std::cout, "HD (hd seed available): %s\n", wallet_instance->IsHDEnabled() ? "yes" : "no");

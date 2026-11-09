@@ -457,7 +457,7 @@ static DBErrors LoadWalletFlags(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
         }
         // All wallets must be descriptor wallets unless opened with a bdb_ro db
         // bdb_ro is only used for legacy to descriptor migration.
-        if (pwallet->GetDatabase().Format() != "bdb_ro" && !pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+        if (pwallet->GetDatastore().Format() != "bdb_ro" && !pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
             return DBErrors::LEGACY_WALLET;
         }
     }
@@ -1263,35 +1263,29 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
     return result;
 }
 
-static bool RunWithinTxn(WalletBatch& batch, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func)
+bool RunWithinTxn(WalletBatch& datastore, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func)
 {
-    if (!batch.TxnBegin()) {
+    if (!datastore.TxnBegin()) {
         LogDebug(BCLog::WALLETDB, "Error: cannot create db txn for %s\n", process_desc);
         return false;
     }
 
     // Run procedure
-    if (!func(batch)) {
+    if (!func(datastore)) {
         LogDebug(BCLog::WALLETDB, "Error: %s failed\n", process_desc);
         // Transaction abort failure will be handled by destructors when the WalletBatch goes out of scope
-        (void)batch.TxnAbort();
+        (void)datastore.TxnAbort();
         return false;
     }
 
-    if (!batch.TxnCommit()) {
+    if (!datastore.TxnCommit()) {
         LogDebug(BCLog::WALLETDB, "Error: cannot commit db txn for %s\n", process_desc);
-        batch.TxnAbort();
+        (void)datastore.TxnAbort();
         return false;
     }
 
     // All good
     return true;
-}
-
-bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func)
-{
-    WalletBatch batch(database);
-    return RunWithinTxn(batch, process_desc, func);
 }
 
 bool WalletBatch::WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent)

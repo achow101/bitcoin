@@ -323,7 +323,7 @@ private:
  * @param func The function to be executed within the db txn context. It returns a boolean indicating whether to commit or roll back the txn.
  * @return true if the db txn executed successfully, false otherwise.
  */
-bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
+bool RunWithinTxn(WalletBatch& datastore, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 bool LoadCryptedKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);

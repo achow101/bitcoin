@@ -97,7 +97,7 @@ static RPCMethod getwalletinfo()
     size_t kpExternalSize = pwallet->KeypoolCountExternalKeys();
     obj.pushKV("walletname", pwallet->GetName());
     obj.pushKV("walletversion", latest_legacy_wallet_minversion);
-    obj.pushKV("format", pwallet->GetDatabase().Format());
+    obj.pushKV("format", pwallet->GetDatastore().Format());
     obj.pushKV("txcount", pwallet->mapWallet.size());
     obj.pushKV("keypoolsize", kpExternalSize);
     obj.pushKV("keypoolsize_hd_internal", pwallet->GetKeyPoolSize() - kpExternalSize);
@@ -810,11 +810,10 @@ static RPCMethod createwalletdescriptor()
             CExtKey active_hdkey(xpub, *key);
 
             std::vector<std::reference_wrapper<DescriptorScriptPubKeyMan>> spkms;
-            WalletBatch batch{pwallet->GetDatabase()};
             for (bool internal : internals) {
                 WalletDescriptor w_desc = GenerateWalletDescriptor(xpub, *output_type, internal);
                 if (!pwallet->GetDescriptorScriptPubKeyMan(w_desc)) {
-                    spkms.emplace_back(pwallet->SetupDescriptorScriptPubKeyMan(batch, active_hdkey, *output_type, internal));
+                    spkms.emplace_back(pwallet->SetupDescriptorScriptPubKeyMan(active_hdkey, *output_type, internal));
                 }
             }
             if (spkms.empty()) {

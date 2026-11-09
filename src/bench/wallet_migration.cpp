@@ -62,20 +62,19 @@ static void WalletMigration(benchmark::Bench& bench)
             // Setup legacy wallet
             wallet = std::make_unique<CWallet>(test_setup->m_node.chain.get(), std::string(i++, 'A'), CreateMockableWalletDatabase());
             LegacyDataSPKM* legacy_spkm = wallet->GetOrCreateLegacyDataSPKM();
-            WalletBatch batch{wallet->GetDatabase()};
 
             LOCK(wallet->cs_wallet);
 
             // Write a best block record as migration expects one to exist
             CBlockLocator loc;
-            (void)batch.WriteBestBlock(loc);
+            (void)wallet->GetDatastore().WriteBestBlock(loc);
 
             // Add watch-only addresses
             for (size_t w = 0; w < scripts_watch_only.size(); ++w) {
                 const auto& [script, dest] = scripts_watch_only.at(w);
                 assert(legacy_spkm->LoadWatchOnly(script));
                 assert(wallet->SetAddressBook(dest, strprintf("watch_%d", w), /*purpose=*/std::nullopt));
-                (void)batch.WriteWatchOnly(script, CKeyMetadata());
+                (void)wallet->GetDatastore().WriteWatchOnly(script, CKeyMetadata());
             }
 
             // Generate transactions and local addresses
@@ -94,7 +93,7 @@ static void WalletMigration(benchmark::Bench& bench)
                 mtx.vin.emplace_back(COutPoint(Txid::FromUint256(uint256{uint8_t(j + 1)}), 0));
                 mtx.vin.emplace_back(COutPoint(Txid::FromUint256(uint256{uint8_t(j + 1)}), 1));
                 wallet->AddToWallet(MakeTransactionRef(mtx), TxStateInactive{}, /*update_wtx=*/nullptr, /*rescanning_old_block=*/true);
-                (void)batch.WriteKey(pubkey, key.GetPrivKey(), CKeyMetadata());
+                (void)wallet->GetDatastore().WriteKey(pubkey, key.GetPrivKey(), CKeyMetadata());
             }
         })
         .run([&] {

@@ -222,7 +222,6 @@ bool LegacyDataSPKM::CheckDecryptionKey(const CKeyingMaterial& master_key)
         bool keyPass = mapCryptedKeys.empty(); // Always pass when there are no encrypted keys
         bool keyFail = false;
         CryptedKeyMap::const_iterator mi = mapCryptedKeys.begin();
-        WalletBatch batch(m_storage.GetDatabase());
         for (; mi != mapCryptedKeys.end(); ++mi)
         {
             const CPubKey &vchPubKey = (*mi).second.first;
@@ -239,7 +238,7 @@ bool LegacyDataSPKM::CheckDecryptionKey(const CKeyingMaterial& master_key)
             else {
                 // Rewrite these encrypted keys with checksums
                 // Write failure is ok, the wallet will redo this on next load but no data is missing from disk
-                (void)batch.WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
+                (void)m_storage.GetDatastore().WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
             }
         }
         if (keyPass && keyFail)
@@ -572,8 +571,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
         keyid_it++;
     }
 
-    WalletBatch batch(m_storage.GetDatabase());
-    if (!batch.TxnBegin()) {
+    if (!m_storage.GetDatastore().TxnBegin()) {
         LogWarning("Error generating descriptors for migration, cannot initialize db transaction");
         return std::nullopt;
     }
@@ -608,7 +606,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
 
         // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
         provider.keys.emplace(key.GetPubKey().GetID(), key);
-        auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, provider);
+        auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, w_desc, /*keypool_size=*/0, provider);
         auto desc_spks = desc_spk_man->GetScriptPubKeys();
 
         // Remove the scriptPubKeys from our current set
@@ -665,7 +663,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
 
             // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
             provider.keys.emplace(master_key.key.GetPubKey().GetID(), master_key.key);
-            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, provider);
+            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, w_desc, /*keypool_size=*/0, provider);
             auto desc_spks = desc_spk_man->GetScriptPubKeys();
 
             // Remove the scriptPubKeys from our current set
@@ -746,7 +744,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
                 keys.keys.emplace(key.GetPubKey().GetID(), key);
             }
             WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
-            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, keys);
+            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, w_desc, /*keypool_size=*/0, keys);
             auto desc_spks_set = desc_spk_man->GetScriptPubKeys();
             desc_spks.insert(desc_spks.end(), desc_spks_set.begin(), desc_spks_set.end());
 
@@ -817,7 +815,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
     }
 
     // Finalize transaction
-    if (!batch.TxnCommit()) {
+    if (!m_storage.GetDatastore().TxnCommit()) {
         LogWarning("Error generating descriptors for migration, cannot commit db transaction");
         return std::nullopt;
     }
@@ -829,16 +827,15 @@ std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFrom
 {
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, descriptor, keypool_size));
     LOCK(spkm->cs_desc_man);
-    WalletBatch batch(storage.GetDatabase());
-    spkm->UpdateWithSigningProvider(batch, provider);
+    spkm->UpdateWithSigningProvider(provider);
     return spkm;
 }
 
-std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromMigration(WalletStorage& storage, WalletBatch& batch, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
+std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::CreateFromMigration(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size, const FlatSigningProvider& provider)
 {
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, descriptor, keypool_size));
     LOCK(spkm->cs_desc_man);
-    spkm->UpdateWithSigningProvider(batch, provider);
+    spkm->UpdateWithSigningProvider(provider);
     return spkm;
 }
 
@@ -861,7 +858,7 @@ std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::LoadFromSt
     return std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, id, descriptor, keypool_size, keys, ckeys));
 }
 
-std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNewSingleSig(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal)
+std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNewSingleSig(WalletStorage& storage, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal)
 {
     WalletDescriptor desc = GenerateWalletDescriptor(master_key.Neuter(), addr_type, internal);
 
@@ -871,10 +868,10 @@ std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNe
     Assert(spkm->m_storage.IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
 
     // Store the master private key, and descriptor
-    if (!spkm->AddDescriptorKeyWithDB(batch, master_key.key, master_key.key.GetPubKey())) {
+    if (!spkm->AddDescriptorKeyWithDB(master_key.key, master_key.key.GetPubKey())) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor master private key failed");
     }
-    if (!batch.WriteDescriptor(spkm->GetID(), spkm->m_wallet_descriptor)) {
+    if (!storage.GetDatastore().WriteDescriptor(spkm->GetID(), spkm->m_wallet_descriptor)) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor failed");
     }
 
@@ -884,9 +881,9 @@ std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNe
     }
 
     // TopUp
-    spkm->TopUpWithDB(batch);
+    spkm->TopUpWithDB();
 
-    spkm->m_storage.UnsetBlankWalletFlag(batch);
+    spkm->m_storage.UnsetBlankWalletFlag();
     return spkm;
 }
 
@@ -960,7 +957,7 @@ util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetNewDestination(const 
             return util::Error{_("Error: Cannot extract destination from the generated scriptpubkey")}; // shouldn't happen
         }
         IncIndex();
-        if (!WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor)) {
+        if (!m_storage.GetDatastore().WriteDescriptor(GetID(), m_wallet_descriptor)) {
             DecIndex();
             return util::Error{_("Error: Unable to update database with new address")};
         }
@@ -1006,7 +1003,7 @@ bool DescriptorScriptPubKeyMan::CheckDecryptionKey(const CKeyingMaterial& master
     return true;
 }
 
-bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, WalletBatch* batch)
+bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key)
 {
     LOCK(cs_desc_man);
     if (!m_map_crypted_keys.empty()) {
@@ -1023,13 +1020,13 @@ bool DescriptorScriptPubKeyMan::Encrypt(const CKeyingMaterial& master_key, Walle
         if (!EncryptSecret(master_key, secret, pubkey.GetHash(), crypted_secret)) {
             return false;
         }
-        if (!batch->WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret)) {
+        if (!m_storage.GetDatastore().WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret)) {
             return false;
         }
         crypted_keys[pubkey.GetID()] = make_pair(pubkey, std::move(crypted_secret));
     }
 
-    batch->RegisterTxnListener({
+    m_storage.GetDatastore().RegisterTxnListener({
         .on_commit = [this, keys = std::move(crypted_keys)]() mutable {
             LOCK(cs_desc_man);
             m_map_crypted_keys = std::move(keys);
@@ -1054,7 +1051,7 @@ void DescriptorScriptPubKeyMan::ReturnDestination(int64_t index, bool internal, 
     if (m_wallet_descriptor.GetNext() - 1 == index) {
         DecIndex();
     }
-    (void)WalletBatch(m_storage.GetDatabase()).WriteDescriptor(GetID(), m_wallet_descriptor);
+    (void)m_storage.GetDatastore().WriteDescriptor(GetID(), m_wallet_descriptor);
 }
 
 std::map<CKeyID, CKey> DescriptorScriptPubKeyMan::GetKeys() const
@@ -1108,14 +1105,13 @@ std::optional<CKey> DescriptorScriptPubKeyMan::GetKey(const CKeyID& keyid) const
 
 bool DescriptorScriptPubKeyMan::TopUp(unsigned int size)
 {
-    WalletBatch batch(m_storage.GetDatabase());
-    if (!batch.TxnBegin()) return false;
-    bool res = TopUpWithDB(batch, size);
-    if (!batch.TxnCommit()) throw std::runtime_error(strprintf("Error during descriptors keypool top up. Cannot commit changes for wallet [%s]", m_storage.LogName()));
+    if (!m_storage.GetDatastore().TxnBegin()) return false;
+    bool res = TopUpWithDB(size);
+    if (!m_storage.GetDatastore().TxnCommit()) throw std::runtime_error(strprintf("Error during descriptors keypool top up. Cannot commit changes for wallet [%s]", m_storage.LogName()));
     return res;
 }
 
-bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int size)
+bool DescriptorScriptPubKeyMan::TopUpWithDB(unsigned int size)
 {
     LOCK(cs_desc_man);
     std::set<CScript> new_spks;
@@ -1168,13 +1164,13 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
         }
         // Merge and write the cache
         DescriptorCache new_items = m_wallet_descriptor.cache.MergeAndDiff(temp_cache);
-        if (!batch.WriteDescriptorCacheItems(id, new_items)) {
+        if (!m_storage.GetDatastore().WriteDescriptorCacheItems(id, new_items)) {
             throw std::runtime_error(std::string(__func__) + ": writing cache items failed");
         }
         m_max_cached_index++;
     }
     SetRangeEnd(new_range_end);
-    if (!batch.WriteDescriptor(GetID(), m_wallet_descriptor)) {
+    if (!m_storage.GetDatastore().WriteDescriptor(GetID(), m_wallet_descriptor)) {
         throw std::runtime_error(std::string(__func__) + ": updating descriptor failed");
     }
 
@@ -1213,7 +1209,7 @@ std::vector<WalletDestination> DescriptorScriptPubKeyMan::MarkUnusedAddresses(co
     return result;
 }
 
-bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, const CKey& key, const CPubKey &pubkey)
+bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(const CKey& key, const CPubKey &pubkey)
 {
     AssertLockHeld(cs_desc_man);
     assert(!m_storage.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
@@ -1237,12 +1233,12 @@ bool DescriptorScriptPubKeyMan::AddDescriptorKeyWithDB(WalletBatch& batch, const
             return false;
         }
 
-        if (!batch.WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret)) {
+        if (!m_storage.GetDatastore().WriteCryptedDescriptorKey(GetID(), pubkey, crypted_secret)) {
             return false;
         }
         m_map_crypted_keys[pubkey.GetID()] = make_pair(pubkey, std::move(crypted_secret));
     } else {
-        if (!batch.WriteDescriptorKey(GetID(), pubkey, key.GetPrivKey())) {
+        if (!m_storage.GetDatastore().WriteDescriptorKey(GetID(), pubkey, key.GetPrivKey())) {
             return false;
         }
         m_map_keys[pubkey.GetID()] = key;
@@ -1557,8 +1553,7 @@ bool DescriptorScriptPubKeyMan::HasWalletDescriptor(const WalletDescriptor& desc
 void DescriptorScriptPubKeyMan::WriteDescriptor()
 {
     LOCK(cs_desc_man);
-    WalletBatch batch(m_storage.GetDatabase());
-    if (!batch.WriteDescriptor(GetID(), m_wallet_descriptor)) {
+    if (!m_storage.GetDatastore().WriteDescriptor(GetID(), m_wallet_descriptor)) {
         throw std::runtime_error(std::string(__func__) + ": writing descriptor failed");
     }
 }
@@ -1631,7 +1626,7 @@ void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()
 
     // Cache the last hardened xpubs
     DescriptorCache diff = m_wallet_descriptor.cache.MergeAndDiff(temp_cache);
-    if (!WalletBatch(m_storage.GetDatabase()).WriteDescriptorCacheItems(GetID(), diff)) {
+    if (!m_storage.GetDatastore().WriteDescriptorCacheItems(GetID(), diff)) {
         throw std::runtime_error(std::string(__func__) + ": writing cache items failed");
     }
 }
@@ -1649,25 +1644,24 @@ util::Result<void> DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescr
     m_max_cached_index = -1;
     m_wallet_descriptor.UpdateFrom(descriptor);
 
-    WalletBatch batch(m_storage.GetDatabase());
-    UpdateWithSigningProvider(batch, provider);
+    UpdateWithSigningProvider(provider);
     NotifyFirstKeyTimeChanged(this, m_wallet_descriptor.creation_time);
     return {};
 }
 
-void DescriptorScriptPubKeyMan::UpdateWithSigningProvider(WalletBatch& batch, const FlatSigningProvider& signing_provider)
+void DescriptorScriptPubKeyMan::UpdateWithSigningProvider(const FlatSigningProvider& signing_provider)
 {
     AssertLockHeld(cs_desc_man);
     // Add the private keys to the descriptor
     for (const auto& entry : signing_provider.keys) {
         const CKey& key = entry.second;
-        if (!AddDescriptorKeyWithDB(batch, key, key.GetPubKey())) {
+        if (!AddDescriptorKeyWithDB(key, key.GetPubKey())) {
             throw std::runtime_error(std::string(__func__) + ": writing descriptor private key failed");
         }
     }
 
     // Top up key pool, to generate scriptPubKeys
-    if (!TopUpWithDB(batch)) {
+    if (!TopUpWithDB()) {
         throw std::runtime_error("Could not top up scriptPubKeys");
     }
 }

@@ -240,9 +240,8 @@ public:
         // - Multiple requests can be stored for the same address, but it might
         //   be better to only allow one request or only keep the current one.
         LOCK(m_wallet->cs_wallet);
-        WalletBatch batch{m_wallet->GetDatabase()};
-        return value.empty() ? m_wallet->EraseAddressReceiveRequest(batch, dest, id)
-                             : m_wallet->SetAddressReceiveRequest(batch, dest, id, value);
+        return value.empty() ? m_wallet->EraseAddressReceiveRequest(dest, id)
+                             : m_wallet->SetAddressReceiveRequest(dest, id, value);
     }
     util::Result<void> displayAddress(const CTxDestination& dest) override
     {
