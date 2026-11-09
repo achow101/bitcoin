@@ -205,7 +205,6 @@ bool LegacyDataSPKM::CheckDecryptionKey(const CKeyingMaterial& master_key)
         bool keyPass = mapCryptedKeys.empty(); // Always pass when there are no encrypted keys
         bool keyFail = false;
         CryptedKeyMap::const_iterator mi = mapCryptedKeys.begin();
-        WalletBatch batch(m_storage.GetDatabase());
         for (; mi != mapCryptedKeys.end(); ++mi)
         {
             const CPubKey &vchPubKey = (*mi).second.first;
@@ -221,7 +220,7 @@ bool LegacyDataSPKM::CheckDecryptionKey(const CKeyingMaterial& master_key)
                 break;
             else {
                 // Rewrite these encrypted keys with checksums
-                (void)batch.WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
+                (void)m_storage.GetDatastore().WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
             }
         }
         if (keyPass && keyFail)
@@ -554,8 +553,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
         keyid_it++;
     }
 
-    WalletBatch batch(m_storage.GetDatabase());
-    if (!batch.TxnBegin()) {
+    if (!m_storage.GetDatastore().TxnBegin()) {
         LogWarning("Error generating descriptors for migration, cannot initialize db transaction");
         return std::nullopt;
     }
@@ -590,7 +588,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
 
         // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
         provider.keys.emplace(key.GetPubKey().GetID(), key);
-        auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, provider);
+        auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, w_desc, /*keypool_size=*/0, provider);
         auto desc_spks = desc_spk_man->GetScriptPubKeys();
 
         // Remove the scriptPubKeys from our current set
@@ -647,7 +645,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
 
             // Make the DescriptorScriptPubKeyMan and get the scriptPubKeys
             provider.keys.emplace(master_key.key.GetPubKey().GetID(), master_key.key);
-            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, provider);
+            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, w_desc, /*keypool_size=*/0, provider);
             auto desc_spks = desc_spk_man->GetScriptPubKeys();
 
             // Remove the scriptPubKeys from our current set
@@ -728,7 +726,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
                 keys.keys.emplace(key.GetPubKey().GetID(), key);
             }
             WalletDescriptor w_desc(std::move(desc), creation_time, 0, 0, 0);
-            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, batch, w_desc, /*keypool_size=*/0, keys);
+            auto desc_spk_man = DescriptorScriptPubKeyMan::CreateFromMigration(m_storage, w_desc, /*keypool_size=*/0, keys);
             auto desc_spks_set = desc_spk_man->GetScriptPubKeys();
             desc_spks.insert(desc_spks.end(), desc_spks_set.begin(), desc_spks_set.end());
 
@@ -799,7 +797,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
     }
 
     // Finalize transaction
-    if (!batch.TxnCommit()) {
+    if (!m_storage.GetDatastore().TxnCommit()) {
         LogWarning("Error generating descriptors for migration, cannot commit db transaction");
         return std::nullopt;
     }

@@ -136,26 +136,23 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
         }
 
         {
-            // Make a WalletBatch for the watchonly wallet so that everything else can be written atomically
-            WalletBatch watchonly_batch(watchonly_wallet->GetDatabase());
-            if (!watchonly_batch.TxnBegin()) {
+            if (!watchonly_wallet->GetDatastore().TxnBegin()) {
                 return util::Error{strprintf(_("Error: database transaction cannot be executed for new watchonly wallet %s"), watchonly_wallet->GetName())};
             }
 
             // Copy orderPosNext
-            if (!watchonly_batch.WriteOrderPosNext(wallet.nOrderPosNext)) {
+            if (!watchonly_wallet->GetDatastore().WriteOrderPosNext(wallet.nOrderPosNext)) {
                 return util::Error{_("Error: Unable to write the next transaction order position record")};
             }
 
             // Write the best block locator to avoid rescanning on reload
             CBlockLocator best_block_locator;
             {
-                WalletBatch local_wallet_batch(wallet.GetDatabase());
-                if (!local_wallet_batch.ReadBestBlock(best_block_locator)) {
+                if (!wallet.GetDatastore().ReadBestBlock(best_block_locator)) {
                     return util::Error{_("Error: Unable to read wallet's best block locator record")};
                 }
             }
-            if (!watchonly_batch.WriteBestBlock(best_block_locator)) {
+            if (!watchonly_wallet->GetDatastore().WriteBestBlock(best_block_locator)) {
                 return util::Error{_("Error: Unable to write watchonly wallet best block locator record")};
             }
 
@@ -167,7 +164,7 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
                 if (!watchonly_wallet->LoadToWallet(std::move(copy_wtx))) {
                     return util::Error{strprintf(_("Error: Could not add tx %s to watchonly wallet"), txid.GetHex())};
                 }
-                if (!watchonly_batch.WriteFullTx(watchonly_wallet->mapWallet.at(txid))) {
+                if (!watchonly_wallet->GetDatastore().WriteFullTx(watchonly_wallet->mapWallet.at(txid))) {
                     return util::Error{_("Error: Unable to write the a tx record")};
                 }
             }
@@ -176,28 +173,28 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
             for (const auto& [dest, entry] : wallet.m_address_book) {
                 auto address{EncodeDestination(dest)};
                 if (entry.purpose) {
-                    if (!watchonly_batch.WritePurpose(address, PurposeToString(*entry.purpose))) {
+                    if (!watchonly_wallet->GetDatastore().WritePurpose(address, PurposeToString(*entry.purpose))) {
                         return util::Error{_("Error: Unable to write address purpose record")};
                     }
                 }
                 if (entry.label) {
-                    if (!watchonly_batch.WriteName(address, *entry.label)) {
+                    if (!watchonly_wallet->GetDatastore().WriteName(address, *entry.label)) {
                         return util::Error{_("Error: Unable to write address label record")};
                     }
                 }
                 for (const auto& [id, request] : entry.receive_requests) {
-                    if (!watchonly_batch.WriteAddressReceiveRequest(dest, id, request)) {
+                    if (!watchonly_wallet->GetDatastore().WriteAddressReceiveRequest(dest, id, request)) {
                         return util::Error{_("Error: Unable to write receive request record")};
                     }
                 }
                 if (entry.previously_spent) {
-                    if (!watchonly_batch.WriteAddressPreviouslySpent(dest, true)) {
+                    if (!watchonly_wallet->GetDatastore().WriteAddressPreviouslySpent(dest, true)) {
                         return util::Error{_("Error: Unable to write previously spent record")};
                     }
                 }
             }
 
-            if (!watchonly_batch.TxnCommit()) {
+            if (!watchonly_wallet->GetDatastore().TxnCommit()) {
                 return util::Error{_("Error: cannot commit db transaction for watchonly wallet export")};
             }
         }

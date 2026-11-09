@@ -32,7 +32,7 @@ public:
 
     //! Adds the ScriptPubKeyMans from MigrationData to this wallet, removes the LegacyDataSPKM,
     //! and moves transaction and address book entries to watchonly_wallet or solvable_wallet as needed.
-    util::Result<void> ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    util::Result<void> ApplyMigrationData(MigrationData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     DBErrors ReorderTransactions();
 };

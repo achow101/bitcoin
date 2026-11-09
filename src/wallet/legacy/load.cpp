@@ -549,7 +549,7 @@ static DBErrors LoadWalletFromBDBRO(LegacyWallet* pwallet) EXCLUSIVE_LOCKS_REQUI
     DBErrors result = DBErrors::LOAD_OK;
     bool any_unordered = false;
 
-    std::unique_ptr<DatabaseBatch> batch = pwallet->GetDatabase().MakeBatch();
+    std::unique_ptr<DatabaseBatch> batch = pwallet->GetDatastore().GetDatabase().MakeBatch();
     if (!batch) {
         pwallet->WalletLogPrintf("Migration: Unable to create BerkeleyROBatch");
         return DBErrors::CORRUPT;
@@ -600,7 +600,7 @@ static DBErrors PopulateWalletFromBDBRO(LegacyWallet *pwallet, bilingual_str& er
 
     DBErrors nLoadWalletRet = LoadWalletFromBDBRO(pwallet);
 
-    const auto wallet_file = pwallet->GetDatabase().Filename();
+    const auto wallet_file = pwallet->GetDatastore().Filename();
     switch (nLoadWalletRet) {
     case DBErrors::LOAD_OK:
     case DBErrors::NONCRITICAL_ERROR:

@@ -303,6 +303,8 @@ public:
     std::vector<fs::path> Files() { return m_database.Files(); }
     std::string Format() { return m_database.Format(); }
 
+    WalletDatabase& GetDatabase() { return m_database; }
+
 private:
     std::unique_ptr<DatabaseBatch> m_batch;
 
@@ -323,7 +325,7 @@ private:
  * @param func The function to be executed within the db txn context. It returns a boolean indicating whether to commit or roll back the txn.
  * @return true if the db txn executed successfully, false otherwise.
  */
-bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
+bool RunWithinTxn(WalletBatch& datastore, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
 
 bool LoadEncryptionKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 } // namespace wallet

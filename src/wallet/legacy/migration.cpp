@@ -12,7 +12,6 @@ namespace legacy_migration {
 DBErrors LegacyWallet::ReorderTransactions()
 {
     LOCK(cs_wallet);
-    WalletBatch batch(GetDatabase());
 
     // Old wallets didn't have any defined order for transactions
     // Probably a bad idea to change the output of this
@@ -39,7 +38,7 @@ DBErrors LegacyWallet::ReorderTransactions()
             nOrderPos = nOrderPosNext++;
             nOrderPosOffsets.push_back(nOrderPos);
 
-            if (!batch.WriteTxMetadata(*pwtx))
+            if (!GetDatastore().WriteTxMetadata(*pwtx))
                 return DBErrors::LOAD_FAIL;
         }
         else
@@ -57,11 +56,11 @@ DBErrors LegacyWallet::ReorderTransactions()
                 continue;
 
             // Since we're changing the order, write it back
-            if (!batch.WriteTxMetadata(*pwtx))
+            if (!GetDatastore().WriteTxMetadata(*pwtx))
                 return DBErrors::LOAD_FAIL;
         }
     }
-    if (!batch.WriteOrderPosNext(nOrderPosNext)) {
+    if (!GetDatastore().WriteOrderPosNext(nOrderPosNext)) {
         return DBErrors::LOAD_FAIL;
     }
 
@@ -148,6 +147,7 @@ bool LegacyWallet::MigrateToSQLite(const std::unordered_set<std::string>& skip_t
     }
 
     // Close this database and delete the file
+    m_datastore.reset();
     fs::path db_path = fs::PathFromString(m_database->Filename());
     m_database.reset();
     fs::remove(db_path);
@@ -164,6 +164,7 @@ bool LegacyWallet::MigrateToSQLite(const std::unordered_set<std::string>& skip_t
     std::unique_ptr<WalletDatabase> new_db = MakeDatabase(wallet_path, opts, db_status, error);
     assert(new_db); // This is to prevent doing anything further with this wallet. The original file was deleted, but a backup exists.
     m_database = std::move(new_db);
+    m_datastore = std::make_unique<WalletBatch>(*m_database);
 
     // Write existing records into the new DB
     batch = m_database->MakeBatch();
@@ -202,7 +203,7 @@ std::optional<MigrationData> LegacyWallet::GetDescriptorsForLegacy(bilingual_str
     return res;
 }
 
-util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data)
+util::Result<void> LegacyWallet::ApplyMigrationData(MigrationData& data)
 {
     AssertLockHeld(cs_wallet);
 
@@ -242,26 +243,26 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
     m_internal_spk_managers.clear();
 
     // Setup new descriptors (only if we are migrating any key material)
-    SetWalletFlagWithDB(local_wallet_batch, WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_LAST_HARDENED_XPUB_CACHED);
+    SetWalletFlagWithDB(WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_LAST_HARDENED_XPUB_CACHED);
     if (has_spendable_material && !IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
         // Use the existing master key if we have it
         if (data.master_key.key.IsValid()) {
-            SetupDescriptorScriptPubKeyMans(local_wallet_batch, data.master_key);
+            SetupDescriptorScriptPubKeyMans(data.master_key);
         } else {
             // Setup with a new seed if we don't.
-            SetupOwnDescriptorScriptPubKeyMans(local_wallet_batch);
+            SetupOwnDescriptorScriptPubKeyMans();
         }
     }
 
     // Set the last opened version and features
-    if (!local_wallet_batch.WriteLastOpenedVersion()) {
+    if (!GetDatastore().WriteLastOpenedVersion()) {
         return util::Error{_("Error: Unable to write last opened version")};
     }
-    if (!local_wallet_batch.WriteLastOpenedFeatures()) {
+    if (!GetDatastore().WriteLastOpenedFeatures()) {
         return util::Error{_("Error: Unable to write last opened features")};
     }
     if (HasEncryptionKeys()) {
-        if (!local_wallet_batch.WriteLastDecryptedFeatures()) {
+        if (!GetDatastore().WriteLastDecryptedFeatures()) {
             return util::Error{_("Error: Unable to write last decrypted features")};
         }
     }
@@ -269,7 +270,7 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
     // Get best block locator so that we can copy it to the watchonly and solvables
     // Note: The best block locator was introduced in #152 so ancient wallets do not have it
     CBlockLocator best_block_locator;
-    (void)local_wallet_batch.ReadBestBlock(best_block_locator);
+    (void)GetDatastore().ReadBestBlock(best_block_locator);
 
     // Update m_txos to match the descriptors remaining in this wallet
     m_txos.clear();
@@ -278,27 +279,23 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
     // Check if the transactions in the wallet are still ours. Either they belong here, or they belong in the watchonly wallet.
     // We need to go through these in the tx insertion order so that lookups to spends works.
     std::vector<Txid> txids_to_delete;
-    std::unique_ptr<WalletBatch> watchonly_batch;
     if (data.watchonly_wallet) {
-        watchonly_batch = std::make_unique<WalletBatch>(data.watchonly_wallet->GetDatabase());
-        if (!watchonly_batch->TxnBegin()) return util::Error{strprintf(_("Error: database transaction cannot be executed for wallet %s"), data.watchonly_wallet->GetName())};
+        if (!data.watchonly_wallet->GetDatastore().TxnBegin()) return util::Error{strprintf(_("Error: database transaction cannot be executed for wallet %s"), data.watchonly_wallet->GetName())};
         // Copy the next tx order pos to the watchonly wallet
         LOCK(data.watchonly_wallet->cs_wallet);
         data.watchonly_wallet->nOrderPosNext = nOrderPosNext;
-        if (!watchonly_batch->WriteOrderPosNext(data.watchonly_wallet->nOrderPosNext)) {
+        if (!data.watchonly_wallet->GetDatastore().WriteOrderPosNext(data.watchonly_wallet->nOrderPosNext)) {
             return util::Error{_("Error: Unable to write watchonly wallet next transaction order")};
         }
         // Write the locator record. An empty locator is valid and triggers rescan on load.
-        if (!watchonly_batch->WriteBestBlock(best_block_locator)) {
+        if (!data.watchonly_wallet->GetDatastore().WriteBestBlock(best_block_locator)) {
             return util::Error{_("Error: Unable to write watchonly wallet best block locator record")};
         }
     }
-    std::unique_ptr<WalletBatch> solvables_batch;
     if (data.solvable_wallet) {
-        solvables_batch = std::make_unique<WalletBatch>(data.solvable_wallet->GetDatabase());
-        if (!solvables_batch->TxnBegin()) return util::Error{strprintf(_("Error: database transaction cannot be executed for wallet %s"), data.solvable_wallet->GetName())};
+        if (!data.solvable_wallet->GetDatastore().TxnBegin()) return util::Error{strprintf(_("Error: database transaction cannot be executed for wallet %s"), data.solvable_wallet->GetName())};
         // Write the locator record. An empty locator is valid and triggers rescan on load.
-        if (!solvables_batch->WriteBestBlock(best_block_locator)) {
+        if (!data.solvable_wallet->GetDatastore().WriteBestBlock(best_block_locator)) {
             return util::Error{_("Error: Unable to write solvable wallet best block locator record")};
         }
     }
@@ -317,7 +314,7 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
                 if (!data.watchonly_wallet->LoadToWallet(std::move(copy_wtx))) {
                     return util::Error{strprintf(_("Error: Could not add watchonly tx %s to watchonly wallet"), wtx->GetHash().GetHex())};
                 }
-                if (!watchonly_batch->WriteFullTx(data.watchonly_wallet->mapWallet.at(hash))) {
+                if (!data.watchonly_wallet->GetDatastore().WriteFullTx(data.watchonly_wallet->mapWallet.at(hash))) {
                     return util::Error{strprintf(_("Error: Could not write watchonly tx %s to watchonly wallet"), wtx->GetHash().GetHex())};
                 }
                 // Mark as to remove from the migrated wallet only if it does not also belong to it
@@ -332,36 +329,36 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
             return util::Error{strprintf(_("Error: Transaction %s in wallet cannot be identified to belong to migrated wallets"), wtx->GetHash().GetHex())};
         }
         // Rewrite the transaction so that anything that may have changed about it in memory also persists to disk
-        if (!local_wallet_batch.WriteTxMetadata(*wtx)) {
+        if (!GetDatastore().WriteTxMetadata(*wtx)) {
             return util::Error{strprintf(_("Error: Could not update tx %s in migrated wallet"), wtx->GetHash().GetHex())};
         }
     }
 
     // Pair external wallets with their corresponding db handler
-    std::vector<std::pair<std::shared_ptr<CWallet>, std::unique_ptr<WalletBatch>>> wallets_vec;
-    if (data.watchonly_wallet) wallets_vec.emplace_back(data.watchonly_wallet, std::move(watchonly_batch));
-    if (data.solvable_wallet) wallets_vec.emplace_back(data.solvable_wallet, std::move(solvables_batch));
+    std::vector<std::shared_ptr<CWallet>> wallets_vec;
+    if (data.watchonly_wallet) wallets_vec.emplace_back(data.watchonly_wallet);
+    if (data.solvable_wallet) wallets_vec.emplace_back(data.solvable_wallet);
 
     // Write address book entry to disk
-    auto func_store_addr = [](WalletBatch& batch, const CTxDestination& dest, const CAddressBookData& entry) {
+    auto func_store_addr = [](CWallet& wallet, const CTxDestination& dest, const CAddressBookData& entry) {
         auto address{EncodeDestination(dest)};
         if (entry.purpose) {
-            if (!batch.WritePurpose(address, PurposeToString(*entry.purpose))) {
+            if (!wallet.GetDatastore().WritePurpose(address, PurposeToString(*entry.purpose))) {
                 return false;
             }
         }
         if (entry.label) {
-            if (!batch.WriteName(address, *entry.label)) {
+            if (!wallet.GetDatastore().WriteName(address, *entry.label)) {
                 return false;
             }
         }
         for (const auto& [id, request] : entry.receive_requests) {
-            if (!batch.WriteAddressReceiveRequest(dest, id, request)) {
+            if (!wallet.GetDatastore().WriteAddressReceiveRequest(dest, id, request)) {
                 return false;
             }
         }
         if (entry.previously_spent) {
-            if (!batch.WriteAddressPreviouslySpent(dest, true)) {
+            if (!wallet.GetDatastore().WriteAddressPreviouslySpent(dest, true)) {
                 return false;
             }
         }
@@ -375,13 +372,13 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
         // Entries for everything else ("send") will be cloned to all wallets.
         bool require_transfer = record.purpose == AddressPurpose::RECEIVE && !IsMine(dest);
         bool copied = false;
-        for (auto& [wallet, batch] : wallets_vec) {
+        for (auto& wallet : wallets_vec) {
             LOCK(wallet->cs_wallet);
             if (require_transfer && !wallet->IsMine(dest)) continue;
 
             // Copy the entire address book entry
             wallet->m_address_book[dest] = record;
-            if (!func_store_addr(*batch, dest, record)) {
+            if (!func_store_addr(*wallet, dest, record)) {
                 return util::Error{_("Error: Unable to write address book data")};
             }
 
@@ -409,8 +406,8 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
     }
 
     // Persist external wallets address book entries
-    for (auto& [wallet, batch] : wallets_vec) {
-        if (!batch->TxnCommit()) {
+    for (auto& wallet : wallets_vec) {
+        if (!wallet->GetDatastore().TxnCommit()) {
             return util::Error{strprintf(_("Error: Unable to write data to disk for wallet %s"), wallet->GetName())};
         }
     }
@@ -418,7 +415,7 @@ util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_ba
     // Remove the things to delete in this wallet
     if (dests_to_delete.size() > 0) {
         for (const auto& dest : dests_to_delete) {
-            if (!DelAddressBookWithDB(local_wallet_batch, dest)) {
+            if (!DelAddressBookWithDB(dest)) {
                 return util::Error{_("Error: Unable to remove watchonly address book data")};
             }
         }
@@ -553,8 +550,8 @@ bool DoMigration(LegacyWallet& wallet, WalletContext& context, bilingual_str& er
     }
 
     // Add the descriptors to the wallet, remove the LegacyDataSPKM, and clean up transactions and address book data
-    return RunWithinTxn(wallet.GetDatabase(), /*process_desc=*/"apply migration process", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
-        if (auto res_migration = wallet.ApplyMigrationData(batch, *data); !res_migration) {
+    return RunWithinTxn(wallet.GetDatastore(), /*process_desc=*/"apply migration process", [&](WalletBatch& datastore) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
+        if (auto res_migration = wallet.ApplyMigrationData(*data); !res_migration) {
             error = util::ErrorString(res_migration);
             return false;
         }
@@ -676,14 +673,14 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     // Helper to track wallet files and directories for cleanup on failure.
     // Only directories of wallets created during migration (not the main wallet) are tracked.
     auto track_for_cleanup = [&](const CWallet& wallet) {
-        const auto files = wallet.GetDatabase().Files();
+        const auto files = wallet.GetDatastore().Files();
         wallet_files_to_remove.insert(files.begin(), files.end());
         if (wallet.GetName() != wallet_name) {
             // If this isn’t the main wallet, mark its directory for removal.
             // This applies to the watch-only and solvable wallets.
             // Wallets stored directly as files in the top-level directory
             // (e.g. default unnamed wallets) don’t have a removable parent directory.
-            wallet_empty_dirs_to_remove.insert(fs::PathFromString(wallet.GetDatabase().Filename()).parent_path());
+            wallet_empty_dirs_to_remove.insert(fs::PathFromString(wallet.GetDatastore().Filename()).parent_path());
         }
     };
 
@@ -693,7 +690,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
         // Check if the local wallet is empty after migration
         if (empty_local_wallet) {
             // This wallet has no records. We can safely remove it.
-            std::vector<fs::path> paths_to_remove = local_wallet->GetDatabase().Files();
+            std::vector<fs::path> paths_to_remove = local_wallet->GetDatastore().Files();
             local_wallet.reset();
             for (const auto& path_to_remove : paths_to_remove) fs::remove(path_to_remove);
         }
