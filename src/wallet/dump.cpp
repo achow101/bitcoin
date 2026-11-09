@@ -122,15 +122,6 @@ bool DumpWallet(const ArgsManager& args, WalletDatabase& db, bilingual_str& erro
     return true;
 }
 
-// The standard wallet deleter function blocks on the validation interface
-// queue, which doesn't exist for the bitcoin-wallet. Define our own
-// deleter here.
-static void WalletToolReleaseWallet(CWallet* wallet)
-{
-    wallet->WalletLogPrintf("Releasing wallet");
-    delete wallet;
-}
-
 bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::path& wallet_path, bilingual_str& error)
 {
     if (name.empty()) {
@@ -213,11 +204,9 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
     // dummy chain interface
     bool ret = true;
-    std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet);
     {
         // Get the database handle
-        WalletDatabase& db = wallet->GetDatabase();
-        std::unique_ptr<DatabaseBatch> batch = db.MakeBatch();
+        std::unique_ptr<DatabaseBatch> batch = database->MakeBatch();
         batch->TxnBegin();
 
         // Read the records from the dump file and write them to the database
@@ -287,10 +276,8 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
         dump_file.close();
     }
     // On failure, gather the paths to remove
-    std::vector<fs::path> paths_to_remove = wallet->GetDatabase().Files();
+    std::vector<fs::path> paths_to_remove = database->Files();
     if (!name.empty()) paths_to_remove.push_back(wallet_path);
-
-    wallet.reset(); // The pointer deleter will close the wallet for us.
 
     // Remove the wallet dir if we have a failure
     if (!ret) {
