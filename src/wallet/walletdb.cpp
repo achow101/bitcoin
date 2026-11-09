@@ -1280,6 +1280,7 @@ static bool RunWithinTxn(WalletBatch& batch, std::string_view process_desc, cons
 
     if (!batch.TxnCommit()) {
         LogDebug(BCLog::WALLETDB, "Error: cannot commit db txn for %s\n", process_desc);
+        batch.TxnAbort();
         return false;
     }
 
