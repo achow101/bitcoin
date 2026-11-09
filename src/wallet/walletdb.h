@@ -198,6 +198,8 @@ struct DbTxnListener
 class WalletBatch
 {
 private:
+    WalletDatabase& m_database;
+
     template <typename K, typename T>
     bool WriteIC(const K& key, const T& value, bool fOverwrite = true)
     {
@@ -218,6 +220,7 @@ private:
 
 public:
     explicit WalletBatch(WalletDatabase &database) :
+        m_database(database),
         m_batch(database.MakeBatch())
     {
     }
@@ -292,6 +295,13 @@ public:
 
     //! Registers db txn callback functions
     void RegisterTxnListener(DbTxnListener l);
+
+    // Passthrough to the underlying database
+    bool Rewrite() { return m_database.Rewrite(); }
+    bool Backup(const std::string& dest) const { return m_database.Backup(dest); }
+    std::string Filename() { return m_database.Filename(); }
+    std::vector<fs::path> Files() { return m_database.Files(); }
+    std::string Format() { return m_database.Format(); }
 
 private:
     std::unique_ptr<DatabaseBatch> m_batch;
