@@ -351,6 +351,8 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     return {}; // all good
 }
 
+namespace legacy_migration {
+
 // Returns wallet prefix for migration.
 // Used to name the backup file and newly created wallets.
 // E.g. a watch-only wallet is named "<prefix>_watchonly".
@@ -722,5 +724,5 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     }
     return res;
 }
-
+} // namespace legacy_migration
 } // namespace wallet
