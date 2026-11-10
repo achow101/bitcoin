@@ -1645,11 +1645,6 @@ bool CWallet::CanGetAddresses(bool internal) const
 
 void CWallet::SetWalletFlag(uint64_t flags)
 {
-    return SetWalletFlagWithDB(flags);
-}
-
-void CWallet::SetWalletFlagWithDB(uint64_t flags)
-{
     LOCK(cs_wallet);
     m_wallet_flags |= flags;
     if (!GetDatastore().WriteWalletFlags(m_wallet_flags))
@@ -1657,11 +1652,6 @@ void CWallet::SetWalletFlagWithDB(uint64_t flags)
 }
 
 void CWallet::UnsetWalletFlag(uint64_t flag)
-{
-    UnsetWalletFlagWithDB(flag);
-}
-
-void CWallet::UnsetWalletFlagWithDB(uint64_t flag)
 {
     LOCK(cs_wallet);
     m_wallet_flags &= ~flag;
@@ -1671,7 +1661,7 @@ void CWallet::UnsetWalletFlagWithDB(uint64_t flag)
 
 void CWallet::UnsetBlankWalletFlag()
 {
-    UnsetWalletFlagWithDB(WALLET_FLAG_BLANK_WALLET);
+    UnsetWalletFlag(WALLET_FLAG_BLANK_WALLET);
 }
 
 bool CWallet::IsWalletFlagSet(uint64_t flag) const
@@ -2139,7 +2129,7 @@ void CWallet::ClearInMemoryTxStateForTest()
     nOrderPosNext = 0;
 }
 
-bool CWallet::SetAddressBookWithDB(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& new_purpose)
+bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& new_purpose)
 {
     bool fUpdated = false;
     bool is_mine;
@@ -2175,55 +2165,45 @@ bool CWallet::SetAddressBookWithDB(const CTxDestination& address, const std::str
     return true;
 }
 
-bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& purpose)
-{
-    return SetAddressBookWithDB(address, strName, purpose);
-}
-
 bool CWallet::DelAddressBook(const CTxDestination& address)
 {
     return RunWithinTxn(GetDatastore(), /*process_desc=*/"address book entry removal", [&](WalletDatastore& datastore){
-        return DelAddressBookWithDB(address);
+        const std::string& dest = EncodeDestination(address);
+        {
+            LOCK(cs_wallet);
+            // If we want to delete receiving addresses, we should avoid calling EraseAddressData because it will delete the previously_spent value. Could instead just erase the label so it becomes a change address, and keep the data.
+            // NOTE: This isn't a problem for sending addresses because they don't have any data that needs to be kept.
+            // When adding new address data, it should be considered here whether to retain or delete it.
+            if (IsMine(address)) {
+                WalletLogPrintf("DelAddressBook called with IsMine address, NOT SUPPORTED. Please report this bug! %s", CLIENT_BUGREPORT);
+                return false;
+            }
+            // Delete data rows associated with this address
+            if (!GetDatastore().EraseAddressData(address)) {
+                WalletLogPrintf("Error: cannot erase address book entry data");
+                return false;
+            }
+
+            // Delete purpose entry
+            if (!GetDatastore().ErasePurpose(dest)) {
+                WalletLogPrintf("Error: cannot erase address book entry purpose");
+                return false;
+            }
+
+            // Delete name entry
+            if (!GetDatastore().EraseName(dest)) {
+                WalletLogPrintf("Error: cannot erase address book entry name");
+                return false;
+            }
+
+            // finally, remove it from the map
+            m_address_book.erase(address);
+        }
+
+        // All good, signal changes
+        NotifyAddressBookChanged(address, "", /*is_mine=*/false, AddressPurpose::SEND, CT_DELETED);
+        return true;
     });
-}
-
-bool CWallet::DelAddressBookWithDB(const CTxDestination& address)
-{
-    const std::string& dest = EncodeDestination(address);
-    {
-        LOCK(cs_wallet);
-        // If we want to delete receiving addresses, we should avoid calling EraseAddressData because it will delete the previously_spent value. Could instead just erase the label so it becomes a change address, and keep the data.
-        // NOTE: This isn't a problem for sending addresses because they don't have any data that needs to be kept.
-        // When adding new address data, it should be considered here whether to retain or delete it.
-        if (IsMine(address)) {
-            WalletLogPrintf("%s called with IsMine address, NOT SUPPORTED. Please report this bug! %s", __func__, CLIENT_BUGREPORT);
-            return false;
-        }
-        // Delete data rows associated with this address
-        if (!GetDatastore().EraseAddressData(address)) {
-            WalletLogPrintf("Error: cannot erase address book entry data");
-            return false;
-        }
-
-        // Delete purpose entry
-        if (!GetDatastore().ErasePurpose(dest)) {
-            WalletLogPrintf("Error: cannot erase address book entry purpose");
-            return false;
-        }
-
-        // Delete name entry
-        if (!GetDatastore().EraseName(dest)) {
-            WalletLogPrintf("Error: cannot erase address book entry name");
-            return false;
-        }
-
-        // finally, remove it from the map
-        m_address_book.erase(address);
-    }
-
-    // All good, signal changes
-    NotifyAddressBookChanged(address, "", /*is_mine=*/false, AddressPurpose::SEND, CT_DELETED);
-    return true;
 }
 
 size_t CWallet::KeypoolCountExternalKeys() const
@@ -3218,7 +3198,7 @@ DescriptorScriptPubKeyMan& CWallet::SetupDescriptorScriptPubKeyMan(const CExtKey
     DescriptorScriptPubKeyMan* out = spk_manager.get();
     uint256 id = spk_manager->GetID();
     AddScriptPubKeyMan(id, std::move(spk_manager));
-    AddActiveScriptPubKeyManWithDb(id, output_type, internal);
+    AddActiveScriptPubKeyMan(id, output_type, internal);
     return *out;
 }
 
@@ -3288,7 +3268,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
                 auto spk_manager = ExternalSignerScriptPubKeyMan::CreateNew(*this, m_keypool_size, std::move(desc));
                 uint256 id = spk_manager->GetID();
                 AddScriptPubKeyMan(id, std::move(spk_manager));
-                AddActiveScriptPubKeyManWithDb(id, t, internal);
+                AddActiveScriptPubKeyMan(id, t, internal);
             }
         }
 
@@ -3310,11 +3290,6 @@ void CWallet::SetupWalletGeneration()
 }
 
 void CWallet::AddActiveScriptPubKeyMan(uint256 id, OutputType type, bool internal)
-{
-    return AddActiveScriptPubKeyManWithDb(id, type, internal);
-}
-
-void CWallet::AddActiveScriptPubKeyManWithDb(uint256 id, OutputType type, bool internal)
 {
     if (!GetDatastore().WriteActiveScriptPubKeyMan(static_cast<uint8_t>(type), id, internal)) {
         throw std::runtime_error(std::string(__func__) + ": writing active ScriptPubKeyMan id failed");

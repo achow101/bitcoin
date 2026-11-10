@@ -45,7 +45,7 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Cr
     }
 
     // TopUp
-    spkm->TopUpWithDB();
+    spkm->TopUp();
 
     storage.UnsetBlankWalletFlag();
     return spkm;

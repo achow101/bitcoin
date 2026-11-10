@@ -243,7 +243,7 @@ util::Result<void> LegacyWallet::ApplyMigrationData(MigrationData& data)
     m_internal_spk_managers.clear();
 
     // Setup new descriptors (only if we are migrating any key material)
-    SetWalletFlagWithDB(WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_LAST_HARDENED_XPUB_CACHED);
+    SetWalletFlag(WALLET_FLAG_DESCRIPTORS | WALLET_FLAG_LAST_HARDENED_XPUB_CACHED);
     if (has_spendable_material && !IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
         // Use the existing master key if we have it
         if (data.master_key.key.IsValid()) {
@@ -415,7 +415,7 @@ util::Result<void> LegacyWallet::ApplyMigrationData(MigrationData& data)
     // Remove the things to delete in this wallet
     if (dests_to_delete.size() > 0) {
         for (const auto& dest : dests_to_delete) {
-            if (!DelAddressBookWithDB(dest)) {
+            if (!DelAddressBook(dest)) {
                 return util::Error{_("Error: Unable to remove watchonly address book data")};
             }
         }

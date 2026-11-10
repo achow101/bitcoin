@@ -369,11 +369,6 @@ private:
     /** WalletFlags set on this wallet. */
     std::atomic<uint64_t> m_wallet_flags{0};
 
-    bool SetAddressBookWithDB(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& strPurpose);
-
-    //! Unsets a wallet flag and saves it to disk
-    void UnsetWalletFlagWithDB(uint64_t flag);
-
     //! Unset the blank wallet flag and saves it to disk
     void UnsetBlankWalletFlag() override;
 
@@ -397,9 +392,6 @@ private:
      * that the wallet has scanned sequentially all blocks up to this one.
      */
     int m_last_block_processed_height GUARDED_BY(cs_wallet) = -1;
-
-    // Same as 'AddActiveScriptPubKeyMan' but designed for use within a batch transaction context
-    void AddActiveScriptPubKeyManWithDb(uint256 id, OutputType type, bool internal);
 
     //! Cache of descriptor ScriptPubKeys used for IsMine. Maps ScriptPubKey to set of spkms
     std::unordered_map<CScript, std::vector<ScriptPubKeyMan*>, SaltedSipHasher> m_cached_spks;
@@ -440,9 +432,6 @@ protected:
     // Appends spk managers into the main 'm_spk_managers'.
     // Must be the only method adding data to it.
     void AddScriptPubKeyMan(const uint256& id, std::unique_ptr<ScriptPubKeyMan> spkm_man);
-
-    /** Store wallet flags */
-    void SetWalletFlagWithDB(uint64_t flags);
 
     //! Set of both spent and unspent transaction outputs owned by this wallet
     std::unordered_map<COutPoint, WalletTXO, SaltedOutpointHasher> m_txos GUARDED_BY(cs_wallet);
@@ -795,7 +784,6 @@ public:
     bool SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& purpose);
 
     bool DelAddressBook(const CTxDestination& address);
-    bool DelAddressBookWithDB(const CTxDestination& address);
 
     bool IsAddressPreviouslySpent(const CTxDestination& dest) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool SetAddressPreviouslySpent(const CTxDestination& dest, bool used) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
