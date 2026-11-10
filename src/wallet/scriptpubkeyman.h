@@ -302,7 +302,7 @@ private:
 
     const uint256 m_id;
 
-    bool AddDescriptorKeyWithDB(const CKey& key, const CPubKey &pubkey) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
+    bool AddDescriptorKey(const CKey& key, const CPubKey &pubkey) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
     KeyMap GetKeys() const EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
 
@@ -333,9 +333,6 @@ protected:
     void IncIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
     void DecIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
     void SetRangeEnd(int32_t end) EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
-
-    //! Same as 'TopUp' but designed for use within a batch transaction context
-    bool TopUpWithDB(unsigned int size = 0);
 
 public:
     static std::unique_ptr<DescriptorScriptPubKeyMan> LoadFromStorage(WalletStorage& storage, const uint256& id, WalletDescriptor& descriptor, int64_t keypool_size, const KeyMap& keys, const CryptedKeyMap& ckeys);
