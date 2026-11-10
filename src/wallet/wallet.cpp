@@ -440,7 +440,7 @@ CWallet::CWallet(interfaces::Chain* chain, const std::string& name, std::unique_
       m_scanner(std::make_unique<ChainScanner>(*this)),
       m_name(name),
       m_database(std::move(database)),
-      m_datastore(std::make_unique<WalletBatch>(*m_database))
+      m_datastore(std::make_unique<WalletDatastore>(*m_database))
 {
 }
 
@@ -819,7 +819,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     {
         LOCK2(m_relock_mutex, cs_wallet);
         const unsigned int new_master_key_id{nMasterKeyMaxID + 1};
-        if (!RunWithinTxn(GetDatastore(), /*process_desc=*/"wallet encryption", [&](WalletBatch& datastore) {
+        if (!RunWithinTxn(GetDatastore(), /*process_desc=*/"wallet encryption", [&](WalletDatastore& datastore) {
                 if (!datastore.WriteMasterKey(new_master_key_id, master_key)) {
                     return false;
                 }
@@ -2182,7 +2182,7 @@ bool CWallet::SetAddressBook(const CTxDestination& address, const std::string& s
 
 bool CWallet::DelAddressBook(const CTxDestination& address)
 {
-    return RunWithinTxn(GetDatastore(), /*process_desc=*/"address book entry removal", [&](WalletBatch& datastore){
+    return RunWithinTxn(GetDatastore(), /*process_desc=*/"address book entry removal", [&](WalletDatastore& datastore){
         return DelAddressBookWithDB(address);
     });
 }
@@ -3253,7 +3253,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
     AssertLockHeld(cs_wallet);
 
     if (!IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
-        if (!RunWithinTxn(GetDatastore(), /*process_desc=*/"setup descriptors", [&](WalletBatch& datastore) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet){
+        if (!RunWithinTxn(GetDatastore(), /*process_desc=*/"setup descriptors", [&](WalletDatastore& datastore) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet){
             SetupOwnDescriptorScriptPubKeyMans();
             return true;
         })) throw std::runtime_error("Error: cannot process db transaction for descriptors setup");

@@ -650,7 +650,7 @@ public:
             db = MakeWalletDatabase(wallet_name, options, status, error);
         }
         if (!db) return false;
-        return WalletBatch(*db).IsEncrypted();
+        return WalletDatastore(*db).IsEncrypted();
     }
     std::string getWalletDir() override
     {

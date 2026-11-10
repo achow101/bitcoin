@@ -164,7 +164,7 @@ bool LegacyWallet::MigrateToSQLite(const std::unordered_set<std::string>& skip_t
     std::unique_ptr<WalletDatabase> new_db = MakeDatabase(wallet_path, opts, db_status, error);
     assert(new_db); // This is to prevent doing anything further with this wallet. The original file was deleted, but a backup exists.
     m_database = std::move(new_db);
-    m_datastore = std::make_unique<WalletBatch>(*m_database);
+    m_datastore = std::make_unique<WalletDatastore>(*m_database);
 
     // Write existing records into the new DB
     batch = m_database->MakeBatch();
@@ -550,7 +550,7 @@ bool DoMigration(LegacyWallet& wallet, WalletContext& context, bilingual_str& er
     }
 
     // Add the descriptors to the wallet, remove the LegacyDataSPKM, and clean up transactions and address book data
-    return RunWithinTxn(wallet.GetDatastore(), /*process_desc=*/"apply migration process", [&](WalletBatch& datastore) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
+    return RunWithinTxn(wallet.GetDatastore(), /*process_desc=*/"apply migration process", [&](WalletDatastore& datastore) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet){
         if (auto res_migration = wallet.ApplyMigrationData(*data); !res_migration) {
             error = util::ErrorString(res_migration);
             return false;
