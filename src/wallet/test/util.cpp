@@ -54,7 +54,7 @@ void AddKey(CWallet& wallet, const CKey& key)
     Assert(wallet.AddWalletDescriptor(w_desc, provider, /*label=*/"", /*internal=*/false));
 }
 
-std::shared_ptr<CWallet> TestCreateWallet(std::unique_ptr<WalletDatabase> database, WalletContext& context, uint64_t create_flags)
+std::shared_ptr<CWallet> TestCreateWallet(std::unique_ptr<WalletDatastore> datastore, WalletContext& context, uint64_t create_flags)
 {
     bilingual_str _error;
     std::vector<bilingual_str> _warnings;
@@ -73,16 +73,16 @@ std::shared_ptr<CWallet> TestCreateWallet(WalletContext& context)
     options.create_flags = WALLET_FLAG_DESCRIPTORS;
     DatabaseStatus status;
     bilingual_str error;
-    auto database = MakeWalletDatabase("", options, status, error);
-    return TestCreateWallet(std::move(database), context, options.create_flags);
+    auto datastore = MakeWalletDatastore("", options, status, error);
+    return TestCreateWallet(std::move(datastore), context, options.create_flags);
 }
 
 
-std::shared_ptr<CWallet> TestLoadWallet(std::unique_ptr<WalletDatabase> database, WalletContext& context)
+std::shared_ptr<CWallet> TestLoadWallet(std::unique_ptr<WalletDatastore> datastore, WalletContext& context)
 {
     bilingual_str error;
     std::vector<bilingual_str> warnings;
-    auto wallet = CWallet::LoadExisting(context, "", std::move(database), error, warnings);
+    auto wallet = CWallet::LoadExisting(context, "", std::move(datastore), error, warnings);
     NotifyWalletLoaded(context, wallet);
     if (context.chain) {
         wallet->postInitProcess();
@@ -96,8 +96,8 @@ std::shared_ptr<CWallet> TestLoadWallet(WalletContext& context)
     options.require_existing = true;
     DatabaseStatus status;
     bilingual_str error;
-    auto database = MakeWalletDatabase("", options, status, error);
-    return TestLoadWallet(std::move(database), context);
+    auto datastore = MakeWalletDatastore("", options, status, error);
+    return TestLoadWallet(std::move(datastore), context);
 }
 
 void TestUnloadWallet(std::shared_ptr<CWallet>&& wallet)

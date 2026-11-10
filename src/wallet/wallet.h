@@ -103,7 +103,6 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
 std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& backup_file, const std::string& wallet_name, std::optional<bool> load_on_start, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings, bool load_after_restore = true, bool allow_unnamed = false);
 std::unique_ptr<interfaces::Handler> HandleLoadWallet(WalletContext& context, LoadWalletFn load_wallet);
 void NotifyWalletLoaded(WalletContext& context, const std::shared_ptr<CWallet>& wallet);
-std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
 
 //! -fallbackfee default
 inline constexpr CAmount DEFAULT_FALLBACK_FEE = 0;
@@ -419,7 +418,6 @@ protected:
     std::string m_name;
 
     /** Internal database handle. */
-    std::unique_ptr<WalletDatabase> m_database;
     std::unique_ptr<WalletDatastore> m_datastore;
 
     std::map<OutputType, ScriptPubKeyMan*> m_external_spk_managers;
@@ -458,7 +456,7 @@ public:
     unsigned int nMasterKeyMaxID = 0;
 
     /** Construct wallet with specified name and database implementation. */
-    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database);
+    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatastore> datastore);
     ~CWallet();
 
     bool IsLocked() const override;
@@ -848,10 +846,10 @@ public:
     static bool LoadWalletArgs(std::shared_ptr<CWallet> wallet, const WalletContext& context, bilingual_str& error, std::vector<bilingual_str>& warnings);
 
     /* Initializes, creates and returns a new CWallet; returns a null pointer in case of an error */
-    static std::shared_ptr<CWallet> CreateNew(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatabase> database, uint64_t wallet_creation_flags, bool born_encrypted, bilingual_str& error, std::vector<bilingual_str>& warnings);
+    static std::shared_ptr<CWallet> CreateNew(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatastore> database, uint64_t wallet_creation_flags, bool born_encrypted, bilingual_str& error, std::vector<bilingual_str>& warnings);
 
     /* Initializes, loads, and returns a CWallet from an existing wallet; returns a null pointer in case of an error */
-    static std::shared_ptr<CWallet> LoadExisting(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatabase> database, bilingual_str& error, std::vector<bilingual_str>& warnings);
+    static std::shared_ptr<CWallet> LoadExisting(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatastore> database, bilingual_str& error, std::vector<bilingual_str>& warnings);
 
     /**
      * Wallet post-init setup

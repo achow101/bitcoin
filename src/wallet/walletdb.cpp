@@ -1117,4 +1117,28 @@ std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const Databas
     status = DatabaseStatus::FAILED_BAD_FORMAT;
     return nullptr;
 }
+
+std::unique_ptr<WalletDatastore> MakeWalletDatastore(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error_string)
+{
+    const auto& wallet_path = GetWalletPath(name);
+    if (!wallet_path) {
+        error_string = util::ErrorString(wallet_path);
+        status = DatabaseStatus::FAILED_BAD_PATH;
+        return nullptr;
+    }
+    auto db = MakeDatabase(*wallet_path, options, status, error_string);
+    if (!db) {
+        return nullptr;
+    }
+    return std::make_unique<WalletDatastore>(std::move(db));
+}
+
+std::unique_ptr<WalletDatastore> MakeInMemoryWalletDatastore()
+{
+    auto db = MakeInMemoryWalletDatabase();
+    if (!db) {
+        return nullptr;
+    }
+    return std::make_unique<WalletDatastore>(std::move(db));
+}
 } // namespace wallet

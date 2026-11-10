@@ -65,7 +65,7 @@ bool VerifyWallets(WalletContext& context)
         bilingual_str error_string;
         options.require_existing = true;
         options.verify = false;
-        if (MakeWalletDatabase("", options, status, error_string)) {
+        if (MakeWalletDatastore("", options, status, error_string)) {
             common::SettingsValue wallets(common::SettingsValue::VARR);
             wallets.push_back(""); // Default wallet name is ""
             // Pass write=false because no need to write file and probably
@@ -98,7 +98,7 @@ bool VerifyWallets(WalletContext& context)
         options.require_existing = true;
         options.verify = true;
         bilingual_str error_string;
-        if (!MakeWalletDatabase(wallet_file, options, status, error_string)) {
+        if (!MakeWalletDatastore(wallet_file, options, status, error_string)) {
             if (status == DatabaseStatus::FAILED_NOT_FOUND) {
                 chain.initWarning(Untranslated(strprintf("Skipping -wallet path that doesn't exist. %s", error_string.original)));
             } else if (status == DatabaseStatus::FAILED_LEGACY_DISABLED) {
@@ -137,8 +137,8 @@ bool LoadWallets(WalletContext& context)
             options.verify = false; // No need to verify, assuming verified earlier in VerifyWallets()
             bilingual_str error;
             std::vector<bilingual_str> warnings;
-            std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
-            if (!database) {
+            std::unique_ptr<WalletDatastore> datastore = MakeWalletDatastore(name, options, status, error);
+            if (!datastore) {
                 if (status == DatabaseStatus::FAILED_NOT_FOUND) continue;
                 if (status == DatabaseStatus::FAILED_LEGACY_DISABLED) {
                     // Inform user that legacy wallet is not loaded and suggest upgrade options
@@ -147,7 +147,7 @@ bool LoadWallets(WalletContext& context)
                 }
             }
             chain.initMessage(_("Loading wallet…"));
-            std::shared_ptr<CWallet> pwallet = database ? CWallet::LoadExisting(context, name, std::move(database), error, warnings) : nullptr;
+            std::shared_ptr<CWallet> pwallet = datastore ? CWallet::LoadExisting(context, name, std::move(datastore), error, warnings) : nullptr;
             if (!warnings.empty()) chain.initWarning(Join(warnings, Untranslated("\n")));
             if (!pwallet) {
                 chain.initError(error);

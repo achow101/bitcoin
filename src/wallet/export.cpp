@@ -79,7 +79,7 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
     bilingual_str error;
     WalletContext empty_context;
     empty_context.args = context.args;
-    std::shared_ptr<CWallet> watchonly_wallet = CWallet::CreateNew(empty_context, /*name=*/wallet.GetName() + "_watchonly_temp", MakeInMemoryWalletDatabase(), create_flags, /*born_encrypted=*/false, error, warnings);
+    std::shared_ptr<CWallet> watchonly_wallet = CWallet::CreateNew(empty_context, /*name=*/wallet.GetName() + "_watchonly_temp", MakeInMemoryWalletDatastore(), create_flags, /*born_encrypted=*/false, error, warnings);
     if (!watchonly_wallet) {
         return util::Error{strprintf(_("Error: Failed to create new watchonly wallet. %s"), error)};
     }

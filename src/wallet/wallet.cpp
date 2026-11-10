@@ -241,14 +241,14 @@ namespace {
 std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::string& name, std::optional<bool> load_on_start, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     try {
-        std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
-        if (!database) {
+        std::unique_ptr<WalletDatastore> datastore = MakeWalletDatastore(name, options, status, error);
+        if (!datastore) {
             error = Untranslated("Wallet file verification failed.") + Untranslated(" ") + error;
             return nullptr;
         }
 
         context.chain->initMessage(_("Loading wallet…"));
-        std::shared_ptr<CWallet> wallet = CWallet::LoadExisting(context, name, std::move(database), error, warnings);
+        std::shared_ptr<CWallet> wallet = CWallet::LoadExisting(context, name, std::move(datastore), error, warnings);
         if (!wallet) {
             error = Untranslated("Wallet loading failed.") + Untranslated(" ") + error;
             status = DatabaseStatus::FAILED_LOAD;
@@ -317,8 +317,8 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
     }
 
     // Wallet::Verify will check if we're trying to create a wallet with a duplicate name.
-    std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
-    if (!database) {
+    std::unique_ptr<WalletDatastore> datastore = MakeWalletDatastore(name, options, status, error);
+    if (!datastore) {
         error = Untranslated("Wallet file verification failed.") + Untranslated(" ") + error;
         status = DatabaseStatus::FAILED_VERIFY;
         return nullptr;
@@ -326,7 +326,7 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
 
     // Make the wallet
     context.chain->initMessage(_("Creating wallet…"));
-    std::shared_ptr<CWallet> wallet = CWallet::CreateNew(context, name, std::move(database), wallet_creation_flags, born_encrypted, error, warnings);
+    std::shared_ptr<CWallet> wallet = CWallet::CreateNew(context, name, std::move(datastore), wallet_creation_flags, born_encrypted, error, warnings);
     if (!wallet) {
         error = Untranslated("Wallet creation failed.") + Untranslated(" ") + error;
         status = DatabaseStatus::FAILED_CREATE;
@@ -435,12 +435,11 @@ std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& b
     return wallet;
 }
 
-CWallet::CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database)
+CWallet::CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatastore> datastore)
     : m_chain(chain),
       m_scanner(std::make_unique<ChainScanner>(*this)),
       m_name(name),
-      m_database(std::move(database)),
-      m_datastore(std::make_unique<WalletDatastore>(*m_database))
+      m_datastore(std::move(datastore))
 {
 }
 
@@ -2077,7 +2076,7 @@ DBErrors CWallet::PopulateWalletFromDB(bilingual_str& error, std::vector<bilingu
         assert(m_internal_spk_managers.empty());
     }
 
-    const auto wallet_file = m_database->Filename();
+    const auto wallet_file = m_datastore->Filename();
     switch (nLoadWalletRet) {
     case DBErrors::LOAD_OK:
         break;
@@ -2553,17 +2552,6 @@ bool CWallet::EraseAddressReceiveRequest(const CTxDestination& dest, const std::
     return true;
 }
 
-std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error_string)
-{
-    const auto& wallet_path = GetWalletPath(name);
-    if (!wallet_path) {
-        error_string = util::ErrorString(wallet_path);
-        status = DatabaseStatus::FAILED_BAD_PATH;
-        return nullptr;
-    }
-    return MakeDatabase(*wallet_path, options, status, error_string);
-}
-
 bool CWallet::LoadWalletArgs(std::shared_ptr<CWallet> wallet, const WalletContext& context, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     interfaces::Chain* chain = context.chain;
@@ -2712,15 +2700,15 @@ bool CWallet::LoadWalletArgs(std::shared_ptr<CWallet> wallet, const WalletContex
     return true;
 }
 
-std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatabase> database, uint64_t wallet_creation_flags, bool born_encrypted, bilingual_str& error, std::vector<bilingual_str>& warnings)
+std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatastore> datastore, uint64_t wallet_creation_flags, bool born_encrypted, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     interfaces::Chain* chain = context.chain;
-    const std::string& walletFile = database->Filename();
+    const std::string& walletFile = datastore->Filename();
 
     const auto start{SteadyClock::now()};
     // TODO: Can't use std::make_shared because we need a custom deleter but
     // should be possible to use std::allocate_shared.
-    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), FlushAndDeleteWallet);
+    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(datastore)), FlushAndDeleteWallet);
 
     if (!LoadWalletArgs(walletInstance, context, error, warnings)) {
         return nullptr;
@@ -2773,13 +2761,13 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
     return walletInstance;
 }
 
-std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatabase> database, bilingual_str& error, std::vector<bilingual_str>& warnings)
+std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std::string& name, std::unique_ptr<WalletDatastore> datastore, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     interfaces::Chain* chain = context.chain;
-    const std::string& walletFile = database->Filename();
+    const std::string& walletFile = datastore->Filename();
 
     const auto start{SteadyClock::now()};
-    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), FlushAndDeleteWallet);
+    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(datastore)), FlushAndDeleteWallet);
 
     if (!LoadWalletArgs(walletInstance, context, error, warnings)) {
         return nullptr;
