@@ -132,9 +132,6 @@ public:
     WalletDatabase() = default;
     virtual ~WalletDatabase() = default;
 
-    /** Open the database if it is not already opened. */
-    virtual void Open() = 0;
-
     /** Rewrite the entire database on disk
      */
     virtual bool Rewrite() = 0;

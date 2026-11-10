@@ -34,7 +34,7 @@ public:
     BerkeleyROData m_records;
 
     /** Open the database if it is not already opened. */
-    void Open() override;
+    void Open();
 
     /** Rewrite the entire database on disk
      */
