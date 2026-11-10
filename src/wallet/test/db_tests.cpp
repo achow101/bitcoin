@@ -111,7 +111,6 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_range_test)
             BOOST_CHECK(cursor->Next(key, value) == DatabaseCursor::Status::DONE);
         }
         handler.reset();
-        database->Close();
     }
 }
 
@@ -142,7 +141,6 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_byte_test)
         CheckPrefix(*batch, StringBytes("\xff"), {f, fs, ff, ffs});
         CheckPrefix(*batch, StringBytes("\xff\xff"), {ff, ffs});
         batch.reset();
-        database->Close();
     }
 }
 

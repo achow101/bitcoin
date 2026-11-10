@@ -143,11 +143,6 @@ public:
      */
     virtual bool Backup(const std::string& strDest) const = 0;
 
-    /** Flush to the database file and close the database.
-     *  Also close the environment if no other databases are open in it.
-     */
-    virtual void Close() = 0;
-
     /** Return path to main database file for logs and error messages. */
     virtual std::string Filename() = 0;
 

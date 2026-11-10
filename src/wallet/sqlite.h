@@ -153,7 +153,7 @@ public:
     void Open() override;
 
     /** Close the database */
-    void Close() override;
+    void Close();
 
     /** Rewrite the entire database on disk */
     bool Rewrite() override;
