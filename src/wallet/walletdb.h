@@ -200,24 +200,6 @@ class WalletDatastore
 private:
     WalletDatabase& m_database;
 
-    template <typename K, typename T>
-    bool WriteIC(const K& key, const T& value, bool fOverwrite = true)
-    {
-        if (!m_batch->Write(key, value, fOverwrite)) {
-            return false;
-        }
-        return true;
-    }
-
-    template <typename K>
-    bool EraseIC(const K& key)
-    {
-        if (!m_batch->Erase(key)) {
-            return false;
-        }
-        return true;
-    }
-
 public:
     explicit WalletDatastore(WalletDatabase &database) :
         m_database(database),
