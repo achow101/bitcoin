@@ -804,9 +804,6 @@ public:
     //! Check if a given transaction has any of its outputs spent by another transaction in the wallet
     bool HasWalletSpend(const CTransactionRef& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    //! Close wallet database
-    void Close();
-
     /** Wallet is about to be unloaded */
     btcsignals::signal<void ()> NotifyUnload;
 

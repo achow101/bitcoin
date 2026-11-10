@@ -726,11 +726,6 @@ bool CWallet::HasWalletSpend(const CTransactionRef& tx) const
     return false;
 }
 
-void CWallet::Close()
-{
-    GetDatabase().Close();
-}
-
 std::set<CWalletTx*, WalletTxOrderComparator> CWallet::GetMalleatedVariants(const CWalletTx& wtx)
 {
     AssertLockHeld(cs_wallet);
@@ -3758,7 +3753,7 @@ bool CWallet::MigrateToSQLite(const std::unordered_set<std::string>& skip_types,
 
     // Close this database and delete the file
     fs::path db_path = fs::PathFromString(m_database->Filename());
-    m_database->Close();
+    m_database.reset();
     fs::remove(db_path);
 
     // Generate the path for the location of the migrated wallet
@@ -3772,7 +3767,6 @@ bool CWallet::MigrateToSQLite(const std::unordered_set<std::string>& skip_types,
     DatabaseStatus db_status;
     std::unique_ptr<WalletDatabase> new_db = MakeDatabase(wallet_path, opts, db_status, error);
     assert(new_db); // This is to prevent doing anything further with this wallet. The original file was deleted, but a backup exists.
-    m_database.reset();
     m_database = std::move(new_db);
 
     // Write existing records into the new DB
@@ -3782,8 +3776,9 @@ bool CWallet::MigrateToSQLite(const std::unordered_set<std::string>& skip_types,
     for (const auto& [key, value] : records) {
         if (!batch->Write(std::span{key}, std::span{value})) {
             batch->TxnAbort();
-            m_database->Close();
-            fs::remove(m_database->Filename());
+            std::string to_remove = m_database->Filename();
+            m_database.reset();
+            fs::remove(to_remove);
             assert(false); // This is a critical error, the new db could not be written to. The original db exists as a backup, but we should not continue execution.
         }
     }
