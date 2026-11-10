@@ -128,7 +128,6 @@ bool DumpWallet(const ArgsManager& args, WalletDatabase& db, bilingual_str& erro
 static void WalletToolReleaseWallet(CWallet* wallet)
 {
     wallet->WalletLogPrintf("Releasing wallet");
-    wallet->Close();
     delete wallet;
 }
 

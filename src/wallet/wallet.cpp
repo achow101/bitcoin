@@ -678,11 +678,6 @@ bool CWallet::HasWalletSpend(const CTransactionRef& tx) const
     return false;
 }
 
-void CWallet::Close()
-{
-    GetDatabase().Close();
-}
-
 std::set<CWalletTx*, WalletTxOrderComparator> CWallet::GetMalleatedVariants(const CWalletTx& wtx)
 {
     AssertLockHeld(cs_wallet);

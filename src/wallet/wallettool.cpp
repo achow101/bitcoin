@@ -21,7 +21,6 @@ namespace WalletTool {
 static void WalletToolReleaseWallet(CWallet* wallet)
 {
     wallet->WalletLogPrintf("Releasing wallet");
-    wallet->Close();
     delete wallet;
 }
 
@@ -126,7 +125,6 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
         const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
         if (!wallet_instance) return false;
         WalletShowInfo(wallet_instance.get());
-        wallet_instance->Close();
     } else if (command == "info") {
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
@@ -134,7 +132,6 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
         const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
         if (!wallet_instance) return false;
         WalletShowInfo(wallet_instance.get());
-        wallet_instance->Close();
     } else if (command == "dump") {
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
