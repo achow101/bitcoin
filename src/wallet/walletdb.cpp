@@ -78,24 +78,24 @@ void LogDBInfo()
 
 bool WalletDatastore::WriteName(const std::string& strAddress, const std::string& strName)
 {
-    return WriteIC(std::make_pair(DBKeys::NAME, strAddress), strName);
+    return m_batch->Write(std::make_pair(DBKeys::NAME, strAddress), strName);
 }
 
 bool WalletDatastore::EraseName(const std::string& strAddress)
 {
     // This should only be used for sending addresses, never for receiving addresses,
     // receiving addresses must always have an address book entry if they're not change return.
-    return EraseIC(std::make_pair(DBKeys::NAME, strAddress));
+    return m_batch->Erase(std::make_pair(DBKeys::NAME, strAddress));
 }
 
 bool WalletDatastore::WritePurpose(const std::string& strAddress, const std::string& strPurpose)
 {
-    return WriteIC(std::make_pair(DBKeys::PURPOSE, strAddress), strPurpose);
+    return m_batch->Write(std::make_pair(DBKeys::PURPOSE, strAddress), strPurpose);
 }
 
 bool WalletDatastore::ErasePurpose(const std::string& strAddress)
 {
-    return EraseIC(std::make_pair(DBKeys::PURPOSE, strAddress));
+    return m_batch->Erase(std::make_pair(DBKeys::PURPOSE, strAddress));
 }
 
 bool WalletDatastore::WriteFullTx(const CWalletTx& wtx)
@@ -105,22 +105,22 @@ bool WalletDatastore::WriteFullTx(const CWalletTx& wtx)
     for (const auto& [wtxid, tx] : wtx.GetTxs()) {
         if (!WriteWtxVariant(txid, tx)) return false;
     }
-    return WriteIC(std::make_pair(DBKeys::TX, txid), wtx);
+    return m_batch->Write(std::make_pair(DBKeys::TX, txid), wtx);
 }
 
 bool WalletDatastore::WriteWtxVariant(const Txid& txid, const CTransactionRef& tx)
 {
-    return WriteIC(std::make_pair(DBKeys::WTX_VARIANT, std::make_pair(txid, tx->GetWitnessHash())), TX_WITH_WITNESS(tx));
+    return m_batch->Write(std::make_pair(DBKeys::WTX_VARIANT, std::make_pair(txid, tx->GetWitnessHash())), TX_WITH_WITNESS(tx));
 }
 
 bool WalletDatastore::WriteTxMetadata(const CWalletTx& wtx)
 {
-    return WriteIC(std::make_pair(DBKeys::TX, wtx.GetHash()), wtx);
+    return m_batch->Write(std::make_pair(DBKeys::TX, wtx.GetHash()), wtx);
 }
 
 bool WalletDatastore::WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubkey, const bool overwrite)
 {
-    return WriteIC(std::make_pair(DBKeys::KEYMETA, pubkey), meta, overwrite);
+    return m_batch->Write(std::make_pair(DBKeys::KEYMETA, pubkey), meta, overwrite);
 }
 
 bool WalletDatastore::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata& keyMeta)
@@ -132,7 +132,7 @@ bool WalletDatastore::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPriv
     // hash pubkey/privkey to accelerate wallet load
     const auto keypair_hash = Hash(vchPubKey, vchPrivKey);
 
-    return WriteIC(std::make_pair(DBKeys::KEY, vchPubKey), std::make_pair(vchPrivKey, keypair_hash), false);
+    return m_batch->Write(std::make_pair(DBKeys::KEY, vchPubKey), std::make_pair(vchPrivKey, keypair_hash), false);
 }
 
 bool WalletDatastore::WriteCryptedKey(const CPubKey& vchPubKey,
@@ -147,42 +147,42 @@ bool WalletDatastore::WriteCryptedKey(const CPubKey& vchPubKey,
     uint256 checksum = Hash(vchCryptedSecret);
 
     const auto key = std::make_pair(DBKeys::CRYPTED_KEY, vchPubKey);
-    if (!WriteIC(key, std::make_pair(vchCryptedSecret, checksum), false)) {
+    if (!m_batch->Write(key, std::make_pair(vchCryptedSecret, checksum), false)) {
         // It may already exist, so try writing just the checksum
         std::vector<unsigned char> val;
         if (!m_batch->Read(key, val)) {
             return false;
         }
-        if (!WriteIC(key, std::make_pair(val, checksum), true)) {
+        if (!m_batch->Write(key, std::make_pair(val, checksum), true)) {
             return false;
         }
     }
-    EraseIC(std::make_pair(DBKeys::KEY, vchPubKey));
+    m_batch->Erase(std::make_pair(DBKeys::KEY, vchPubKey));
     return true;
 }
 
 bool WalletDatastore::WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey)
 {
-    return WriteIC(std::make_pair(DBKeys::MASTER_KEY, nID), kMasterKey, true);
+    return m_batch->Write(std::make_pair(DBKeys::MASTER_KEY, nID), kMasterKey, true);
 }
 
 bool WalletDatastore::EraseMasterKey(unsigned int id)
 {
-    return EraseIC(std::make_pair(DBKeys::MASTER_KEY, id));
+    return m_batch->Erase(std::make_pair(DBKeys::MASTER_KEY, id));
 }
 
 bool WalletDatastore::WriteWatchOnly(const CScript &dest, const CKeyMetadata& keyMeta)
 {
-    if (!WriteIC(std::make_pair(DBKeys::WATCHMETA, dest), keyMeta)) {
+    if (!m_batch->Write(std::make_pair(DBKeys::WATCHMETA, dest), keyMeta)) {
         return false;
     }
-    return WriteIC(std::make_pair(DBKeys::WATCHS, dest), uint8_t{'1'});
+    return m_batch->Write(std::make_pair(DBKeys::WATCHS, dest), uint8_t{'1'});
 }
 
 bool WalletDatastore::WriteBestBlock(const CBlockLocator& locator)
 {
-    WriteIC(DBKeys::BESTBLOCK, CBlockLocator()); // Write empty block locator so versions that require a merkle branch automatically rescan
-    return WriteIC(DBKeys::BESTBLOCK_NOMERKLE, locator);
+    m_batch->Write(DBKeys::BESTBLOCK, CBlockLocator()); // Write empty block locator so versions that require a merkle branch automatically rescan
+    return m_batch->Write(DBKeys::BESTBLOCK_NOMERKLE, locator);
 }
 
 bool WalletDatastore::ReadBestBlock(CBlockLocator& locator)
@@ -204,19 +204,19 @@ bool WalletDatastore::IsEncrypted()
 
 bool WalletDatastore::WriteOrderPosNext(int64_t nOrderPosNext)
 {
-    return WriteIC(DBKeys::ORDERPOSNEXT, nOrderPosNext);
+    return m_batch->Write(DBKeys::ORDERPOSNEXT, nOrderPosNext);
 }
 
 bool WalletDatastore::WriteActiveScriptPubKeyMan(uint8_t type, const uint256& id, bool internal)
 {
     std::string key = internal ? DBKeys::ACTIVEINTERNALSPK : DBKeys::ACTIVEEXTERNALSPK;
-    return WriteIC(make_pair(key, type), id);
+    return m_batch->Write(make_pair(key, type), id);
 }
 
 bool WalletDatastore::EraseActiveScriptPubKeyMan(uint8_t type, bool internal)
 {
     const std::string key{internal ? DBKeys::ACTIVEINTERNALSPK : DBKeys::ACTIVEEXTERNALSPK};
-    return EraseIC(make_pair(key, type));
+    return m_batch->Erase(make_pair(key, type));
 }
 
 bool WalletDatastore::WriteDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const CPrivKey& privkey)
@@ -224,7 +224,7 @@ bool WalletDatastore::WriteDescriptorKey(const uint256& desc_id, const CPubKey& 
     // hash pubkey/privkey to accelerate wallet load
     const auto keypair_hash = Hash(pubkey, privkey);
 
-    return WriteIC(std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(desc_id, pubkey)), std::make_pair(privkey, keypair_hash), false);
+    return m_batch->Write(std::make_pair(DBKeys::WALLETDESCRIPTORKEY, std::make_pair(desc_id, pubkey)), std::make_pair(privkey, keypair_hash), false);
 }
 
 bool WalletDatastore::WriteCryptedDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const std::vector<unsigned char>& secret)
@@ -236,7 +236,7 @@ bool WalletDatastore::WriteCryptedDescriptorKey(const uint256& desc_id, const CP
     // Keep the write and erase atomic even when the caller has not started a transaction
     const bool own_txn{!HasActiveTxn()};
     if (own_txn && !TxnBegin()) return false;
-    if (!WriteIC(encrypted_key, secret, /*fOverwrite=*/false) || !EraseIC(plaintext_key) || (own_txn && !TxnCommit())) {
+    if (!m_batch->Write(encrypted_key, secret, /*fOverwrite=*/false) || !m_batch->Erase(plaintext_key) || (own_txn && !TxnCommit())) {
         if (own_txn) (void)TxnAbort();
         return false;
     }
@@ -245,28 +245,28 @@ bool WalletDatastore::WriteCryptedDescriptorKey(const uint256& desc_id, const CP
 
 bool WalletDatastore::WriteDescriptor(const uint256& desc_id, const WalletDescriptor& descriptor)
 {
-    return WriteIC(make_pair(DBKeys::WALLETDESCRIPTOR, desc_id), descriptor);
+    return m_batch->Write(make_pair(DBKeys::WALLETDESCRIPTOR, desc_id), descriptor);
 }
 
 bool WalletDatastore::WriteDescriptorDerivedCache(const CExtPubKey& xpub, const uint256& desc_id, uint32_t key_exp_index, uint32_t der_index)
 {
     std::vector<unsigned char> ser_xpub;
     VectorWriter{ser_xpub, 0, xpub};
-    return WriteIC(std::make_pair(std::make_pair(DBKeys::WALLETDESCRIPTORCACHE, desc_id), std::make_pair(key_exp_index, der_index)), ser_xpub);
+    return m_batch->Write(std::make_pair(std::make_pair(DBKeys::WALLETDESCRIPTORCACHE, desc_id), std::make_pair(key_exp_index, der_index)), ser_xpub);
 }
 
 bool WalletDatastore::WriteDescriptorParentCache(const CExtPubKey& xpub, const uint256& desc_id, uint32_t key_exp_index)
 {
     std::vector<unsigned char> ser_xpub;
     VectorWriter{ser_xpub, 0, xpub};
-    return WriteIC(std::make_pair(std::make_pair(DBKeys::WALLETDESCRIPTORCACHE, desc_id), key_exp_index), ser_xpub);
+    return m_batch->Write(std::make_pair(std::make_pair(DBKeys::WALLETDESCRIPTORCACHE, desc_id), key_exp_index), ser_xpub);
 }
 
 bool WalletDatastore::WriteDescriptorLastHardenedCache(const CExtPubKey& xpub, const uint256& desc_id, uint32_t key_exp_index)
 {
     std::vector<unsigned char> ser_xpub;
     VectorWriter{ser_xpub, 0, xpub};
-    return WriteIC(std::make_pair(std::make_pair(DBKeys::WALLETDESCRIPTORLHCACHE, desc_id), key_exp_index), ser_xpub);
+    return m_batch->Write(std::make_pair(std::make_pair(DBKeys::WALLETDESCRIPTORLHCACHE, desc_id), key_exp_index), ser_xpub);
 }
 
 bool WalletDatastore::WriteDescriptorCacheItems(const uint256& desc_id, const DescriptorCache& cache)
@@ -293,12 +293,12 @@ bool WalletDatastore::WriteDescriptorCacheItems(const uint256& desc_id, const De
 
 bool WalletDatastore::WriteLockedUTXO(const COutPoint& output)
 {
-    return WriteIC(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)), uint8_t{'1'});
+    return m_batch->Write(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)), uint8_t{'1'});
 }
 
 bool WalletDatastore::EraseLockedUTXO(const COutPoint& output)
 {
-    return EraseIC(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)));
+    return m_batch->Erase(std::make_pair(DBKeys::LOCKED_UTXO, std::make_pair(output.hash, output.n)));
 }
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr)
@@ -1237,7 +1237,7 @@ DBErrors WalletDatastore::LoadWallet(CWallet* pwallet)
     // Discard stale decryption features before updating the version, so that a locked
     // reload cannot restore the features recorded before a downgrade.
     if (last_client < VERSION_LAST_CLIENT_FEATURES && m_batch->Exists(DBKeys::LAST_DECRYPTED_FEATURES)) {
-        if (!EraseIC(DBKeys::LAST_DECRYPTED_FEATURES)) {
+        if (!m_batch->Erase(DBKeys::LAST_DECRYPTED_FEATURES)) {
             pwallet->WalletLogPrintf("Error: Unable to erase last decrypted client features.");
             return DBErrors::LOAD_FAIL;
         }
@@ -1292,17 +1292,17 @@ bool RunWithinTxn(WalletDatastore& datastore, std::string_view process_desc, con
 bool WalletDatastore::WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent)
 {
     auto key{std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), std::string("used")))};
-    return previously_spent ? WriteIC(key, std::string("1")) : EraseIC(key);
+    return previously_spent ? m_batch->Write(key, std::string("1")) : m_batch->Erase(key);
 }
 
 bool WalletDatastore::WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request)
 {
-    return WriteIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), "rr" + id)), receive_request);
+    return m_batch->Write(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), "rr" + id)), receive_request);
 }
 
 bool WalletDatastore::EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id)
 {
-    return EraseIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), "rr" + id)));
+    return m_batch->Erase(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), "rr" + id)));
 }
 
 bool WalletDatastore::EraseAddressData(const CTxDestination& dest)
@@ -1314,22 +1314,22 @@ bool WalletDatastore::EraseAddressData(const CTxDestination& dest)
 
 bool WalletDatastore::WriteWalletFlags(const uint64_t flags)
 {
-    return WriteIC(DBKeys::FLAGS, flags);
+    return m_batch->Write(DBKeys::FLAGS, flags);
 }
 
 bool WalletDatastore::WriteLastOpenedVersion()
 {
-    return WriteIC(DBKeys::VERSION, VERSION_LATEST);
+    return m_batch->Write(DBKeys::VERSION, VERSION_LATEST);
 }
 
 bool WalletDatastore::WriteLastOpenedFeatures()
 {
-    return WriteIC(DBKeys::LAST_OPENED_FEATURES, WALLET_CLIENT_FEATURES);
+    return m_batch->Write(DBKeys::LAST_OPENED_FEATURES, WALLET_CLIENT_FEATURES);
 }
 
 bool WalletDatastore::WriteLastDecryptedFeatures()
 {
-    return WriteIC(DBKeys::LAST_DECRYPTED_FEATURES, WALLET_CLIENT_FEATURES);
+    return m_batch->Write(DBKeys::LAST_DECRYPTED_FEATURES, WALLET_CLIENT_FEATURES);
 }
 
 bool WalletDatastore::TxnBegin()
