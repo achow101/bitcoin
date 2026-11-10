@@ -938,7 +938,8 @@ DBErrors WalletDatastore::LoadWallet(CWallet* pwallet)
 
 bool RunWithinTxn(WalletDatastore& datastore, std::string_view process_desc, const std::function<bool(WalletDatastore&)>& func)
 {
-    if (!datastore.TxnBegin()) {
+    bool existing_txn = datastore.HasActiveTxn();
+    if (!existing_txn && !datastore.TxnBegin()) {
         LogDebug(BCLog::WALLETDB, "Error: cannot create db txn for %s\n", process_desc);
         return false;
     }
@@ -951,7 +952,7 @@ bool RunWithinTxn(WalletDatastore& datastore, std::string_view process_desc, con
         return false;
     }
 
-    if (!datastore.TxnCommit()) {
+    if (!existing_txn && !datastore.TxnCommit()) {
         LogDebug(BCLog::WALLETDB, "Error: cannot commit db txn for %s\n", process_desc);
         (void)datastore.TxnAbort();
         return false;
