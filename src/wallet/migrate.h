@@ -43,11 +43,6 @@ public:
      */
     bool Backup(const std::string& strDest) const override;
 
-    /** Flush to the database file and close the database.
-     *  Also close the environment if no other databases are open in it.
-     */
-    void Close() override {}
-
     /** Return path to main database file for logs and error messages. */
     std::string Filename() override { return fs::PathToString(m_filepath); }
     std::vector<fs::path> Files() override { return {m_filepath}; }
