@@ -150,7 +150,7 @@ public:
     bool Verify(bilingual_str& error);
 
     /** Open the database if it is not already opened */
-    void Open() override;
+    void Open();
 
     /** Close the database */
     void Close();
