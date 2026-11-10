@@ -70,7 +70,7 @@ class Wallet;
 }
 namespace wallet {
 class CWallet;
-class WalletBatch;
+class WalletDatastore;
 enum class DBErrors : int;
 } // namespace wallet
 struct CBlockLocator;
@@ -385,7 +385,7 @@ private:
 
     /** Internal database handle. */
     std::unique_ptr<WalletDatabase> m_database;
-    std::unique_ptr<WalletBatch> m_datastore;
+    std::unique_ptr<WalletDatastore> m_datastore;
 
     std::unique_ptr<ChainScanner> m_scanner;
 
@@ -453,7 +453,7 @@ public:
      */
     mutable RecursiveMutex cs_wallet;
 
-    WalletBatch& GetDatastore() const override
+    WalletDatastore& GetDatastore() const override
     {
         Assert(m_datastore);
         return *m_datastore;

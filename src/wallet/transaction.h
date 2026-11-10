@@ -28,7 +28,7 @@ class Chain;
 } // namespace interfaces
 
 namespace wallet {
-class WalletBatch;
+class WalletDatastore;
 
 //! State of transaction confirmed in a block.
 struct TxStateConfirmed {
@@ -354,7 +354,7 @@ public:
     // If the given transaction has a different wtxid, the transaction is stored if it has not been seen before.
     // The canonical wtxid is also updated. The tx that is confirmed becomes canonical. For unconfirmed txs,
     // those with witnesses are preferred, followed by least weight.
-    bool Update(CTransactionRef tx, const TxState& new_state, WalletBatch& datastore, bool metadata_changed);
+    bool Update(CTransactionRef tx, const TxState& new_state, WalletDatastore& datastore, bool metadata_changed);
 
     //! make sure balances are recalculated
     void MarkDirty()

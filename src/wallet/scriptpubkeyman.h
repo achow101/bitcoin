@@ -46,7 +46,7 @@ class WalletStorage
 public:
     virtual ~WalletStorage() = default;
     virtual std::string LogName() const = 0;
-    virtual WalletBatch& GetDatastore() const = 0;
+    virtual WalletDatastore& GetDatastore() const = 0;
     virtual bool IsWalletFlagSet(uint64_t) const = 0;
     virtual void UnsetBlankWalletFlag() = 0;
     //! Pass the encryption key to cb().

@@ -440,7 +440,7 @@ BOOST_FIXTURE_TEST_CASE(LoadReceiveRequests, TestingSetup)
             auto requests = wallet->GetAddressReceiveRequests();
             auto erequests = {"val_rr11", "val_rr20"};
             BOOST_CHECK_EQUAL_COLLECTIONS(requests.begin(), requests.end(), std::begin(erequests), std::end(erequests));
-            RunWithinTxn(wallet->GetDatastore(), /*process_desc=*/"test", [](WalletBatch& datastore){
+            RunWithinTxn(wallet->GetDatastore(), /*process_desc=*/"test", [](WalletDatastore& datastore){
                 BOOST_CHECK(datastore.WriteAddressPreviouslySpent(PKHash(), false));
                 BOOST_CHECK(datastore.EraseAddressData(ScriptHash()));
                 return true;

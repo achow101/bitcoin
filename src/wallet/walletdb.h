@@ -35,7 +35,7 @@ void LogDBInfo();
 /**
  * Overview of wallet database classes:
  *
- * - WalletBatch is an abstract modifier object for the wallet database, and encapsulates a database
+ * - WalletDatastore is an abstract modifier object for the wallet database, and encapsulates a database
  *   batch update as well as methods to act on the database. It should be agnostic to the database implementation.
  */
 
@@ -195,7 +195,7 @@ struct DbTxnListener
  * Optionally (on by default) it will flush to disk on close.
  * Every 1000 writes will automatically trigger a flush to disk.
  */
-class WalletBatch
+class WalletDatastore
 {
 private:
     WalletDatabase& m_database;
@@ -219,13 +219,13 @@ private:
     }
 
 public:
-    explicit WalletBatch(WalletDatabase &database) :
+    explicit WalletDatastore(WalletDatabase &database) :
         m_database(database),
         m_batch(database.MakeBatch())
     {
     }
-    WalletBatch(const WalletBatch&) = delete;
-    WalletBatch& operator=(const WalletBatch&) = delete;
+    WalletDatastore(const WalletDatastore&) = delete;
+    WalletDatastore& operator=(const WalletDatastore&) = delete;
 
     [[nodiscard]] bool WriteName(const std::string& strAddress, const std::string& strName);
     [[nodiscard]] bool EraseName(const std::string& strAddress);
@@ -323,7 +323,7 @@ private:
  * @param func The function to be executed within the db txn context. It returns a boolean indicating whether to commit or roll back the txn.
  * @return true if the db txn executed successfully, false otherwise.
  */
-bool RunWithinTxn(WalletBatch& datastore, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
+bool RunWithinTxn(WalletDatastore& datastore, std::string_view process_desc, const std::function<bool(WalletDatastore&)>& func);
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 bool LoadCryptedKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
