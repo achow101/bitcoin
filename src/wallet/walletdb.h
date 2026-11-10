@@ -10,6 +10,7 @@
 #include <primitives/transaction.h>
 #include <primitives/transaction_identifier.h>
 #include <script/sign.h>
+#include <util/result.h>
 #include <wallet/db.h>
 #include <wallet/walletutil.h>
 
@@ -198,12 +199,12 @@ struct DbTxnListener
 class WalletDatastore
 {
 private:
-    WalletDatabase& m_database;
+    std::unique_ptr<WalletDatabase> m_database;
 
 public:
-    explicit WalletDatastore(WalletDatabase &database) :
-        m_database(database),
-        m_batch(database.MakeBatch())
+    explicit WalletDatastore(std::unique_ptr<WalletDatabase> database) :
+        m_database(std::move(database)),
+        m_batch(database->MakeBatch())
     {
     }
     WalletDatastore(const WalletDatastore&) = delete;
@@ -311,6 +312,15 @@ bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::stri
 bool LoadCryptedKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 bool LoadEncryptionKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 bool LoadHDChain(CWallet* pwallet, DataStream& ssValue, std::string& strErr);
+
+//! Determine the path that the wallet is stored in
+util::Result<fs::path> GetWalletPath(const std::string& name);
+
+//! Make a WalletDatastore object for interacting with wallet data storage
+std::unique_ptr<WalletDatastore> MakeWalletDatastore(const std::string& name, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
+
+//! Make a WalletDatastore with an in memory database
+std::unique_ptr<WalletDatastore> MakeInMemoryWalletDatastore();
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_WALLETDB_H
