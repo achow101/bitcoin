@@ -1,14 +1,16 @@
 #include <key_io.h>
 
 #include <wallet/context.h>
+#include <wallet/legacy/bdbro.h>
 #include <wallet/legacy/migration.h>
 #include <wallet/legacy/load.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
 namespace wallet {
+namespace legacy_migration {
 
-LegacyDataSPKM* CWallet::GetLegacyDataSPKM() const
+LegacyDataSPKM* LegacyWallet::GetLegacyDataSPKM() const
 {
     if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         return nullptr;
@@ -18,13 +20,13 @@ LegacyDataSPKM* CWallet::GetLegacyDataSPKM() const
     return dynamic_cast<LegacyDataSPKM*>(it->second);
 }
 
-LegacyDataSPKM* CWallet::GetOrCreateLegacyDataSPKM()
+LegacyDataSPKM* LegacyWallet::GetOrCreateLegacyDataSPKM()
 {
     SetupLegacyDataSPKM();
     return GetLegacyDataSPKM();
 }
 
-void CWallet::SetupLegacyDataSPKM()
+void LegacyWallet::SetupLegacyDataSPKM()
 {
     if (!m_internal_spk_managers.empty() || !m_external_spk_managers.empty() || !m_spk_managers.empty() || IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         return;
@@ -62,7 +64,7 @@ static std::string MigrationFilePrefix(CWallet& wallet)
     return fs::PathToString(legacy_wallet_path.filename());
 }
 
-static bool CopyMigrationRecords(std::vector<std::pair<SerializeData, SerializeData>> records, WalletDatabase& new_db, bool& had_legacy_records)
+static bool CopyMigrationRecords(const BerkeleyRODatabase& legacy_db, WalletDatabase& new_db, bool& had_legacy_records)
 {
     // Write existing records into the new DB
     had_legacy_records = false;
@@ -79,8 +81,8 @@ static bool CopyMigrationRecords(std::vector<std::pair<SerializeData, SerializeD
         DBKeys::DESTDATA, DBKeys::NAME, DBKeys::PURPOSE,
     });
 
-    return RunWithinTxn(new_db, "migration: write records to new db", [&records, &had_legacy_records, &SKIP_TYPES](DatabaseBatch& in_batch) {
-        for (const auto& [key, value] : records) {
+    return RunWithinTxn(new_db, "migration: write records to new db", [&legacy_db, &had_legacy_records, &SKIP_TYPES](DatabaseBatch& in_batch) {
+        for (const auto& [key, value] : legacy_db.m_records) {
             DataStream ss_key{key};
             std::string type;
             ss_key >> type;
@@ -97,7 +99,7 @@ static bool CopyMigrationRecords(std::vector<std::pair<SerializeData, SerializeD
     });
 }
 
-bool CWallet::MigrateToSQLite(bilingual_str& error, bool& had_legacy_records)
+bool LegacyWallet::MigrateToSQLite(bilingual_str& error, bool& had_legacy_records)
 {
     AssertLockHeld(cs_wallet);
 
@@ -105,33 +107,6 @@ bool CWallet::MigrateToSQLite(bilingual_str& error, bool& had_legacy_records)
 
     if (m_database->Format() == "sqlite") {
         error = _("Error: This wallet already uses SQLite");
-        return false;
-    }
-
-    // Get all of the records for DB type migration
-    std::unique_ptr<DatabaseBatch> batch = m_database->MakeBatch();
-    std::unique_ptr<DatabaseCursor> cursor = batch->GetNewCursor();
-    std::vector<std::pair<SerializeData, SerializeData>> records;
-    if (!cursor) {
-        error = _("Error: Unable to begin reading all records in the database");
-        return false;
-    }
-    DatabaseCursor::Status status = DatabaseCursor::Status::FAIL;
-    while (true) {
-        DataStream ss_key{};
-        DataStream ss_value{};
-        status = cursor->Next(ss_key, ss_value);
-        if (status != DatabaseCursor::Status::MORE) {
-            break;
-        }
-        SerializeData key(ss_key.begin(), ss_key.end());
-        SerializeData value(ss_value.begin(), ss_value.end());
-        records.emplace_back(key, value);
-    }
-    cursor.reset();
-    batch.reset();
-    if (status != DatabaseCursor::Status::DONE) {
-        error = _("Error: Unable to read all records in the database");
         return false;
     }
 
@@ -179,7 +154,8 @@ bool CWallet::MigrateToSQLite(bilingual_str& error, bool& had_legacy_records)
 
     // Write existing records into the new DB
     {
-        const bool written = CopyMigrationRecords(records, *new_db, had_legacy_records);
+        const BerkeleyRODatabase& legacy_db = *dynamic_cast<BerkeleyRODatabase*>(m_database.get());
+        const bool written = CopyMigrationRecords(legacy_db, *new_db, had_legacy_records);
         if (!written) {
             return remove_tmp_and_fail(strprintf(_("Error: Unable to write records into the new database for wallet '%s'"), GetName()));
         }
@@ -214,7 +190,7 @@ bool CWallet::MigrateToSQLite(bilingual_str& error, bool& had_legacy_records)
     return true;
 }
 
-std::optional<MigrationData> CWallet::GetDescriptorsForLegacy(bilingual_str& error) const
+std::optional<MigrationData> LegacyWallet::GetDescriptorsForLegacy(bilingual_str& error) const
 {
     AssertLockHeld(cs_wallet);
 
@@ -233,7 +209,7 @@ std::optional<MigrationData> CWallet::GetDescriptorsForLegacy(bilingual_str& err
     return res;
 }
 
-util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data)
+util::Result<void> LegacyWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, MigrationData& data)
 {
     AssertLockHeld(cs_wallet);
 
@@ -255,9 +231,9 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
 
     // When the legacy wallet has no spendable scripts, the main wallet will be empty, leaving its script cache empty as well.
     // The watch-only and/or solvable wallet(s) will contain the scripts in their respective caches.
-    if (!data.desc_spkms.empty()) Assume(!m_cached_spks.empty());
-    if (!data.watch_descs.empty()) Assume(!data.watchonly_wallet->m_cached_spks.empty());
-    if (!data.solvable_descs.empty()) Assume(!data.solvable_wallet->m_cached_spks.empty());
+    if (!data.desc_spkms.empty()) Assume(GetCachedSPKsSize() != 0);
+    if (!data.watch_descs.empty()) Assume(data.watchonly_wallet->GetCachedSPKsSize() != 0);
+    if (!data.solvable_descs.empty()) Assume(data.solvable_wallet->GetCachedSPKsSize() != 0);
 
     for (auto& desc_spkm : data.desc_spkms) {
         if (m_spk_managers.contains(desc_spkm->GetID())) {
@@ -421,9 +397,7 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     return {}; // all good
 }
 
-namespace legacy_migration {
-
-bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, MigrationResult& res, const bool load_on_startup = true) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+bool DoMigration(LegacyWallet& wallet, WalletContext& context, bilingual_str& error, MigrationResult& res, const bool load_on_startup = true) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     AssertLockHeld(wallet.cs_wallet);
 
@@ -543,7 +517,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
     }
 
     // Make the local wallet
-    std::shared_ptr<CWallet> local_wallet = LoadWalletForMigration(wallet_name, error);
+    std::shared_ptr<LegacyWallet> local_wallet = LoadWalletForMigration(wallet_name, error);
     if (!local_wallet) {
         return util::Error{Untranslated("Wallet loading failed.") + Untranslated(" ") + error};
     }
@@ -599,16 +573,17 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     bool empty_local_wallet = false;
 
     try {
+        std::shared_ptr<LegacyWallet> legacy_local_wallet = static_pointer_cast<LegacyWallet>(local_wallet);
         LOCK(local_wallet->cs_wallet);
         // First change to using SQLite
         bool had_legacy_records = false;
-        if (!local_wallet->MigrateToSQLite(error, had_legacy_records)) return util::Error{error};
+        if (!legacy_local_wallet->MigrateToSQLite(error, had_legacy_records)) return util::Error{error};
 
         // Do the migration of keys and scripts for non-empty wallets, and cleanup if it fails
         if (had_legacy_records) {
-            success = DoMigration(*local_wallet, context, error, res, load_wallet);
+            success = DoMigration(*legacy_local_wallet, context, error, res, load_wallet);
             // No scripts mean empty wallet after migration
-            empty_local_wallet = local_wallet->GetAllScriptPubKeyMans().empty();
+            empty_local_wallet = legacy_local_wallet->GetAllScriptPubKeyMans().empty();
         } else {
             // Make sure that descriptors flag is actually set
             local_wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
@@ -659,7 +634,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
         }
         // Migration successful, if load_wallet is set load all the migrated wallets.
         bool main_wallet_set{false};
-        for (std::shared_ptr<CWallet>* wallet_ptr : {&local_wallet, &res.watchonly_wallet, &res.solvables_wallet}) {
+        for (std::shared_ptr<CWallet>* wallet_ptr : std::array<std::shared_ptr<CWallet>*, 3>{&local_wallet, &res.watchonly_wallet, &res.solvables_wallet}) {
             if (success && *wallet_ptr) {
                 std::shared_ptr<CWallet>& wallet = *wallet_ptr;
                 // Track db path
