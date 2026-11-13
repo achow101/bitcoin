@@ -314,7 +314,7 @@ struct CRecipient
 /**
  * A CWallet maintains a set of transactions and balances, and provides the ability to create new transactions.
  */
-class CWallet final : public WalletStorage, public interfaces::Chain::Notifications
+class CWallet : public WalletStorage, public interfaces::Chain::Notifications
 {
 private:
     CKeyingMaterial vMasterKey GUARDED_BY(cs_wallet);

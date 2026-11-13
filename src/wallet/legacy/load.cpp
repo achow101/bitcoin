@@ -627,7 +627,7 @@ static DBErrors PopulateWalletFromBDBRO(CWallet *pwallet, bilingual_str& error)
     return nLoadWalletRet;
 }
 
-std::shared_ptr<CWallet> LoadWalletForMigration(const std::string& name, bilingual_str& error)
+std::shared_ptr<LegacyWallet> LoadWalletForMigration(const std::string& name, bilingual_str& error)
 {
     // Load the wallet but only in the context of migration.
     // No signals should be connected nor should anything else be aware of this wallet
@@ -639,7 +639,7 @@ std::shared_ptr<CWallet> LoadWalletForMigration(const std::string& name, bilingu
     std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
     if (!database) return nullptr;
 
-    std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database)));
+    std::shared_ptr<LegacyWallet> wallet(new LegacyWallet(name, std::move(database)));
 
     // Load wallet
     auto res = PopulateWalletFromBDBRO(wallet.get(), error);
