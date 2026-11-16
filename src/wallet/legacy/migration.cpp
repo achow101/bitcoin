@@ -4,6 +4,7 @@
 #include <wallet/legacy/bdbro.h>
 #include <wallet/legacy/migration.h>
 #include <wallet/legacy/load.h>
+#include <wallet/legacy/spkm.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
