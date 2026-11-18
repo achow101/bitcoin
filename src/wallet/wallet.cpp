@@ -1441,11 +1441,6 @@ void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
     LOCK(cs_wallet);
     SyncTransaction(tx, TxStateInMempool{});
 
-    auto it = mapWallet.find(tx->GetHash());
-    if (it != mapWallet.end()) {
-        RefreshMempoolStatus(it->second, chain());
-    }
-
     const Txid& txid = tx->GetHash();
 
     for (const CTxIn& tx_in : tx->vin) {
