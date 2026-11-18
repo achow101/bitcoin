@@ -402,6 +402,8 @@ public:
     // Enable the default move constructor
     CWalletTx(CWalletTx&&) = default;
 
+    std::set<Txid> GetMempoolConflicts() const;
+
 private:
     void SetDefaults()
     {

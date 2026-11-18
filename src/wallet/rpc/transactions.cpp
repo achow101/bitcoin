@@ -50,7 +50,7 @@ static void WalletTxToJSON(const CWallet& wallet, const CWalletTx& wtx, UniValue
         conflicts.push_back(conflict.GetHex());
     entry.pushKV("walletconflicts", std::move(conflicts));
     UniValue mempool_conflicts(UniValue::VARR);
-    for (const Txid& mempool_conflict : wtx.mempool_conflicts)
+    for (const Txid& mempool_conflict : wtx.GetMempoolConflicts())
         mempool_conflicts.push_back(mempool_conflict.GetHex());
     entry.pushKV("mempoolconflicts", std::move(mempool_conflicts));
     entry.pushKV("time", wtx.GetTxTime());

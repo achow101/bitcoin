@@ -106,4 +106,9 @@ void CWalletTx::RecomputeCanonical()
                             return std::make_pair(!entry.second->HasWitness(), GetTransactionWeight(*entry.second));
                         })->first;
 }
+
+std::set<Txid> CWalletTx::GetMempoolConflicts() const
+{
+    return mempool_conflicts;
+}
 } // namespace wallet
