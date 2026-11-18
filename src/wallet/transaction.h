@@ -271,6 +271,9 @@ public:
     // so that we don't try to create another unconfirmed child
     std::optional<Txid> truc_child_in_mempool;
 
+    // In mempool truc sibling
+    std::optional<Txid> m_truc_sibling_in_mempool;
+
     template<typename Stream>
     void Serialize(Stream& s) const
     {
@@ -382,7 +385,7 @@ public:
     void updateState(interfaces::Chain& chain);
 
     bool isAbandoned() const { return state<TxStateInactive>() && state<TxStateInactive>()->abandoned; }
-    bool isMempoolConflicted() const { return !mempool_conflicts.empty(); }
+    bool isMempoolConflicted() const { return !mempool_conflicts.empty() || m_truc_sibling_in_mempool.has_value(); }
     bool isBlockConflicted() const { return state<TxStateBlockConflicted>(); }
     bool isInactive() const { return state<TxStateInactive>(); }
     bool isUnconfirmed() const { return !isAbandoned() && !isBlockConflicted() && !isMempoolConflicted() && !isConfirmed(); }

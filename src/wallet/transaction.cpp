@@ -109,6 +109,10 @@ void CWalletTx::RecomputeCanonical()
 
 std::set<Txid> CWalletTx::GetMempoolConflicts() const
 {
-    return mempool_conflicts;
+    std::set<Txid> conflicts = mempool_conflicts;
+    if (m_truc_sibling_in_mempool.has_value()) {
+        conflicts.insert(m_truc_sibling_in_mempool.value());
+    }
+    return conflicts;
 }
 } // namespace wallet

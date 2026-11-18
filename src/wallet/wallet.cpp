@@ -1296,8 +1296,19 @@ void CWallet::UpdateTrucSiblingConflicts(const CWalletTx& parent_wtx, const Txid
             // Skip the child_tx itself
             if (sibling_txid == child_txid) continue;
             RecursiveUpdateTxState(/*batch=*/nullptr, sibling_txid, [&child_txid, add_conflict](CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
-                return add_conflict ? (wtx.mempool_conflicts.insert(child_txid).second ? TxUpdate::CHANGED : TxUpdate::UNCHANGED)
-                                    : (wtx.mempool_conflicts.erase(child_txid) ? TxUpdate::CHANGED : TxUpdate::UNCHANGED);
+                if (add_conflict) {
+                    if (wtx.m_truc_sibling_in_mempool != child_txid) {
+                        wtx.m_truc_sibling_in_mempool = child_txid;
+                        return TxUpdate::CHANGED;
+                    }
+                    return TxUpdate::UNCHANGED;
+                } else {
+                    if (wtx.m_truc_sibling_in_mempool == child_txid) {
+                        wtx.m_truc_sibling_in_mempool.reset();
+                        return TxUpdate::CHANGED;
+                    }
+                    return TxUpdate::UNCHANGED;
+                }
             });
         }
     }
