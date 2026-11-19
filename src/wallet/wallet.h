@@ -310,6 +310,13 @@ struct CRecipient
     bool fSubtractFeeFromAmount;
 };
 
+struct SpentInput {
+    std::set<Txid> m_conflicts; // All known transactions that spend this input
+    std::optional<Txid> m_best; // The transaction spending this output that is in the blockchain or in the mempool
+    bool m_spent_confirmed{false}; // Whether the tx spending this output is confirmed
+    bool m_created{false}; // Whether the transaction creating this output is in the blockchain or in the mempool
+    bool m_confirmed{false}; // Wehther the tx creating or conflicting this output is confirmed
+};
 
 /**
  * A CWallet maintains a set of transactions and balances, and provides the ability to create new transactions.
@@ -340,10 +347,8 @@ private:
      * detect and report conflicts (double-spends or
      * mutated transactions where the mutant gets mined).
      */
-    typedef std::unordered_multimap<COutPoint, Txid, SaltedOutpointHasher> TxSpends;
-    TxSpends mapTxSpends GUARDED_BY(cs_wallet);
-    void AddToSpends(const COutPoint& outpoint, const Txid& txid) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    void AddToSpends(const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::unordered_map<COutPoint, SpentInput, SaltedOutpointHasher> m_spent_inputs GUARDED_BY(cs_wallet);
+    void UpdateSpends(const CTransactionRef& wtx, const TxState& state, bool add_inputs) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** Mark a transaction (and its in-wallet descendants) as conflicting with a particular block. */
     void MarkConflicted(const uint256& hashBlock, int conflicting_height, const Txid& hashTx);
