@@ -6,7 +6,10 @@
 
 #include <key_io.h>
 #include <util/bip32.h>
+#include <util/fs.h>
 #include <wallet/context.h>
+#include <wallet/db.h>
+#include <wallet/legacy/bdbro.h>
 #include <wallet/legacy/spkm.h>
 #include <wallet/wallet.h>
 
@@ -628,18 +631,41 @@ static DBErrors PopulateWalletFromBDBRO(LegacyWallet *pwallet, bilingual_str& er
     return nLoadWalletRet;
 }
 
-std::shared_ptr<LegacyWallet> LoadWalletForMigration(const std::string& name, bilingual_str& error)
+std::unique_ptr<BerkeleyRODatabase> MakeMigrationDatabase(const std::string& name, DatabaseStatus& status, bilingual_str& error)
 {
-    // Load the wallet but only in the context of migration.
-    // No signals should be connected nor should anything else be aware of this wallet
-    WalletContext empty_context;
+    const auto& wallet_path = GetWalletPath(name);
+    if (!wallet_path) {
+        error = util::ErrorString(wallet_path);
+        return nullptr;
+    }
+
+    try {
+        if (fs::symlink_status(*wallet_path).type() == fs::file_type::not_found) {
+            error = Untranslated(strprintf("Failed to load database path '%s'. Path does not exist.", fs::PathToString(*wallet_path)));
+            return nullptr;
+        }
+    } catch (const fs::filesystem_error& e) {
+        error = Untranslated(strprintf("Failed to access database path '%s': %s", fs::PathToString(*wallet_path), e.code().message()));
+        return nullptr;
+    }
+
+    if (!IsBDBFile(BDBDataFile(*wallet_path))) {
+        error = Untranslated(strprintf("Failed to load database path '%s'. File is not a BerkeleyDB file.", fs::PathToString(*wallet_path)));
+        return nullptr;
+    }
     DatabaseOptions options;
     options.require_existing = true;
-    options.require_format = DatabaseFormat::BERKELEY_RO;
+    return MakeBerkeleyRODatabase(*wallet_path, options, status, error);
+}
+
+std::shared_ptr<LegacyWallet> LoadWalletForMigration(const std::string& name, bilingual_str& error)
+{
     DatabaseStatus status;
-    std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(name, options, status, error);
+    std::unique_ptr<BerkeleyRODatabase> database = MakeMigrationDatabase(name, status, error);
     if (!database) return nullptr;
 
+    // Load the wallet but only in the context of migration.
+    // No signals should be connected nor should anything else be aware of this wallet
     std::shared_ptr<LegacyWallet> wallet(new LegacyWallet(name, std::move(database)));
 
     // Load wallet

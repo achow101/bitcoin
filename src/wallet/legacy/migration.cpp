@@ -10,6 +10,13 @@
 
 namespace wallet {
 namespace legacy_migration {
+BerkeleyRODatabase& LegacyWallet::GetBDBRODatabase()
+{
+    BerkeleyRODatabase* db = dynamic_cast<BerkeleyRODatabase*>(m_database.get());
+    Assert(db);
+    return *db;
+}
+
 DBErrors LegacyWallet::ReorderTransactions()
 {
     LOCK(cs_wallet);

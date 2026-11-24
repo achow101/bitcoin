@@ -26,7 +26,7 @@
 #include <wallet/fees.h>
 #include <wallet/imports.h>
 #include <wallet/load.h>
-#include <wallet/legacy/migration.h>
+#include <wallet/legacy/load.h>
 #include <wallet/receive.h>
 #include <wallet/rpc/wallet.h>
 #include <wallet/spend.h>
@@ -647,8 +647,7 @@ public:
         bilingual_str error;
         auto db = MakeWalletDatabase(wallet_name, options, status, error);
         if (!db && status == wallet::DatabaseStatus::FAILED_LEGACY_DISABLED) {
-            options.require_format = wallet::DatabaseFormat::BERKELEY_RO;
-            db = MakeWalletDatabase(wallet_name, options, status, error);
+            db = wallet::legacy_migration::MakeMigrationDatabase(wallet_name, status, error);
         }
         if (!db) return false;
         return WalletBatch(*db).IsEncrypted();

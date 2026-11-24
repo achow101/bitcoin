@@ -10,6 +10,7 @@
 namespace wallet {
 namespace legacy_migration {
 
+std::unique_ptr<BerkeleyRODatabase> MakeMigrationDatabase(const std::string& name, DatabaseStatus& status, bilingual_str& error);
 std::shared_ptr<LegacyWallet> LoadWalletForMigration(const std::string& name, bilingual_str& error);
 
 } // namespace legacy_migration

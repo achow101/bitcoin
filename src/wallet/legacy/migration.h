@@ -3,6 +3,7 @@
 
 #include <wallet/wallet.h>
 
+#include <wallet/legacy/bdbro.h>
 #include <wallet/legacy/spkm.h>
 
 namespace wallet {
@@ -11,7 +12,9 @@ namespace legacy_migration {
 class LegacyWallet : public CWallet
 {
 public:
-    LegacyWallet(const std::string& name, std::unique_ptr<WalletDatabase> database) : CWallet::CWallet(/*chain=*/nullptr, name, std::move(database)) {}
+    LegacyWallet(const std::string& name, std::unique_ptr<BerkeleyRODatabase> database) : CWallet::CWallet(/*chain=*/nullptr, name, std::move(database)) {}
+
+    BerkeleyRODatabase& GetBDBRODatabase();
 
     //! Get the LegacyDataSPKM used for all legacy output types and both internal and external chains.
     LegacyDataSPKM* GetLegacyDataSPKM() const;
