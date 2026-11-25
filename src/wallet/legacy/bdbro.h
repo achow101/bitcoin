@@ -29,6 +29,7 @@ public:
     {
         if (open) Open();
     }
+    BerkeleyRODatabase() : WalletDatabase() {}
     ~BerkeleyRODatabase() = default;
 
     BerkeleyROData m_records;

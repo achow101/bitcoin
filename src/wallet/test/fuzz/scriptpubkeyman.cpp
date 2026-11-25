@@ -25,6 +25,7 @@
 #include <util/string.h>
 #include <validation.h>
 #include <wallet/context.h>
+#include <wallet/legacy/bdbro.h>
 #include <wallet/legacy/migration.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/test/util.h>
@@ -223,7 +224,8 @@ FUZZ_TARGET(spkm_migration, .init = initialize_spkm_migration)
     const auto& node{g_setup->m_node};
     Chainstate& chainstate{node.chainman->ActiveChainstate()};
 
-    std::unique_ptr<legacy_migration::LegacyWallet> wallet_ptr{std::make_unique<legacy_migration::LegacyWallet>("", CreateMockableWalletDatabase())};
+    std::unique_ptr<legacy_migration::BerkeleyRODatabase> database = std::make_unique<legacy_migration::BerkeleyRODatabase>();
+    std::unique_ptr<legacy_migration::LegacyWallet> wallet_ptr{std::make_unique<legacy_migration::LegacyWallet>("", std::move(database))};
     legacy_migration::LegacyWallet& wallet{*wallet_ptr};
     wallet.m_keypool_size = 1;
     {
